@@ -36,8 +36,17 @@ machine learning and neither of which should pull in an image-dataset package to
   the eleven scripts collected here.
 
 - **`scripts/gml/`**, moved from `GeometricMachineLearning/scripts/`: `transformer_mnist.jl`,
-  `transformer_fashion_mnist.jl`, `transformer_bfgs.jl`, `transformer_analysis.jl`,
-  `mnist_grassmann.jl`, `autoencoder.jl`, `classifier.jl` and `convert_jld2_to_h5.jl`.
+  `transformer_fashion_mnist.jl`, `transformer_bfgs.jl`, `transformer_analysis.jl` and
+  `convert_jld2_to_h5.jl`.
+
+  `autoencoder.jl`, `classifier.jl` and `mnist_grassmann.jl` were moved with them and then
+  dropped. They were last modified in July 2023 and could not run: all three called
+  `init_optimizer_cache`, which no longer exists, and `optimization_step!` with its 2023
+  five-argument signature. They were the only reason `Lux` and `Flux` were in
+  `scripts/Project.toml` — for `Lux.setup`/`Lux.apply`, which the `NeuralNetwork` API replaced,
+  and for `Flux.flatten` and `Flux.onehotbatch`, which are a `reshape` and this package's own
+  `onehotbatch`. `Lux` and `Flux` are gone from the scripts environment with them, which also
+  takes a `LuxCore` → `FluxExt` precompilation failure out of it.
 
 - **`scripts/geometric_optimizers/`**, moved from `GeometricOptimizers/scripts/`: `mnist.jl` and its
   `_cuda`, `_cuda_repetitions`, `_metal` and `_metal_short` variants, plus

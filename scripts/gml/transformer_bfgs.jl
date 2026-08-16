@@ -2,9 +2,10 @@
 TODO: Add a better predictor at the end! It should set the biggest value of the softmax to 1 and the rest to zero!
 """
 
-using GeometricMachineLearning, LinearAlgebra, ProgressMeter, Plots, CUDA
+using GeometricMachineLearning, LinearAlgebra, ProgressMeter, CairoMakie, CUDA
 using AbstractNeuralNetworks
 using GMLDatasets: mnist
+import GeometricOptimizers
 import Zygote
 
 # remove this after AbstractNeuralNetworks PR has been merged 
@@ -50,7 +51,7 @@ model2 = Chain(Transformer(patch_length^2, n_heads, n_layers, Stiefel=true, add_
 	    Classification(patch_length^2, 10, activation))
 
 # err_freq is the frequency with which the error is computed (e.g. every 100 steps)
-function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=BFGSOptimizer(1f-3))
+function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=GeometricOptimizers._BFGS())
     # call data loader
     dl = DataLoader(train_x, train_y)
     dl_test = DataLoader(test_x, test_y)
@@ -85,19 +86,52 @@ function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=B
     loss_array, ps, total_time, accuracy_score
 end
 
-loss_array1, ps1, total_time1, accuracy_score1 = transformer_training(model1, backend=backend, n_epochs=n_epochs, opt=BFGSOptimizer(1f-3))
-loss_array2, ps2, total_time2, accuracy_score2 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=BFGSOptimizer(1f-3))
+loss_array1, ps1, total_time1, accuracy_score1 = transformer_training(model1, backend=backend, n_epochs=n_epochs, opt=GeometricOptimizers._BFGS())
+loss_array2, ps2, total_time2, accuracy_score2 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=GeometricOptimizers._BFGS())
 loss_array3, ps3, total_time3, accuracy_score3 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=GradientOptimizer(1f-3))
 loss_array4, ps4, total_time4, accuracy_score4 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
 
-p1 = plot(loss_array1, color=1, label="Regular weights", ylimits=(0.,1.4), linewidth=2)
-plot!(p1, loss_array2, color=3, label="Weights on Stiefel Manifold", linewidth=2)
-png(p1, "BFGS_Stiefel_Regular")
+# The figure style of `docs/src/homogeneous_spaces_experiment.md`: recessive chrome, a
+# colorblind-safe palette, and a series that keeps its color across both figures.
+CairoMakie.activate!(type = "png", px_per_unit = 2)
 
-p2 = plot(loss_array2, color=3, label="BFGS", ylimits=(0.,1.4), linewidth=2)
-plot!(p2, loss_array3, color=1, label="Gradient", linewidth=2)
-plot!(p2, loss_array4, color=2, label="Adam", linewidth=2)
-png(p2, "BFGS_Gradient_Adam")
+const INK = "#898781"
+const GRID = (INK, 0.3)
+const REGULAR  = "#eda100"
+const BFGS     = "#008300"
+const GRADIENT = "#e87ba4"
+const ADAM     = "#2a78d6"
+
+"An axis with recessive chrome: no top or right spine, horizontal gridlines only."
+function loss_axis(figure)
+    Axis(figure[1, 1]; xlabel = "epoch", ylabel = "training loss",
+         limits = (nothing, (0., 1.4)), backgroundcolor = :transparent,
+         xgridvisible = false, ygridcolor = GRID, ygridwidth = 1,
+         topspinevisible = false, rightspinevisible = false,
+         leftspinecolor = INK, bottomspinecolor = INK, xtickcolor = INK, ytickcolor = INK,
+         xticklabelcolor = INK, yticklabelcolor = INK, xlabelcolor = INK, ylabelcolor = INK)
+end
+
+"A figure with one axis, one line per `(loss, color, label)`, and a horizontal legend below."
+function loss_figure(series)
+    figure = Figure(size = (760, 420), backgroundcolor = :transparent, fontsize = 14)
+    ax = loss_axis(figure)
+    for (loss, color, label) in series
+        lines!(ax, loss; color = color, linewidth = 2, label = label)
+    end
+    Legend(figure[2, 1], ax; orientation = :horizontal, framevisible = false,
+           labelcolor = INK, padding = (0, 0, 0, 0))
+    figure
+end
+
+CairoMakie.save("BFGS_Stiefel_Regular.png",
+    loss_figure([(loss_array1, REGULAR, "Regular weights"),
+                 (loss_array2, BFGS, "Weights on Stiefel Manifold")]))
+
+CairoMakie.save("BFGS_Gradient_Adam.png",
+    loss_figure([(loss_array2, BFGS, "BFGS"),
+                 (loss_array3, GRADIENT, "Gradient"),
+                 (loss_array4, ADAM, "Adam")]))
 
 text_string = 
     "n_epochs: " * string(n_epochs) * "\n"

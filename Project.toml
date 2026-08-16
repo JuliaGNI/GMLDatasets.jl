@@ -1,0 +1,36 @@
+name = "GMLDatasets"
+uuid = "676c5310-75a3-4edf-a7af-a2dbff91674b"
+version = "0.1.0"
+authors = ["Michael Kraus", "Benedikt Brantner"]
+
+[deps]
+AbstractNeuralNetworks = "60874f82-5ada-4c70-bd1c-fa6be7711c8a"
+GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+
+[compat]
+AbstractNeuralNetworks = "0.6.4"
+GeometricMachineLearning = "0.5"
+KernelAbstractions = "0.9"
+MLDatasets = "0.7"
+Random = "1"
+SafeTestsets = "0.1"
+Zygote = "0.6"
+julia = "1.10"
+
+[extras]
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
+[targets]
+test = ["Test", "SafeTestsets", "Zygote"]
+
+# `GeometricMachineLearning` 0.5 is not tagged yet and 0.4.8 still defines `split_and_flatten`,
+# `onehotbatch` and the classification `DataLoader` constructor that this package now owns, so it has
+# to come from `main`. Drop this block once 0.5 is registered.
+[sources]
+GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricML", rev = "main"}

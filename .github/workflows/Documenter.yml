@@ -1,0 +1,33 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags: '*'
+  pull_request:
+
+jobs:
+  build:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install LaTeX for the MNIST patch-splitting figure
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-xetex texlive-pictures poppler-utils
+      - name: Make docs (call julia documenter)
+        env:
+          # The MNIST tutorial downloads the data set through DataDeps, which prompts interactively
+          # unless this is set.
+          DATADEPS_ALWAYS_ACCEPT: "true"
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+          make all -C docs/src/mnist
+          julia --project=docs --color=yes --threads=2 docs/make.jl
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-docdeploy@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}

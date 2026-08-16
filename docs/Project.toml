@@ -1,0 +1,17 @@
+[deps]
+Bibliography = "f1be7e48-bf82-45af-a471-ae754a193061"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
+GMLDatasets = "676c5310-75a3-4edf-a7af-a2dbff91674b"
+GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+
+[sources]
+GMLDatasets = {path = ".."}
+GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricML", rev = "main"}
+
+[compat]
+Documenter = "1"
+DocumenterCitations = "1"
+HDF5 = "0.16, 0.17"

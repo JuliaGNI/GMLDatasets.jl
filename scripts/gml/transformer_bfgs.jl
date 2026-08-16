@@ -5,7 +5,6 @@ TODO: Add a better predictor at the end! It should set the biggest value of the 
 using GeometricMachineLearning, LinearAlgebra, ProgressMeter, CairoMakie, CUDA
 using AbstractNeuralNetworks
 using GMLDatasets: mnist
-import GeometricOptimizers
 import Zygote
 
 # remove this after AbstractNeuralNetworks PR has been merged 
@@ -51,7 +50,7 @@ model2 = Chain(Transformer(patch_length^2, n_heads, n_layers, Stiefel=true, add_
 	    Classification(patch_length^2, 10, activation))
 
 # err_freq is the frequency with which the error is computed (e.g. every 100 steps)
-function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=GeometricOptimizers._BFGS())
+function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=AdamOptimizer())
     # call data loader
     dl = DataLoader(train_x, train_y)
     dl_test = DataLoader(test_x, test_y)
@@ -86,8 +85,15 @@ function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=G
     loss_array, ps, total_time, accuracy_score
 end
 
-loss_array1, ps1, total_time1, accuracy_score1 = transformer_training(model1, backend=backend, n_epochs=n_epochs, opt=GeometricOptimizers._BFGS())
-loss_array2, ps2, total_time2, accuracy_score2 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=GeometricOptimizers._BFGS())
+# NOTE: this script trained with `BFGSOptimizer()` and cannot any more. GML's own manifold BFGS —
+# a gradient-only, fixed-step method driven by `optimization_step!` — was deleted when the optimizer
+# layer moved to GeometricOptimizers, on the stated grounds that GO's `BFGS` replaces it. It does
+# not: GO's is a quasi-Newton method whose cache keeps an inverse-Hessian approximation sized by the
+# *flattened* parameters, and GML's per-leaf update path cannot drive it (see the GML changelog).
+# Until that is bridged, the two runs below use `Adam` and the first two curves are therefore not
+# BFGS. The figures and their labels say `BFGS`; treat them as a placeholder.
+loss_array1, ps1, total_time1, accuracy_score1 = transformer_training(model1, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
+loss_array2, ps2, total_time2, accuracy_score2 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
 loss_array3, ps3, total_time3, accuracy_score3 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=GradientOptimizer(1f-3))
 loss_array4, ps4, total_time4, accuracy_score4 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
 

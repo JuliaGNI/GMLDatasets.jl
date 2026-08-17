@@ -136,3 +136,21 @@ machine learning and neither of which should pull in an image-dataset package to
 - **`.github/workflows/Documenter.yml` no longer calls `Pkg.develop(path = pwd())`.**
   `docs/Project.toml` already has `GMLDatasets = {path = ".."}` under `[sources]`, and `Pkg.develop`
   overwrites that with an absolute path — which it duly did, on the machine this was verified on.
+
+- **`docs/src/mnist/mnist_visualization.jl` no longer opens 34 image viewers.** Each of its four
+  `Figure()`s was followed by `display(fig)` — the GLMakie idiom of opening a window and then drawing
+  into it live. Under CairoMakie there is no interactive backend, so `display` falls through to the
+  file-based show stack, which writes a temporary image and hands it to the system viewer: 34 Preview
+  windows on macOS on every documentation build, and every one of them blank, because the call sits
+  between `Figure()` and the `plot_image!` that fills it.
+
+  The render pass itself is **not** removable, which is the trap here. Each figure is saved as the
+  child scene of its `Axis` rather than as the figure — that is what makes the images tightly cropped
+  — and the child scene of a figure that has never been rendered has no content, so dropping
+  `display` outright makes `CairoMakie.save` write a fully transparent image. `Makie.colorbuffer` is
+  the same render pass without the display stack; the 34 images it produces are byte-identical to the
+  ones `display` produced. `Makie.update_state_before_display!` is not a substitute despite the name
+  — it leaves the scenes empty.
+
+  `docs/src/mnist/Makefile` drops the `-i` from the `julia` invocation, and the script drops the
+  `exit()` that only existed to escape the REPL that `-i` opened.

@@ -2,7 +2,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://JuliaGNI.github.io/GMLDatasets.jl/latest/)
 
-Dataset-backed demonstrations for [GeometricMachineLearning](https://github.com/JuliaGNI/GeometricML)
+Dataset-backed demonstrations for [GeometricMachineLearning](https://github.com/JuliaGNI/GeometricMachineLearning.jl)
 and [GeometricOptimizers](https://github.com/JuliaGNI/GeometricOptimizers.jl).
 
 Both of those packages are libraries for *scientific* machine learning and neither should depend on
@@ -44,12 +44,15 @@ rerun.
 
 Not registered, and it needs `GeometricMachineLearning` at `0.5`, which is not tagged yet — the
 newest registered version still defines `split_and_flatten` and `onehotbatch` itself and would
-collide with this package. So until `0.5` lands:
+collide with this package. That is also why Julia **1.11** is the floor: `Project.toml` pins
+`GeometricMachineLearning` to `main` through a `[sources]` block, which is a 1.11 feature, and Pkg
+1.10 ignores it and resolves to the registered 0.4.8 instead. Both go back to 1.10 when `0.5` lands.
+So until it does:
 
 ```julia
 using Pkg
-Pkg.develop(url = "https://github.com/JuliaGNI/GeometricML")
-Pkg.develop(url = "https://github.com/JuliaGNI/GMLDatasets.git")
+Pkg.develop(url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl")
+Pkg.develop(url = "https://github.com/JuliaGNI/GMLDatasets.jl.git")
 ```
 
 or, working from local checkouts side by side:

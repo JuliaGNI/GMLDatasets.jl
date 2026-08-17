@@ -195,13 +195,11 @@ using GeometricMachineLearning: accuracy # hide
 
 ## Library Functions
 
-```@docs
-GMLDatasets.mnist
-GMLDatasets.mnist_data_loader
-GMLDatasets.DataLoader
-split_and_flatten
-onehotbatch
-```
+[`mnist`](@ref), [`mnist_data_loader`](@ref), the `DataLoader` constructor for labelled images,
+[`split_and_flatten`](@ref) and [`onehotbatch`](@ref) are documented in the [Library](@ref) section
+of the home page. This page deliberately does not repeat them: a docstring rendered in two places
+makes every `@ref` to it resolve to whichever of the two Documenter saw last, which was this one, so
+the reference on the home page linked away from itself.
 
 `accuracy`, `ClassificationTransformer` and `ClassificationLayer` are documented in the
 [`GeometricMachineLearning` reference](https://juliagni.github.io/GeometricMachineLearning.jl/latest/).

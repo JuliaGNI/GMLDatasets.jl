@@ -17,7 +17,11 @@ MLDatasets = "0.7"
 Random = "1"
 SafeTestsets = "0.1"
 Zygote = "0.6"
-julia = "1.10"
+# 1.11 and not 1.10 because of the `[sources]` block below: `[sources]` is a Julia 1.11 feature and
+# Pkg 1.10 ignores it, falls back to the registered `GeometricMachineLearning` 0.4.8 and cannot then
+# satisfy the `"0.5"` bound above. Both this and the CI matrix go back to 1.10 once 0.5 is registered
+# and `[sources]` goes away.
+julia = "1.11"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -32,4 +36,4 @@ test = ["Random", "Test", "SafeTestsets", "Zygote"]
 # `onehotbatch` and the classification `DataLoader` constructor that this package now owns, so it has
 # to come from `main`. Drop this block once 0.5 is registered.
 [sources]
-GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricML", rev = "main"}
+GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl", rev = "main"}

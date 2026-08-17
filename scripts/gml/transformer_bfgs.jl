@@ -1,101 +1,81 @@
-"""
-TODO: Add a better predictor at the end! It should set the biggest value of the softmax to 1 and the rest to zero!
-"""
+# The loss-curve figures of the MNIST comparison, written against `GeometricMachineLearning`.
+#
+# This is `transformer_mnist.jl` with figures instead of a `.jld2`: the same four configurations, and
+# the two plots the comparison is usually shown as — regular weights against Stiefel weights, and the
+# three optimizers against each other with the weights on the Stiefel manifold.
+#
+# The file is called `transformer_bfgs.jl` because its first two curves used to be `BFGSOptimizer()`,
+# GML's own manifold BFGS: a gradient-only, fixed-step method driven by `optimization_step!`. That
+# method was deleted when the optimizer layer moved to `GeometricOptimizers`, on the stated grounds
+# that GO's `BFGS` replaces it. It does not — GO's is a quasi-Newton method whose cache holds an
+# inverse-Hessian approximation sized by the *flattened* parameters, and GML's per-leaf update path
+# cannot drive it (see the GML changelog). So there is no BFGS to plot here, the runs below are
+# `Adam`, `GradientMethod` and `MomentumMethod`, and the labels say so rather than saying `BFGS`.
 
-using GeometricMachineLearning, LinearAlgebra, ProgressMeter, CairoMakie, CUDA
-using AbstractNeuralNetworks
-using GMLDatasets: mnist
-import Zygote
+using CairoMakie, CUDA, GeometricMachineLearning, GMLDatasets
 
-# remove this after AbstractNeuralNetworks PR has been merged 
-GeometricMachineLearning.Chain(model::Chain, d::AbstractNeuralNetworks.AbstractExplicitLayer) = Chain(model.layers..., d)
-GeometricMachineLearning.Chain(d::AbstractNeuralNetworks.AbstractExplicitLayer, model::Chain) = Chain(d, model.layers...)
+# MNIST images are 28×28, so a sequence length of 16 = 4² means the image patches are of size 7² = 49
+const patch_length = 7
+const n_heads = 7
+const L = 16
+const batch_size = 2048
+const n_epochs = 500
+const add_connection = false
 
-# MNIST images are 28×28, so a sequence_length of 16 = 4² means the image patches are of size 7² = 49
-image_dim = 28
-patch_length = 7
-transformer_dim = 49
-n_heads = 7
-n_layers = 1
-number_of_patch = (image_dim÷patch_length)^2
-batch_size = 2048
-activation = softmax
-n_epochs = 500
-add_connection = false
+# Use the GPU where there is one and fall back to the host where there is not, so that the script
+# runs on a laptop at a reduced `n_epochs` as well as on a workstation.
+backend, to_device = CUDA.functional() ? (CUDABackend(), cu) : (CPU(), identity)
 
-train_x, train_y = mnist(:train)
-test_x, test_y = mnist(:test)
+# `transform` is applied to the images and the labels before the `DataLoader` splits them into
+# patches, so the splitting and the one-hot encoding run on the device too.
+dl = mnist_data_loader(:train; patch_length = patch_length, transform = to_device)
+dl_test = mnist_data_loader(:test; patch_length = patch_length, transform = to_device)
+const T = eltype(dl)
 
-# use CUDA backend if available. else use CPU()
-backend, train_x, test_x, train_y, test_y = 
-    try
-        CUDABackend(),
-        train_x |> cu,
-        test_x |> cu,
-        train_y |> cu,
-        test_y |> cu
-    catch
-        CPU(), 
-        train_x, 
-        test_x, 
-        train_y, 
-        test_y
-end
+# the difference between the first and the second model is that we put the weights on the Stiefel manifold in the second case
+model1 = ClassificationTransformer(dl;
+                                    n_heads = n_heads,
+                                    L = L,
+                                    add_connection = add_connection,
+                                    Stiefel = false)
+model2 = ClassificationTransformer(dl;
+                                    n_heads = n_heads,
+                                    L = L,
+                                    add_connection = add_connection,
+                                    Stiefel = true)
 
-#encoder layer - final layer has to be added for evaluation purposes!
-model1 = Chain(Transformer(patch_length^2, n_heads, n_layers, Stiefel=false, add_connection=add_connection),
-	    Classification(patch_length^2, 10, activation))
+batch = Batch(batch_size, dl)
 
-model2 = Chain(Transformer(patch_length^2, n_heads, n_layers, Stiefel=true, add_connection=add_connection),
-	    Classification(patch_length^2, 10, activation))
+# The optimizer *method* only produces a direction; the step size is `Optimizer`'s `step_size`
+# keyword, which is why `GradientMethod()` and `MomentumMethod(α)` take no learning rate.
+function transformer_training(model::GeometricMachineLearning.Architecture;
+                              n_epochs = 100, method = AdamOptimizer(T), step_size = T(0.001))
+    nn = NeuralNetwork(model, backend, T)
+    optimizer_instance = Optimizer(method, nn; step_size = step_size)
 
-# err_freq is the frequency with which the error is computed (e.g. every 100 steps)
-function transformer_training(Ψᵉ::Chain; backend=backend, n_epochs=100, opt=AdamOptimizer())
-    # call data loader
-    dl = DataLoader(train_x, train_y)
-    dl_test = DataLoader(test_x, test_y)
-    batch = Batch(batch_size)
-
-    ps = initialparameters(backend, eltype(dl.input), Ψᵉ) 
-
-    optimizer_instance = Optimizer(opt, ps)
-
-    println("initial test accuracy: ", GeometricMachineLearning.accuracy(Ψᵉ, ps, dl_test), "\n")
-
-    progress_object = Progress(n_epochs; enabled=true)
+    println("initial test accuracy: ", GeometricMachineLearning.accuracy(nn, dl_test), "\n")
 
     # use the `time` function to get the system time.
     init_time = time()
-    total_time = init_time - time()
 
-    loss_array = zeros(eltype(train_x), n_epochs)
-    for i in 1:n_epochs
-        loss_val = optimize_for_one_epoch!(optimizer_instance, Ψᵉ, ps, dl, batch)
+    loss_array = optimizer_instance(nn, dl, batch, n_epochs, FeedForwardLoss())
 
-        ProgressMeter.next!(progress_object; showvalues = [(:TrainingLoss, loss_val)])   
-        loss_array[i] = loss_val
+    total_time = time() - init_time
 
-        # update runtime
-        total_time = init_time - time()
-    end
-
-    accuracy_score = GeometricMachineLearning.accuracy(Ψᵉ, ps, dl_test)
+    accuracy_score = GeometricMachineLearning.accuracy(nn, dl_test)
     println("final test accuracy: ", accuracy_score, "\n")
 
-    loss_array, ps, total_time, accuracy_score
+    loss_array, nn, total_time, accuracy_score
 end
 
-# NOTE: this script trained with `BFGSOptimizer()` and cannot any more. GML's own manifold BFGS —
-# a gradient-only, fixed-step method driven by `optimization_step!` — was deleted when the optimizer
-# layer moved to GeometricOptimizers, on the stated grounds that GO's `BFGS` replaces it. It does
-# not: GO's is a quasi-Newton method whose cache keeps an inverse-Hessian approximation sized by the
-# *flattened* parameters, and GML's per-leaf update path cannot drive it (see the GML changelog).
-# Until that is bridged, the two runs below use `Adam` and the first two curves are therefore not
-# BFGS. The figures and their labels say `BFGS`; treat them as a placeholder.
-loss_array1, ps1, total_time1, accuracy_score1 = transformer_training(model1, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
-loss_array2, ps2, total_time2, accuracy_score2 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
-loss_array3, ps3, total_time3, accuracy_score3 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=GradientOptimizer(1f-3))
-loss_array4, ps4, total_time4, accuracy_score4 = transformer_training(model2, backend=backend, n_epochs=n_epochs, opt=AdamOptimizer())
+loss_array1, nn1, total_time1, accuracy_score1 =
+    transformer_training(model1; n_epochs = n_epochs)
+loss_array2, nn2, total_time2, accuracy_score2 =
+    transformer_training(model2; n_epochs = n_epochs)
+loss_array3, nn3, total_time3, accuracy_score3 =
+    transformer_training(model2; n_epochs = n_epochs, method = GradientOptimizer())
+loss_array4, nn4, total_time4, accuracy_score4 =
+    transformer_training(model2; n_epochs = n_epochs, method = MomentumOptimizer(T(0.5)))
 
 # The figure style of `docs/src/homogeneous_spaces_experiment.md`: recessive chrome, a
 # colorblind-safe palette, and a series that keeps its color across both figures.
@@ -104,9 +84,9 @@ CairoMakie.activate!(type = "png", px_per_unit = 2)
 const INK = "#898781"
 const GRID = (INK, 0.3)
 const REGULAR  = "#eda100"
-const BFGS     = "#008300"
-const GRADIENT = "#e87ba4"
 const ADAM     = "#2a78d6"
+const GRADIENT = "#e87ba4"
+const MOMENTUM = "#008300"
 
 "An axis with recessive chrome: no top or right spine, horizontal gridlines only."
 function loss_axis(figure)
@@ -130,24 +110,24 @@ function loss_figure(series)
     figure
 end
 
-CairoMakie.save("BFGS_Stiefel_Regular.png",
+CairoMakie.save("mnist_regular_vs_stiefel.png",
     loss_figure([(loss_array1, REGULAR, "Regular weights"),
-                 (loss_array2, BFGS, "Weights on Stiefel Manifold")]))
+                 (loss_array2, ADAM, "Weights on Stiefel manifold")]))
 
-CairoMakie.save("BFGS_Gradient_Adam.png",
-    loss_figure([(loss_array2, BFGS, "BFGS"),
+CairoMakie.save("mnist_optimizer_comparison.png",
+    loss_figure([(loss_array2, ADAM, "Adam"),
                  (loss_array3, GRADIENT, "Gradient"),
-                 (loss_array4, ADAM, "Adam")]))
+                 (loss_array4, MOMENTUM, "Momentum")]))
 
-text_string = 
-    "n_epochs: " * string(n_epochs) * "\n"
-    "Regular weights:   time: " * string(total_time1) * " classification accuracy: " * string(accuracy_score1) * "\n" *
-    "Stiefel weights:   time: " * string(total_time2) * " classification accuracy: " * string(accuracy_score2) * "\n" *
-    "GradientOptimizer: time: " * string(total_time3) * " classification accuracy: " * string(accuracy_score3) * "\n" *
-    "MomentumOptimizer: time: " * string(total_time4) * " classification accuracy: " * string(accuracy_score4) * "\n"
+text_string =
+    "n_epochs: " * string(n_epochs) * "\n" *
+    "Regular weights,  Adam:     time: " * string(total_time1) * " classification accuracy: " * string(accuracy_score1) * "\n" *
+    "Stiefel weights,  Adam:     time: " * string(total_time2) * " classification accuracy: " * string(accuracy_score2) * "\n" *
+    "Stiefel weights,  gradient: time: " * string(total_time3) * " classification accuracy: " * string(accuracy_score3) * "\n" *
+    "Stiefel weights,  momentum: time: " * string(total_time4) * " classification accuracy: " * string(accuracy_score4) * "\n"
 
-display(text_string)
+print(text_string)
 
-open("measure_times"*string(backend), "w") do file
+open("measure_times" * string(backend), "w") do file
     write(file, text_string)
 end

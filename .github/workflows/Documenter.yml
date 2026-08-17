@@ -23,7 +23,9 @@ jobs:
           # unless this is set.
           DATADEPS_ALWAYS_ACCEPT: "true"
         run: |
-          julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+          # No `Pkg.develop(path = pwd())` here: `docs/Project.toml` already has a `[sources]` entry
+          # pointing at `..`, and `Pkg.develop` would overwrite it with an absolute path.
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           make all -C docs/src/mnist
           julia --project=docs --color=yes --threads=2 docs/make.jl
       - uses: julia-actions/julia-buildpkg@v1

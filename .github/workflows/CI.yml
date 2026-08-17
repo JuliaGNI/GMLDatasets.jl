@@ -18,8 +18,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # 1.10 is deliberately absent: the `[sources]` block of `Project.toml` is a Julia 1.11
+        # feature and Pkg 1.10 cannot resolve this package while `GeometricMachineLearning` 0.5 is
+        # unregistered. Put it back together with the compat bound once 0.5 lands.
         version:
-          - "1.10"
+          - "1.11"
           - "1.12"
           - "^1.13.0-0"
         os:

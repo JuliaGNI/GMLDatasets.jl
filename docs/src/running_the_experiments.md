@@ -6,7 +6,21 @@ exercising.
 `scripts/gml/` is written against `GeometricMachineLearning`, so it gets `DataLoader`,
 `ClassificationTransformer`, `NeuralNetwork` and the optimizers from the library and each script is a
 few dozen lines. `transformer_mnist.jl` is the one the [MNIST Tutorial](@ref) walks through;
-`transformer_fashion_mnist.jl` is the same thing on Fashion-MNIST.
+`transformer_fashion_mnist.jl` is the same thing on Fashion-MNIST. Both write their four loss
+arrays, wall-clock times and test accuracies to a `.jld2`, and `plot_mnist_results.jl` draws the two
+loss-curve figures from that file:
+
+```
+julia --project=scripts scripts/gml/transformer_mnist.jl
+julia --project=scripts scripts/gml/plot_mnist_results.jl mnist_parameters.jld2
+```
+
+The plotting is separate from the training for the same reason the figures of [The Numerical
+Experiment on Homogeneous Spaces](@ref) are drawn from checked-in CSVs: the run is four
+configurations of 500 epochs, and redrawing a figure must not cost a rerun of it. The argument
+defaults to `mnist_parameters.jld2`, and the output names follow it, so passing
+`fashion_mnist_parameters.jld2` produces `fashion_mnist_*.png` rather than overwriting the MNIST
+figures.
 
 `scripts/geometric_optimizers/` is written against `GeometricOptimizers` *alone*.
 `GeometricMachineLearning` depends on `GeometricOptimizers`, so the dependency cannot be inverted and

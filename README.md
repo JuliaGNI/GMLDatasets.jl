@@ -31,7 +31,9 @@ The pieces are also available on their own: `split_and_flatten`, `onehotbatch`, 
 `scripts/` holds the training runs, split by which package they exercise:
 
 - `scripts/gml/` — written against `GeometricMachineLearning`, so they get `DataLoader`,
-  `ClassificationTransformer` and the optimizers from the library.
+  `ClassificationTransformer` and the optimizers from the library. The training runs write a `.jld2`
+  and `plot_mnist_results.jl` draws the loss-curve figures from it, so a figure can be redrawn
+  without repeating four configurations of 500 epochs.
 - `scripts/geometric_optimizers/` — written against `GeometricOptimizers` alone, with the neural
   network spelled out by hand. `GeometricMachineLearning` depends on `GeometricOptimizers`, so these
   cannot use it. Host, CUDA and Metal variants.

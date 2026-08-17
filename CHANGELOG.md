@@ -36,7 +36,8 @@ machine learning and neither of which should pull in an image-dataset package to
   the eleven scripts collected here.
 
 - **`scripts/gml/`**, moved from `GeometricMachineLearning/scripts/`: `transformer_mnist.jl`,
-  `transformer_fashion_mnist.jl`, `transformer_bfgs.jl` and `convert_jld2_to_h5.jl`.
+  `transformer_fashion_mnist.jl` and `convert_jld2_to_h5.jl`, plus `plot_mnist_results.jl`, which is
+  `transformer_bfgs.jl` turned into the plotting half of the pair (see below).
 
   `autoencoder.jl`, `classifier.jl`, `mnist_grassmann.jl` and `transformer_analysis.jl` were moved
   with them and then dropped. None of the four could run. The first three were last modified in
@@ -54,20 +55,40 @@ machine learning and neither of which should pull in an image-dataset package to
   are gone from the scripts environment with them, which also takes a `LuxCore` → `FluxExt`
   precompilation failure out of it.
 
-  `transformer_bfgs.jl` was dead in the same four ways and is **repaired** rather than dropped,
-  because it is the only script that draws the loss-curve figures. It is now `transformer_mnist.jl`
-  with figures instead of a `.jld2`. It keeps its name, and the header says why the name no longer
-  describes it: its first two curves used to be `BFGSOptimizer()`, GML's own manifold BFGS, which was
-  deleted when the optimizer layer moved to `GeometricOptimizers` on the stated grounds that GO's
-  `BFGS` replaces it. It does not — GO's is a quasi-Newton method whose cache holds an
-  inverse-Hessian approximation sized by the *flattened* parameters, and GML's per-leaf update path
-  cannot drive it. So there is no BFGS to plot, the four runs are `Adam`, `GradientMethod` and
-  `MomentumMethod`, and the labels and the report say that instead of saying `BFGS` — which the
-  figure legends and the summary text did not, the latter naming a `MomentumOptimizer` run that was
-  a second copy of the `Adam` one.
+  `transformer_bfgs.jl` was dead in the same four ways and is **`plot_mnist_results.jl`** instead of
+  being dropped, because it is the only thing that draws the loss-curve figures. Three problems, one
+  change:
 
-  **All three surviving scripts needed repairs before any of them ran**, and each was carried over
-  from GML rather than introduced here:
+  1. **It could not do BFGS.** Its first two curves were `BFGSOptimizer()`, GML's own manifold BFGS,
+     deleted when the optimizer layer moved to `GeometricOptimizers` on the stated grounds that GO's
+     `BFGS` replaces it. It does not — GO's is a quasi-Newton method whose cache holds an
+     inverse-Hessian approximation sized by the *flattened* parameters, and GML's per-leaf update
+     path cannot drive it. The figure legends said `BFGS` regardless, and the summary text named a
+     `MomentumOptimizer` run that was a second copy of the `Adam` one.
+  2. **It retrained in order to plot.** Four configurations of 500 epochs, to draw two loss curves —
+     so a figure could not be redrawn without repeating the run that produced it.
+  3. **It duplicated `transformer_mnist.jl`.** Roughly sixty lines of data loading, model
+     construction and training loop, verbatim, differing only in the output stage.
+
+  All three go away by reading the run instead of performing it. `transformer_mnist.jl` already
+  writes the four loss arrays, the four wall-clock times and the four test accuracies to
+  `mnist_parameters.jld2` — everything the figures and the summary need — so the new script opens
+  that file and draws. Its four series are then whatever the run actually was, and the labels say so.
+
+  This is the split `scripts/geometric_optimizers/distill_mnist_results.jl` already uses and the
+  reason `docs/src/homogeneous_spaces_experiment.md` plots from checked-in CSVs: the documentation
+  figures need neither a GPU nor a rerun, and neither should these. The results file is an argument
+  defaulting to `mnist_parameters.jld2`, and the output names follow it, so
+  `fashion_mnist_parameters.jld2` produces `fashion_mnist_*.png` and `transformer_fashion_mnist.jl`
+  gains figures it never had.
+
+  It reads the four datasets it needs rather than the whole file: `JLD2.load` would also pull in the
+  `nn*weights`, and reconstructing a `NeuralNetworkParameters` of `StiefelManifold`s needs
+  `GeometricMachineLearning` loaded purely to be discarded. The script depends on `CairoMakie` and
+  `JLD2` and nothing else.
+
+  **Both surviving training scripts needed repairs before either of them ran**, and each fault was
+  carried over from GML rather than introduced here:
 
   - `GradientOptimizer(T(0.001))` and `MomentumOptimizer(T(0.001), T(0.5))` were `MethodError`s.
     A `GeometricOptimizers` method only produces a direction, so `GradientMethod` takes no
@@ -88,9 +109,10 @@ machine learning and neither of which should pull in an image-dataset package to
     at the first `NeuralNetwork(model, backend, T)`, which is also what made them untestable. The
     choice is `CUDA.functional()` now and the host is a real fallback.
 
-  Verified by running `transformer_mnist.jl` and `transformer_bfgs.jl` to completion at `L = 1` and
-  `n_epochs = 1` on the host: four trainings each, the `.jld2` and the two figures written, and a
-  four-line report with positive times.
+  Verified by running `transformer_mnist.jl` to completion at `L = 1` and `n_epochs = 1` on the
+  host — four trainings, `mnist_parameters.jld2` written, a four-line report with positive times —
+  and then `plot_mnist_results.jl` on the `.jld2` it produced, which draws both figures at the same
+  byte sizes the training-and-plotting version did.
 
 - **`scripts/geometric_optimizers/`**, moved from `GeometricOptimizers/scripts/`: `mnist.jl` and its
   `_cuda`, `_cuda_repetitions`, `_metal` and `_metal_short` variants, plus

@@ -25,6 +25,8 @@ lcov.info
 # Generated pendulum dataset and model artifacts
 /pendulum_dataset.jls
 /pendulum_sae.h5
+/src/pendulum/pendulum_dataset.jls
+/src/pendulum/pendulum_sae.h5
 
 # Reports, loss curves and logs written by scripts/geometric_optimizers/mnist_cuda.jl and
 # scripts/geometric_optimizers/mnist_cuda_repetitions.jl, wherever they are started from

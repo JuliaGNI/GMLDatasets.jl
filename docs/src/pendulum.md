@@ -2,50 +2,148 @@
 CurrentModule = GMLDatasets
 ```
 
-# Four-dimensional pendulum dataset
+# The Pendulum Data Set
 
-`GMLDatasets` provides short, reproducible mathematical-pendulum trajectories
-for numerical experiments and symplectic autoencoders. The canonical
-coordinates are an angle `θ` and its conjugate momentum `pθ`. The four
-Euclidean rows are `(q₁, q₂, p₁, p₂)`:
+The mathematical pendulum, integrated symplectically and lifted into ``\mathbb{R}^4``. It is small,
+deterministic and needs no download, and it is the smallest system on which a
+`GeometricMachineLearning.SymplecticAutoencoder` has something real to do: the data are
+two-dimensional but they arrive in four dimensions, on a curved submanifold that no linear method
+recovers exactly.
+
+Everything here is [`pendulum`](@ref) and [`angular_to_euclidean`](@ref) — one call to
+[`GeometricProblems`](https://github.com/JuliaGNI/GeometricProblems.jl) and
+[`GeometricIntegrators`](https://github.com/JuliaGNI/GeometricIntegrators.jl), and one coordinate
+change. The data loader is `GeometricMachineLearning`'s own; this package adds no adapter for it.
+
+## The system
+
+The Hamiltonian is the one `GeometricProblems.Pendulum` defines,
 
 ```math
-q = (\ell\sin θ,\; \ell\cos θ), \qquad
-p = (p_θ\cos θ/\ell,\; -p_θ\sin θ/\ell).
+H(\theta, p_\theta) = \frac{p_\theta^2}{2m\ell^2} + mg\ell\cos(\theta),
 ```
 
-Generate one trajectory:
+with the angle ``\theta``, its conjugate momentum ``p_\theta``, and the length, mass and
+gravitational acceleration ``\ell``, ``m``, ``g``.
 
-```julia
+!!! note "The pendulum hangs down at θ = π"
+    The potential is ``+mg\ell\cos\theta``, not ``-mg\ell\cos\theta``, so it is at its *minimum* at
+    ``\theta = \pi`` and at its maximum at ``\theta = 0``. The stable equilibrium is therefore
+    ``\theta = \pi`` and the inverted one is ``\theta = 0``. Trajectories with ``H < mg\ell``
+    librate about ``\pi``, trajectories with ``H > mg\ell`` rotate, and ``H = mg\ell`` is the
+    separatrix between them.
+
+## Generating the data
+
+[`pendulum`](@ref) integrates a grid of initial conditions and hands back the
+`GeometricSolutions.EnsembleSolution`:
+
+```@example pendulum
 using GMLDatasets
 
-trajectory = pendulum_trajectory(
-    timespan=(0.0, 10.0), timestep=0.1,
-    angle=0.8, momentum=0.0,
-)
-trajectory.q  # 2 × n Euclidean positions
-trajectory.p  # 2 × n Euclidean momenta
+solution = pendulum()
+(length(solution.s), length(solution.t))
 ```
 
-Generate an ensemble and concatenate it for autoencoder input:
+That is a hundred trajectories of a hundred and one time steps each, spread over
+``\theta \in [0, 2\pi]`` and ``p_\theta \in [-2, 2]`` — the grid `GeometricProblems` itself uses,
+which covers both libration and rotation. The keyword arguments are the six grid bounds, the
+physical `parameters`, the `timespan` and `timestep`, and the `integrator`. The default integrator
+is two-stage Gauss collocation, which is symplectic.
 
-```julia
-dataset = pendulum_dataset([
-    (angle=0.2, momentum=0.0),
-    (angle=0.8, momentum=0.2),
-]; timespan=(0.0, 5.0), timestep=0.1)
+## The lift into four dimensions
 
-data = pendulum_matrix(dataset)  # 4 × total_samples
-loader = pendulum_data_loader(dataset; suppress_info=true)
+[`angular_to_euclidean`](@ref) replaces the angle by the position of the bob in the plane and
+``p_\theta`` by the corresponding Euclidean momentum:
+
+```math
+q = (\ell\sin\theta,\; \ell\cos\theta), \qquad
+p = (p_\theta\cos\theta/\ell,\; -p_\theta\sin\theta/\ell).
 ```
 
-The integrator includes both `timespan` endpoints. Use
-`pendulum_energy` to evaluate the Hamiltonian in either canonical or
-Euclidean coordinates, and `angular_to_euclidean`/
-`euclidean_to_angular` for explicit coordinate conversion.
+The map is a symplectomorphism onto its image, and its image is the tangent bundle of the circle of
+radius ``\ell``: two dimensions of data inside four, held there by ``\|q\| = \ell`` and
+``q\cdot{}p = 0``.
 
-```@autodocs
-Modules = [GMLDatasets]
-Pages = ["pendulum_implementation.md"]
-Order = [:type, :function]
+```@example pendulum
+data = angular_to_euclidean(solution)
+size(data)
+```
+
+The rows are ``(q_1, q_2, p_1, p_2)`` — the ``q``-components first, then the ``p``-components, which
+is what every symplectic architecture in `GeometricMachineLearning` assumes. The two constraints
+hold to rounding:
+
+```@example pendulum
+q, p = data[1:2, :, :], data[3:4, :, :]
+(maximum(abs, sum(abs2, q; dims = 1) .- 1), maximum(abs, sum(q .* p; dims = 1)))
+```
+
+[`euclidean_to_angular`](@ref) inverts the lift, up to the ``2\pi``-periodicity of the angle.
+
+## Handing it to a network
+
+There is no `pendulum_data_loader` here: the array above is already in the shape
+`GeometricMachineLearning.DataLoader` reads, so the constructor takes it directly.
+
+```@example pendulum
+using GeometricMachineLearning
+
+dl = DataLoader(data; autoencoder = true, suppress_info = true)
+(dl.input_dim, dl.input_time_steps, dl.n_params)
+```
+
+`autoencoder = true` is what marks the columns as independent samples rather than a time series,
+which is what an autoencoder wants. From here on it is an ordinary `GeometricMachineLearning`
+training run; `scripts/pendulum/train_sae.jl` is a complete one.
+
+!!! tip "Do not train on the whole phase space"
+    The default grid covers every angle and includes trajectories that go over the top, so the lifted
+    data set is a cylinder. A two-dimensional reduced coordinate that covers a cylinder has to be an
+    angle, and no continuous map from ``\mathbb{R}^2`` is one, so an autoencoder cannot do better
+    than tear it somewhere. Restricting the grid to trajectories that librate about ``\theta = \pi``
+    without reaching the separatrix — `qmin = [π/2]`, `qmax = [3π/2]`, `pmin = [-1.0]`,
+    `pmax = [1.0]` — gives a topological disc instead, and the same run reaches roughly a third of the
+    reconstruction error. That is what `scripts/pendulum/train_sae.jl` does.
+
+## Checking the integrator
+
+[`pendulum_energy`](@ref) evaluates ``H`` in either set of coordinates — on the canonical solution,
+on the lifted array, or on a pair of coordinate arrays. That the two agree is the statement that the
+lift preserved the dynamics:
+
+```@example pendulum
+energy = pendulum_energy(data)
+maximum(abs, energy .- pendulum_energy(solution))
+```
+
+And because the integrator is symplectic, the energy of each trajectory stays in a bounded band
+around its initial value rather than drifting away from it over the run:
+
+```@example pendulum
+maximum(abs, energy .- energy[1:1, :])
+```
+
+`scripts/pendulum/plot_dataset.jl` draws both of these — the phase portrait in each set of
+coordinates, and the energy error over time.
+
+## Other parameters
+
+`parameters` is the ``(\ell, m, g)`` named tuple that `GeometricProblems` takes, and it travels with
+the solution: [`angular_to_euclidean`](@ref) reads ``\ell`` off the problem rather than assuming it
+is one, and `pendulum_energy(solution)` reads all three.
+
+```@example pendulum
+heavy = pendulum(; parameters = (l = 2.0, m = 3.0, g = 9.81),
+                   qsamples = [4], psamples = [3], timespan = (0.0, 2.0))
+maximum(abs, sum(abs2, angular_to_euclidean(heavy)[1:2, :, :]; dims = 1))
+```
+
+For the Euclidean methods of [`pendulum_energy`](@ref) the parameters are an argument, since a bare
+array does not carry them:
+
+```@example pendulum
+const heavy_parameters = (l = 2.0, m = 3.0, g = 9.81)
+maximum(abs, pendulum_energy(angular_to_euclidean(heavy), heavy_parameters) .-
+             pendulum_energy(heavy))
 ```

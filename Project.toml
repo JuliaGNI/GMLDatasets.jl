@@ -5,17 +5,19 @@ authors = ["Michael Kraus", "Benedikt Brantner"]
 
 [deps]
 AbstractNeuralNetworks = "60874f82-5ada-4c70-bd1c-fa6be7711c8a"
-GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
 GeometricIntegrators = "dcce2d33-59f6-5b8d-9047-0defad88ae06"
+GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
 GeometricProblems = "18cb22b4-ad41-5c80-9c5f-710df63fbdc9"
+GeometricSolutions = "7843afe4-64f4-4df4-9231-049495c56661"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 
 [compat]
 AbstractNeuralNetworks = "0.6.4"
-GeometricMachineLearning = "0.5"
 GeometricIntegrators = "0.18"
+GeometricMachineLearning = "0.5"
 GeometricProblems = "0.8"
+GeometricSolutions = "0.6"
 KernelAbstractions = "0.9"
 MLDatasets = "0.7"
 Random = "1"

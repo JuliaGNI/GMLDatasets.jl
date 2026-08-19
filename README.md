@@ -8,9 +8,10 @@ and [GeometricOptimizers](https://github.com/JuliaGNI/GeometricOptimizers.jl).
 Both of those packages are libraries for *scientific* machine learning and neither should depend on
 an image-dataset package to document itself. This package holds everything that does: the
 [MLDatasets](https://github.com/JuliaML/MLDatasets.jl) glue, the MNIST and Fashion-MNIST
-demonstrations, and the numerical experiment from
+demonstrations, the numerical experiment from
 [brantner2023generalizing](https://arxiv.org/abs/2305.16901) that shows manifold optimization making
-a vision transformer trainable at all.
+a vision transformer trainable at all, and a symplectically integrated pendulum data set for the
+autoencoders.
 
 ## What is in here
 
@@ -28,6 +29,23 @@ patch into a column, and one-hot encodes the labels — the *time series* format
 The pieces are also available on their own: `split_and_flatten`, `onehotbatch`, `mnist`,
 `fashion_mnist`, and a `DataLoader(images, labels)` constructor.
 
+The pendulum half is the same kind of thin layer, over
+[GeometricProblems](https://github.com/JuliaGNI/GeometricProblems.jl) and
+[GeometricIntegrators](https://github.com/JuliaGNI/GeometricIntegrators.jl) instead:
+
+```julia
+using GeometricMachineLearning
+
+dl = DataLoader(angular_to_euclidean(pendulum()); autoencoder = true)
+```
+
+`pendulum` integrates a grid of initial conditions with a symplectic method and returns the
+`EnsembleSolution`; `angular_to_euclidean` lifts the two canonical coordinates into the four
+Euclidean ones, where the data lie on the tangent bundle of a circle — two dimensions inside four,
+which is a submanifold worth asking a `SymplecticAutoencoder` to find. `euclidean_to_angular`
+inverts the lift and `pendulum_energy` evaluates the Hamiltonian in either set of coordinates. There
+is no data loader of its own: the array is already in the shape `DataLoader` reads.
+
 `scripts/` holds the training runs, split by which package they exercise:
 
 - `scripts/gml/` — written against `GeometricMachineLearning`, so they get `DataLoader`,
@@ -37,10 +55,14 @@ The pieces are also available on their own: `split_and_flatten`, `onehotbatch`, 
 - `scripts/geometric_optimizers/` — written against `GeometricOptimizers` alone, with the neural
   network spelled out by hand. `GeometricMachineLearning` depends on `GeometricOptimizers`, so these
   cannot use it. Host, CUDA and Metal variants.
+- `scripts/pendulum/` — `train_sae.jl` trains a symplectic autoencoder on the pendulum data set and
+  `plot_dataset.jl` draws the data set and the integrator's energy error. Both run on the host in
+  minutes and neither needs a download.
 
-`docs/` builds the MNIST tutorial and the figures for the numerical experiment. The figures are drawn
-from CSVs checked in under `docs/src/data/`, so building the documentation needs neither a GPU nor a
-rerun.
+`docs/` builds the MNIST tutorial, the pendulum page and the figures for the numerical experiment.
+The figures are drawn from CSVs checked in under `docs/src/data/` and the pendulum page integrates
+its own data at build time in a fraction of a second, so building the documentation needs neither a
+GPU nor a rerun.
 
 ## Installation
 

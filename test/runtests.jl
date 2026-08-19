@@ -8,6 +8,6 @@ end
     include("docstrings.jl")
 end
 
-@safetestset "Pendulum dataset                                                              " begin
+@safetestset "Pendulum dataset                                                               " begin
     include("pendulum.jl")
 end

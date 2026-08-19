@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (pre-1.0, so a minor bump is a
 breaking release).
 
+## [Unreleased]
+
+### Added
+
+- **`src/pendulum.jl`**, new: `pendulum`, `angular_to_euclidean`, `euclidean_to_angular` and
+  `pendulum_energy`, with `docs/src/pendulum.md` and `scripts/pendulum/`. A mathematical pendulum,
+  integrated symplectically and lifted into four dimensions, as a data set for the symplectic
+  autoencoders — small, deterministic and with nothing to download.
+
+  It is a thin layer, in the same sense `src/datasets.jl` is one over `MLDatasets`. `pendulum` is
+  `GeometricProblems.Pendulum.hodeensemble` composed with `GeometricIntegrators.integrate` and
+  returns the `GeometricSolutions.EnsembleSolution` unchanged, rather than a trajectory and data-set
+  type of its own; `pendulum_energy` on canonical coordinates is
+  `GeometricProblems.Pendulum.hamiltonian` broadcast, rather than a second copy of that formula; and
+  there is no data loader function, because the array `angular_to_euclidean` returns is already what
+  `GeometricMachineLearning.DataLoader`'s tensor constructor reads. Compare
+  `GeometricMachineLearning`'s own symplectic-autoencoder tutorial, which is `hodeproblem`,
+  `integrate`, `DataLoader` and nothing else.
+
+  What is genuinely new is the **lift**. `angular_to_euclidean` replaces the angle by the position of
+  the bob in the plane,
+
+  ```
+  q = (l sin θ, l cos θ),   p = (pθ cos θ / l, −pθ sin θ / l),
+  ```
+
+  which is a symplectomorphism onto its image, and that image is the tangent bundle of the circle of
+  radius `l`: two dimensions of data sitting inside four, held there by ‖q‖ = l and q·p = 0. A
+  `SymplecticAutoencoder` therefore has a curved submanifold to find rather than a linear subspace,
+  which is the point of the example. `pendulum_energy` carries the same Hamiltonian into those
+  coordinates, `H = ‖p‖²/2m + m·g·q₂`, and the tests check that it agrees with `GeometricProblems`'
+  to the last bit at parameters that are *not* the defaults — the one place where dropping `l`, `m`
+  or `g` somewhere in the lift would otherwise go unnoticed.
+
+  On a solution, `angular_to_euclidean` reads `l` off the problem that solution was integrated from
+  rather than assuming it is one. The canonical coordinates come out of `GeometricSolutions` as
+  `OffsetVector`s indexed from zero, since a solution counts the initial condition as step 0; they
+  are collected on the way out so that nothing downstream ever sees a zero-based axis.
+
+  The Euclidean data are one `4 × n_t × n` array with rows `(q₁, q₂, p₁, p₂)`, and not the
+  `(q = …, p = …)` named tuple that `DataLoader` also accepts, deliberately: the named tuple builds a
+  loader, but training through it hits a missing `ZygotePullback` method for `AutoEncoderLoss` in
+  `GeometricMachineLearning`. The stacked layout is what the symplectic architectures assume anyway —
+  the first half of the rows is `q`, the second half is `p` — and one epoch of training is part of
+  the test suite so that a change of layout cannot pass silently.
+
+  `GeometricProblems`' Hamiltonian is `p²/(2ml²) + mgl·cos(q)`, with a **plus** in front of the
+  potential, so the pendulum hangs down at `θ = π` and stands upright at `θ = 0`. That is the
+  opposite of the convention most textbooks use and it is what every choice of initial conditions
+  here depends on, so the documentation says so in a box rather than in passing.
+
+  `scripts/pendulum/train_sae.jl` does **not** train on `pendulum()`'s default grid, and the reason is
+  topological rather than numerical. That grid is the whole phase space — every angle, and
+  trajectories that go over the top — so the lifted data set is a cylinder, and a reduced coordinate
+  covering a cylinder has to be an angle, which no continuous map from `ℝ²` is. The script restricts
+  itself to trajectories that librate about `θ = π` without reaching the separatrix, which is a
+  topological disc. Measured: 0.11 reconstruction error on the restricted grid against 0.38 on the
+  full one after the same number of epochs, and widening the network on the full grid makes it
+  slightly *worse* (0.44), which is what says the limit is not capacity.
+
 ## [0.1.0]
 
 Initial release. Nothing here is new code — it is the MLDatasets-dependent material extracted from

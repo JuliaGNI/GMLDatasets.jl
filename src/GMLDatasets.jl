@@ -32,9 +32,14 @@ export DataLoader
 export split_and_flatten, onehotbatch
 export mnist, fashion_mnist
 export mnist_data_loader, fashion_mnist_data_loader
+export PendulumTrajectory, PendulumDataset
+export angular_to_euclidean, euclidean_to_angular
+export pendulum_energy, pendulum_trajectory, pendulum_dataset
+export pendulum_matrix, pendulum_data_loader
 
 include("mnist_utils.jl")
 include("data_loader.jl")
 include("datasets.jl")
+include("pendulum.jl")
 
 end

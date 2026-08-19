@@ -28,6 +28,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "MNIST Tutorial" => "mnist/mnist_tutorial.md",
+        "Pendulum Dataset" => "pendulum.md",
         "The Numerical Experiment on Homogeneous Spaces" => "homogeneous_spaces_experiment.md",
         "Running the Experiments" => "running_the_experiments.md",
         "References" => "references.md",

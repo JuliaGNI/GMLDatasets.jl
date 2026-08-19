@@ -446,3 +446,16 @@ and statuses have been verified.
 - Documentation builds without training and uses verified parameters.
 - Obsolete copied files and generated outputs are removed or ignored.
 - The final diff, dependency changes, and external actions have been reviewed.
+
+### External repository actions (August 19, 2026)
+
+- Committed the implementation as `3e7f07a` with explicit AI-assistance attribution.
+- Pushed branch `pendulum-dataset` to the maintainer's personal fork after the
+  upstream repository rejected direct branch pushes for the authenticated
+  account.
+- Opened pull request #4:
+  https://github.com/JuliaGNI/GMLDatasets.jl/pull/4
+- Checked the upstream open issues first; no matching issue existed. Opened
+  issue #3 requesting removal of the required `GeometricMachineLearning`
+  dependency when `DataLoader` moves to its planned standalone package:
+  https://github.com/JuliaGNI/GMLDatasets.jl/issues/3

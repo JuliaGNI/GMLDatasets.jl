@@ -56,8 +56,9 @@ is no data loader of its own: the array is already in the shape `DataLoader` rea
   network spelled out by hand. `GeometricMachineLearning` depends on `GeometricOptimizers`, so these
   cannot use it. Host, CUDA and Metal variants.
 - `scripts/pendulum/` — `train_sae.jl` trains a symplectic autoencoder on the pendulum data set and
-  `plot_dataset.jl` draws the data set and the integrator's energy error. Both run on the host in
-  minutes and neither needs a download.
+  `plot_dataset.jl` draws the data set and the integrator's energy error. Training covers both sides
+  of the separatrix, uses CUDA when available, and saves its result with HDF5; neither script needs a
+  download.
 
 `docs/` builds the MNIST tutorial, the pendulum page and the figures for the numerical experiment.
 The figures are drawn from CSVs checked in under `docs/src/data/` and the pendulum page integrates

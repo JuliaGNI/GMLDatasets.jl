@@ -57,14 +57,13 @@ breaking release).
   opposite of the convention most textbooks use and it is what every choice of initial conditions
   here depends on, so the documentation says so in a box rather than in passing.
 
-  `scripts/pendulum/train_sae.jl` does **not** train on `pendulum()`'s default grid, and the reason is
-  topological rather than numerical. That grid is the whole phase space — every angle, and
-  trajectories that go over the top — so the lifted data set is a cylinder, and a reduced coordinate
-  covering a cylinder has to be an angle, which no continuous map from `ℝ²` is. The script restricts
-  itself to trajectories that librate about `θ = π` without reaching the separatrix, which is a
-  topological disc. Measured: 0.11 reconstruction error on the restricted grid against 0.38 on the
-  full one after the same number of epochs, and widening the network on the full grid makes it
-  slightly *worse* (0.44), which is what says the limit is not capacity.
+  `scripts/pendulum/train_sae.jl` trains on `pendulum()`'s default bounded grid, including librating
+  and rotating trajectories on both sides of the separatrix. Although the standard reduction cannot
+  use a globally real-valued angular coordinate, a bounded cylinder can be represented differently
+  in two dimensions — for example as an annulus. The SAE experiment therefore tests whether a
+  learned reduction can represent the separatrix without reproducing `(θ, pθ)`. It uses the deeper
+  12,000-epoch architecture that demonstrated this behavior experimentally, prefers CUDA when
+  available, falls back to the host, and saves the trained parameters and loss curve with HDF5.
 
 ## [0.1.0]
 

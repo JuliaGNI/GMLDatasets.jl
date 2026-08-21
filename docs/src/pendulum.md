@@ -36,7 +36,7 @@ gravitational acceleration ``\ell``, ``m``, ``g``.
 ## Generating the data
 
 [`pendulum`](@ref) integrates a grid of initial conditions and hands back the
-`GeometricSolutions.EnsembleSolution`:
+[`GeometricSolutions.EnsembleSolution`](@extref):
 
 ```@example pendulum
 using GMLDatasets
@@ -84,7 +84,7 @@ q, p = data[1:2, :, :], data[3:4, :, :]
 ## Handing it to a network
 
 There is no `pendulum_data_loader` here: the array above is already in the shape
-`GeometricMachineLearning.DataLoader` reads, so the constructor takes it directly.
+[`GeometricMachineLearning.DataLoader`](@extref) reads, so the constructor takes it directly.
 
 ```@example pendulum
 using GeometricMachineLearning
@@ -97,14 +97,14 @@ dl = DataLoader(data; autoencoder = true, suppress_info = true)
 which is what an autoencoder wants. From here on it is an ordinary `GeometricMachineLearning`
 training run; `scripts/pendulum/train_sae.jl` is a complete one.
 
-!!! tip "Do not train on the whole phase space"
-    The default grid covers every angle and includes trajectories that go over the top, so the lifted
-    data set is a cylinder. A two-dimensional reduced coordinate that covers a cylinder has to be an
-    angle, and no continuous map from ``\mathbb{R}^2`` is one, so an autoencoder cannot do better
-    than tear it somewhere. Restricting the grid to trajectories that librate about ``\theta = \pi``
-    without reaching the separatrix — `qmin = [π/2]`, `qmax = [3π/2]`, `pmin = [-1.0]`,
-    `pmax = [1.0]` — gives a topological disc instead, and the same run reaches roughly a third of the
-    reconstruction error. That is what `scripts/pendulum/train_sae.jl` does.
+!!! tip "Train across the separatrix"
+    The standard reduction ``(\theta, p_\theta)`` cannot be represented globally by two ordinary
+    real-valued coordinates because ``\theta`` is periodic. That does **not** prevent an SAE from
+    finding a different two-dimensional representation of a bounded part of the cylinder. For
+    example, it can represent the angular direction by an annular geometry in its latent plane.
+    `scripts/pendulum/train_sae.jl` therefore trains on the default bounded grid, which contains both
+    librating and rotating trajectories and crosses the separatrix. The learned coordinates need not
+    resemble ``(\theta, p_\theta)`` to represent those trajectories faithfully.
 
 ## Checking the integrator
 

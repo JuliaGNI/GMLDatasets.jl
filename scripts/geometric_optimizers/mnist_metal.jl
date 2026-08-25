@@ -49,7 +49,13 @@
 # it ever grows out of it again.
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!, ParameterHandling
+using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
+# `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
+# package that owns a parameter set and does its flattening. This script used to reach the old one
+# through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
+# `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
+# `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
+using NeuralNetworkParameters: flatten, flatten!, freeparameters, parameterlayout, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
@@ -208,7 +214,7 @@ resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the b
 const classification_index = lastindex(parameter_layout)
 
 # the range that a parameter occupies in the flattened parameter vector, i.e. in
-# `ParameterHandling.flatten(ps)[1]`
+# `NeuralNetworkParameters.flatten(ps)[1]`
 const parameter_ranges = let offsets = cumsum([0; prod.(parameter_sizes)])
     [(offsets[i]+1):offsets[i+1] for i in eachindex(parameter_sizes)]
 end
@@ -234,8 +240,6 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
     NamedTuple{parameter_keys}(Tuple(values))
 end
 
-_array(Y::StiefelManifold) = Y.A
-_array(Y::AbstractArray) = Y
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
@@ -264,17 +268,35 @@ const host_parameters = zeros(T, n_parameters)
 const device_parameters = to_device(zeros(T, n_parameters))
 const device_gradient = to_device(zeros(T, n_parameters))
 
+# The layout of the parameter set, built once from a prototype: `flatten!` writes through it with a
+# `copyto!` per leaf over a known range, so the per-iteration flattening allocates nothing. This is what
+# replaced a hand-written loop over `parameter_ranges`, and `freeparameters` is what takes a
+# `StiefelManifold` down to its dense `A` -- by a method `GeometricOptimizers` registers, so the
+# knowledge lives in the package that owns the type.
+const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
+
+# The hand-computed `parameter_ranges` above have to agree with the flattening. Asserted at load time
+# and not in a comment: `regroup` reads the flat vector by those ranges and `∇F!` writes the gradient
+# into it the same way, so if the two ever diverged every gradient would be wrong by a permutation and
+# nothing would say so. This is the whole of what the port has to get right.
+let ps = initial_parameters(Random.Xoshiro(seed), true)
+    v, _ = flatten(ps)
+    n_parameters == length(v) == flatlength(ps) ||
+        error("parameter_ranges cover ", n_parameters, " numbers, the flattening has ", length(v))
+    for (i, (key, p)) in enumerate(pairs(ps))
+        v[parameter_ranges[i]] == vec(freeparameters(p)) ||
+            error("`", key, "` is not at parameter_ranges[", i, "] in the flattening")
+    end
+end
+
 """
     flatten_parameters!(v, ps)
 
 Write the parameter `NamedTuple` into the flat vector `v`, in the same order in which
-`ParameterHandling.flatten` writes it (which is the order of `parameter_ranges`).
+`NeuralNetworkParameters.flatten` writes it (which is the order of `parameter_ranges`).
 """
 function flatten_parameters!(v::AbstractVector{T}, ps::NamedTuple)
-    for (i, p) in pairs(values(ps))
-        copyto!(view(v, parameter_ranges[i]), vec(_array(p)))
-    end
-    v
+    flatten!(v, ps, parameter_flat_layout)
 end
 
 function regroup_device(v::AbstractVector{T})
@@ -426,7 +448,7 @@ cancellation error of the difference quotient is of the same order as the quanti
 be multiplied on the GPU, so this part has to run on the host anyway.
 """
 function check_gradient(ps::NamedTuple)
-    v, _ = ParameterHandling.flatten(ps)
+    v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
     d = Random.randn(Random.Xoshiro(seed), T, length(v))
@@ -538,7 +560,7 @@ for run in runs
     ps, losses, total_time = train(run.stiefel, run.algorithm, train_input, train_output)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, parameters=map(_array, ps), losses=losses, total_time=total_time, accuracy=score))
+    push!(results, (name=run.name, parameters=map(freeparameters, ps), losses=losses, total_time=total_time, accuracy=score))
 end
 
 output = Dict{String,Any}("n_epochs" => n_epochs)

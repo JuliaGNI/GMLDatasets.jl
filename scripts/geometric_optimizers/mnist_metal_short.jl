@@ -87,7 +87,13 @@
 # the gradient noise, i.e. the optimization problem, which is why it is not the default.
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!, ParameterHandling
+using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
+# `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
+# package that owns a parameter set and does its flattening. This script used to reach the old one
+# through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
+# `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
+# `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
+using NeuralNetworkParameters: flatten, flatten!, freeparameters, parameterlayout, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
@@ -274,8 +280,6 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
     NamedTuple{parameter_keys}(Tuple(values))
 end
 
-_array(Y::StiefelManifold) = Y.A
-_array(Y::AbstractArray) = Y
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 function regroup(get_parameter::Base.Callable)
@@ -299,17 +303,35 @@ const host_parameters = zeros(T, n_parameters)
 const device_parameters = to_device(zeros(T, n_parameters))
 const device_gradient = to_device(zeros(T, n_parameters))
 
+# The layout of the parameter set, built once from a prototype: `flatten!` writes through it with a
+# `copyto!` per leaf over a known range, so the per-iteration flattening allocates nothing. This is what
+# replaced a hand-written loop over `parameter_ranges`, and `freeparameters` is what takes a
+# `StiefelManifold` down to its dense `A` -- by a method `GeometricOptimizers` registers, so the
+# knowledge lives in the package that owns the type.
+const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
+
+# The hand-computed `parameter_ranges` above have to agree with the flattening. Asserted at load time
+# and not in a comment: `regroup` reads the flat vector by those ranges and `∇F!` writes the gradient
+# into it the same way, so if the two ever diverged every gradient would be wrong by a permutation and
+# nothing would say so. This is the whole of what the port has to get right.
+let ps = initial_parameters(Random.Xoshiro(seed), true)
+    v, _ = flatten(ps)
+    n_parameters == length(v) == flatlength(ps) ||
+        error("parameter_ranges cover ", n_parameters, " numbers, the flattening has ", length(v))
+    for (i, (key, p)) in enumerate(pairs(ps))
+        v[parameter_ranges[i]] == vec(freeparameters(p)) ||
+            error("`", key, "` is not at parameter_ranges[", i, "] in the flattening")
+    end
+end
+
 """
     flatten_parameters!(v, ps)
 
 Write the parameter `NamedTuple` into the flat vector `v`, in the order of `parameter_ranges`
-(which is the order `ParameterHandling.flatten` uses).
+(which is the order `NeuralNetworkParameters.flatten` uses).
 """
 function flatten_parameters!(v::AbstractVector{T}, ps::NamedTuple)
-    for (i, p) in pairs(values(ps))
-        copyto!(view(v, parameter_ranges[i]), vec(_array(p)))
-    end
-    v
+    flatten!(v, ps, parameter_flat_layout)
 end
 
 function regroup_device(v::AbstractVector{T})
@@ -452,7 +474,7 @@ needs a single dual number instead — and `ForwardDiff.Dual`s cannot be multipl
 so the reference has to be computed on the host.
 """
 function check_gradient(ps::NamedTuple)
-    v, _ = ParameterHandling.flatten(ps)
+    v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
     d = Random.randn(Random.Xoshiro(seed), T, length(v))
@@ -477,7 +499,7 @@ function orthonormality_error(ps::NamedTuple)
     ps[1] isa StiefelManifold || return T(NaN)
     worst = zero(T)
     for i in 1:n_attention_parameters
-        A = _array(values(ps)[i])
+        A = freeparameters(values(ps)[i])
         worst = max(worst, T(norm(A' * A - I)))
     end
     worst
@@ -491,7 +513,7 @@ step that silently promoted the parameters to `Float64`, shows up here.
 """
 function parameters_are_sound(ps::NamedTuple)
     all(values(ps)) do p
-        A = _array(p)
+        A = freeparameters(p)
         eltype(A) === T && all(isfinite, A)
     end
 end
@@ -683,7 +705,7 @@ for (j, run) in pairs(runs)
         train(run.stiefel, run.algorithm, train_input, train_output; n_epochs=n_epochs, deadline=deadline)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, stiefel=run.stiefel, learns=run.learns, parameters=map(_array, ps),
+    push!(results, (name=run.name, stiefel=run.stiefel, learns=run.learns, parameters=map(freeparameters, ps),
         losses=losses, epoch_losses=epoch_losses, total_time=total_time, accuracy=score,
         truncated=truncated, orthonormality=orthonormality_error(ps), sound=parameters_are_sound(ps)))
 end

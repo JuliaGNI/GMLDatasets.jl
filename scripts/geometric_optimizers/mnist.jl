@@ -19,7 +19,13 @@
 # of parameters (of which there are more than 150000 for the default configuration).
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!, ParameterHandling
+using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
+# `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
+# package that owns a parameter set and does its flattening. This script used to reach the old one
+# through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
+# `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
+# `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
+using NeuralNetworkParameters: flatten, freeparameters, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
@@ -101,7 +107,10 @@ resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the b
 const classification_index = lastindex(parameter_layout)
 
 # the range that a parameter occupies in the flattened parameter vector, i.e. in
-# `ParameterHandling.flatten(ps)[1]`
+# `NeuralNetworkParameters.flatten(ps)[1]`. Computed here rather than read off a layout because it is
+# needed before there is a parameter set to build one from -- and checked against the real thing below,
+# which is the point: this script indexes the flat vector by hand and the optimizer flattens with
+# `NeuralNetworkParameters`, so a disagreement would permute the gradient silently.
 const parameter_ranges = let offsets = cumsum([0; prod.(parameter_sizes)])
     [(offsets[i]+1):offsets[i+1] for i in eachindex(parameter_sizes)]
 end
@@ -127,11 +136,23 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
     NamedTuple{parameter_keys}(Tuple(values))
 end
 
+# The hand-computed ranges above have to agree with the flattening the optimizer actually performs.
+# Asserted at load time and not in a comment: `∇F!` writes the gradient into the flat vector by these
+# ranges, so if the two ever diverged every gradient would be wrong by a permutation and nothing would
+# say so. This is also the whole of what the port to `NeuralNetworkParameters` has to get right.
+let ps = initial_parameters(Random.Xoshiro(seed), true)
+    v, _ = flatten(ps)
+    n_parameters == length(v) == flatlength(ps) ||
+        error("parameter_ranges cover ", n_parameters, " numbers, the flattening has ", length(v))
+    for (i, (key, p)) in enumerate(pairs(ps))
+        v[parameter_ranges[i]] == vec(freeparameters(p)) ||
+            error("`", key, "` is not at parameter_ranges[", i, "] in the flattening")
+    end
+end
+
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
-# type stable.
-_array(Y::StiefelManifold) = Y.A
-_array(Y::AbstractArray) = Y
+# type stable. `freeparameters` is what takes a `StiefelManifold` down to its dense `A`.
 
 function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
     (Q=Matrix{R}[get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
@@ -143,7 +164,7 @@ function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
 end
 
 regroup(ps::NamedTuple) = regroup(let p = values(ps)
-    i -> _array(p[i])
+    i -> freeparameters(p[i])
 end)
 
 # the element type is kept general here so that `check_gradient` can differentiate through it
@@ -272,7 +293,7 @@ Note that a central difference is not a useful comparison here: the objective is
 cancellation error of the difference quotient is of the same order as the quantity itself.
 """
 function check_gradient(ps::NamedTuple)
-    v, _ = ParameterHandling.flatten(ps)
+    v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
     d = Random.randn(Random.Xoshiro(seed), T, length(v))
@@ -372,7 +393,7 @@ for run in runs
     ps, losses, total_time = train(run.stiefel, run.algorithm, train_input, train_output)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, parameters=map(_array, ps), losses=losses, total_time=total_time, accuracy=score))
+    push!(results, (name=run.name, parameters=map(freeparameters, ps), losses=losses, total_time=total_time, accuracy=score))
 end
 
 output = Dict{String,Any}("n_epochs" => n_epochs)

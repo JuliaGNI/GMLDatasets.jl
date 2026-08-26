@@ -19,7 +19,14 @@
 # of parameters (of which there are more than 150000 for the default configuration).
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!, ParameterHandling
+using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
+# `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
+# package that owns a parameter set and does its flattening. This script used to reach the old one
+# through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
+# `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
+# `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
+using NeuralNetworkParameters: flatten, freeparameters,
+                               parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
@@ -100,13 +107,6 @@ attention_index(kind::Integer, l::Integer, h::Integer) = (l - 1) * 3 * n_heads +
 resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the bias follows right after
 const classification_index = lastindex(parameter_layout)
 
-# the range that a parameter occupies in the flattened parameter vector, i.e. in
-# `ParameterHandling.flatten(ps)[1]`
-const parameter_ranges = let offsets = cumsum([0; prod.(parameter_sizes)])
-    [(offsets[i]+1):offsets[i+1] for i in eachindex(parameter_sizes)]
-end
-const n_parameters = last(last(parameter_ranges))
-
 # `GlorotUniform` of `AbstractNeuralNetworks`, which is what the original script uses for all
 # parameters that are not on a manifold.
 function glorot_uniform(rng::Random.AbstractRNG, size::Tuple)
@@ -127,11 +127,29 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
     NamedTuple{parameter_keys}(Tuple(values))
 end
 
+# The layout of the parameter set, and the ranges this script indexes the flat vector by.
+#
+# Both are read *off the layout* rather than computed here from `parameter_sizes`. That is the whole of
+# what the port from `ParameterHandling` to `NeuralNetworkParameters` had to get right: this script
+# reads and writes the flat vector by hand — `regroup` slices it, `∇F!` writes the gradient into it —
+# while the optimizer flattens with `NeuralNetworkParameters`, so a disagreement between the two
+# orderings would permute every gradient and nothing would say so. Deriving the ranges from the same
+# layout the flattening uses makes the two agree by construction, where a `cumsum` over
+# `parameter_sizes` beside an assertion that it matched only made them agree by inspection.
+#
+# `parameterlayout` needs a parameter set to read, so this comes after `initial_parameters` rather than
+# beside `parameter_sizes`. `flatten!` writes through the layout with one `copyto!` per leaf over a
+# known range, which is what makes the per-iteration flattening allocation-free, and `freeparameters`
+# is what takes a `StiefelManifold` down to its dense `A` — by a method `GeometricOptimizers`
+# registers, so this script needs no copy of that knowledge.
+const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
+const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.children, i))
+                          for i in eachindex(parameter_sizes)]
+const n_parameters = flatlength(parameter_flat_layout)
+
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
-# type stable.
-_array(Y::StiefelManifold) = Y.A
-_array(Y::AbstractArray) = Y
+# type stable. `freeparameters` is what takes a `StiefelManifold` down to its dense `A`.
 
 function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
     (Q=Matrix{R}[get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
@@ -143,7 +161,7 @@ function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
 end
 
 regroup(ps::NamedTuple) = regroup(let p = values(ps)
-    i -> _array(p[i])
+    i -> freeparameters(p[i])
 end)
 
 # the element type is kept general here so that `check_gradient` can differentiate through it
@@ -272,7 +290,7 @@ Note that a central difference is not a useful comparison here: the objective is
 cancellation error of the difference quotient is of the same order as the quantity itself.
 """
 function check_gradient(ps::NamedTuple)
-    v, _ = ParameterHandling.flatten(ps)
+    v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
     d = Random.randn(Random.Xoshiro(seed), T, length(v))
@@ -372,7 +390,7 @@ for run in runs
     ps, losses, total_time = train(run.stiefel, run.algorithm, train_input, train_output)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, parameters=map(_array, ps), losses=losses, total_time=total_time, accuracy=score))
+    push!(results, (name=run.name, parameters=map(freeparameters, ps), losses=losses, total_time=total_time, accuracy=score))
 end
 
 output = Dict{String,Any}("n_epochs" => n_epochs)

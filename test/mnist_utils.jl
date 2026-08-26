@@ -4,6 +4,11 @@ using GMLDatasets: patch_index
 using GMLDatasets: within_patch_index
 using GMLDatasets: index_conversion
 using GeometricMachineLearning
+# `ParameterSet` is `Union{NamedTuple, NetworkParameters}` -- the union this annotation used to
+# spell as `Union{NamedTuple, NeuralNetworkParameters}`, back when the container was a type of
+# that name in `AbstractNeuralNetworks`. It is a package now, and the type in it is
+# `NetworkParameters`, so the old spelling names nothing.
+using NeuralNetworkParameters: ParameterSet
 import Zygote, Random
 
 Random.seed!(1234)
@@ -82,7 +87,7 @@ function test_optimizer_for_classification_layer(; dim₁=28, dim₂=28, number_
 
     ps = NeuralNetwork(model, CPU(), T).params
     loss = FeedForwardLoss()
-    loss_dl(model::GeometricMachineLearning.Chain, ps::Union{Tuple, NamedTuple, NeuralNetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
+    loss_dl(model::GeometricMachineLearning.Chain, ps::Union{Tuple, ParameterSet}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
     loss₁ = loss_dl(model, ps, dl)
 
     opt = Optimizer(GradientOptimizer(), ps)

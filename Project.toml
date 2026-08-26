@@ -10,30 +10,27 @@ KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 
 [compat]
-AbstractNeuralNetworks = "0.6.4"
-GeometricMachineLearning = "0.5"
+AbstractNeuralNetworks = "0.7"
+GeometricMachineLearning = "0.6"
 KernelAbstractions = "0.9"
 MLDatasets = "0.7"
+# A test dependency: `test/mnist_utils.jl` annotates against `ParameterSet`, added in 0.2.2.
+NeuralNetworkParameters = "0.2.2"
 Random = "1"
 SafeTestsets = "0.1"
-Zygote = "0.6"
-# 1.11 and not 1.10 because of the `[sources]` block below: `[sources]` is a Julia 1.11 feature and
-# Pkg 1.10 ignores it, falls back to the registered `GeometricMachineLearning` 0.4.8 and cannot then
-# satisfy the `"0.5"` bound above. Both this and the CI matrix go back to 1.10 once 0.5 is registered
-# and `[sources]` goes away.
+Test = "1"
+Zygote = "0.7"
+# 1.11 is the floor across this family of packages. It used to be 1.11 for a local reason as well --
+# the `[sources]` block that pinned `GeometricMachineLearning` to `main` is a Julia 1.11 feature -- and
+# that reason is gone: 0.6.0 is registered and the block with it.
 julia = "1.11"
 
 [extras]
+NeuralNetworkParameters = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Random", "Test", "SafeTestsets", "Zygote"]
-
-# `GeometricMachineLearning` 0.5 is not tagged yet and 0.4.8 still defines `split_and_flatten`,
-# `onehotbatch` and the classification `DataLoader` constructor that this package now owns, so it has
-# to come from `main`. Drop this block once 0.5 is registered.
-[sources]
-GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl", rev = "main"}
+test = ["NeuralNetworkParameters", "Random", "Test", "SafeTestsets", "Zygote"]

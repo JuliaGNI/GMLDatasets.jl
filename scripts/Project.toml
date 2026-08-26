@@ -28,6 +28,8 @@ SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
+# `GMLDatasets` is not registered, so it is reached by path. `GeometricMachineLearning` used to be
+# here too, pinned to `main`, because the container work these scripts are written against was
+# unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
 [sources]
 GMLDatasets = {path = ".."}
-GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl", rev = "main"}

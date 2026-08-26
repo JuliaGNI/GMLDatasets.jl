@@ -35,7 +35,7 @@ isfile(results_file) || error("no such file: $results_file — run `transformer_
                               "or pass the path of a `.jld2` it wrote")
 
 # Read only the datasets that are needed. `JLD2.load` would pull in the `nn*weights` too, and
-# reconstructing a `NeuralNetworkParameters` of `StiefelManifold`s needs `GeometricMachineLearning`
+# reconstructing a `NetworkParameters` of `StiefelManifold`s needs `GeometricMachineLearning`
 # loaded just to be thrown away again.
 losses, times, accuracies = JLD2.jldopen(results_file, "r") do file
     ([file["loss_array$i"] for i in 1:4],

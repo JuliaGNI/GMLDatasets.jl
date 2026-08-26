@@ -91,7 +91,8 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, flatten!, freeparameters, parameterlayout, flatlength
+using NeuralNetworkParameters: flatten, flatten!, freeparameters,
+                               parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
@@ -361,13 +362,6 @@ attention_index(kind::Integer, l::Integer, h::Integer) = (l - 1) * 3 * n_heads +
 resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the bias follows right after
 const classification_index = lastindex(parameter_layout)
 
-# the range that a parameter occupies in the flattened parameter vector, i.e. in
-# `NeuralNetworkParameters.flatten(ps)[1]`
-const parameter_ranges = let offsets = cumsum([0; prod.(parameter_sizes)])
-    [(offsets[i]+1):offsets[i+1] for i in eachindex(parameter_sizes)]
-end
-const n_parameters = last(last(parameter_ranges))
-
 # `GlorotUniform` of `AbstractNeuralNetworks`, which is what the original script uses for all
 # parameters that are not on a manifold.
 function glorot_uniform(rng::Random.AbstractRNG, size::Tuple)
@@ -387,7 +381,6 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
     end
     NamedTuple{parameter_keys}(Tuple(values))
 end
-
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
@@ -416,26 +409,25 @@ const host_parameters = zeros(T, n_parameters)
 const device_parameters = to_device(zeros(T, n_parameters))
 const device_gradient = to_device(zeros(T, n_parameters))
 
-# The layout of the parameter set, built once from a prototype: `flatten!` writes through it with a
-# `copyto!` per leaf over a known range, so the per-iteration flattening allocates nothing. This is what
-# replaced a hand-written loop over `parameter_ranges`, and `freeparameters` is what takes a
-# `StiefelManifold` down to its dense `A` -- by a method `GeometricOptimizers` registers, so the
-# knowledge lives in the package that owns the type.
+# The layout of the parameter set, and the ranges this script indexes the flat vector by.
+#
+# Both are read *off the layout* rather than computed here from `parameter_sizes`. That is the whole of
+# what the port from `ParameterHandling` to `NeuralNetworkParameters` had to get right: this script
+# reads and writes the flat vector by hand — `regroup` slices it, `∇F!` writes the gradient into it —
+# while the optimizer flattens with `NeuralNetworkParameters`, so a disagreement between the two
+# orderings would permute every gradient and nothing would say so. Deriving the ranges from the same
+# layout the flattening uses makes the two agree by construction, where a `cumsum` over
+# `parameter_sizes` beside an assertion that it matched only made them agree by inspection.
+#
+# `parameterlayout` needs a parameter set to read, so this comes after `initial_parameters` rather than
+# beside `parameter_sizes`. `flatten!` writes through the layout with one `copyto!` per leaf over a
+# known range, which is what makes the per-iteration flattening allocation-free, and `freeparameters`
+# is what takes a `StiefelManifold` down to its dense `A` — by a method `GeometricOptimizers`
+# registers, so this script needs no copy of that knowledge.
 const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
-
-# The hand-computed `parameter_ranges` above have to agree with the flattening. Asserted at load time
-# and not in a comment: `regroup` reads the flat vector by those ranges and `∇F!` writes the gradient
-# into it the same way, so if the two ever diverged every gradient would be wrong by a permutation and
-# nothing would say so. This is the whole of what the port has to get right.
-let ps = initial_parameters(Random.Xoshiro(seed), true)
-    v, _ = flatten(ps)
-    n_parameters == length(v) == flatlength(ps) ||
-        error("parameter_ranges cover ", n_parameters, " numbers, the flattening has ", length(v))
-    for (i, (key, p)) in enumerate(pairs(ps))
-        v[parameter_ranges[i]] == vec(freeparameters(p)) ||
-            error("`", key, "` is not at parameter_ranges[", i, "] in the flattening")
-    end
-end
+const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.children, i))
+                          for i in eachindex(parameter_sizes)]
+const n_parameters = flatlength(parameter_flat_layout)
 
 """
     flatten_parameters!(v, ps)

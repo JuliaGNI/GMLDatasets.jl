@@ -42,7 +42,7 @@ gravitational acceleration ``\ell``, ``m``, ``g``.
 using GMLDatasets
 
 solution = pendulum()
-(length(solution.s), length(solution.t))
+(length(solution), length(solution.t))
 ```
 
 That is a hundred trajectories of a hundred and one time steps each, spread over
@@ -139,11 +139,17 @@ heavy = pendulum(; parameters = (l = 2.0, m = 3.0, g = 9.81),
 maximum(abs, sum(abs2, angular_to_euclidean(heavy)[1:2, :, :]; dims = 1))
 ```
 
+That is ``\ell^2 = 4``, not 1: the bob is on the circle of radius two, because
+[`angular_to_euclidean`](@ref) took ``\ell`` from the problem rather than assuming it away.
+
 For the Euclidean methods of [`pendulum_energy`](@ref) the parameters are an argument, since a bare
 array does not carry them:
 
 ```@example pendulum
-const heavy_parameters = (l = 2.0, m = 3.0, g = 9.81)
+heavy_parameters = (l = 2.0, m = 3.0, g = 9.81)
 maximum(abs, pendulum_energy(angular_to_euclidean(heavy), heavy_parameters) .-
              pendulum_energy(heavy))
 ```
+
+Zero to rounding — the two coordinate systems give the same energy away from the defaults as well,
+which is the statement that no factor of ``\ell``, ``m`` or ``g`` was dropped in the lift.

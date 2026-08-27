@@ -39,6 +39,15 @@ end
 
     # The canonical method must stay `GeometricProblems`' Hamiltonian rather than a copy of it, and
     # the Euclidean one must be the same function written in the lifted coordinates.
+    #
+    # Asserted against the closed form rather than against `Pendulum.hamiltonian` itself: comparing
+    # the implementation with the expression it is written as cannot fail. This can, and the case it
+    # catches is the one that matters — `GeometricProblems`' potential is `+mgl·cos(θ)`, so the
+    # pendulum hangs down at θ = π, and every initial condition in this package is chosen against
+    # that sign.
+    @test pendulum_energy(θ, pθ, parameters) ≈
+          @. pθ^2 / (2 * parameters.m * parameters.l^2) +
+             parameters.m * parameters.g * parameters.l * cos(θ)
     @test pendulum_energy(θ, pθ, parameters) ==
           Pendulum.hamiltonian.(0.0, θ, pθ, Ref(parameters))
 
@@ -55,7 +64,7 @@ end
     solution = pendulum(; qmin=[2.0], qmax=[4.0], pmin=[0.0], pmax=[0.5],
         qsamples=[3], psamples=[2], parameters=parameters,
         timespan=(0.0, 2.0), timestep=0.1)
-    @test length(solution.s) == 6
+    @test length(solution) == 6
     @test length(solution.t) == 21
 
     # One array, rows (q₁, q₂, p₁, p₂), one column per time step and one slice per trajectory.
@@ -74,8 +83,8 @@ end
     @test pendulum_energy(data, parameters) ≈ energy
     @test maximum(abs, energy .- energy[1:1, :]) < 1e-4
 
-    @test angular_to_euclidean(first(solution.s)) ≈ data[:, :, 1:1]
-    @test pendulum_energy(first(solution.s)) ≈ energy[:, 1]
+    @test angular_to_euclidean(first(solution)) ≈ data[:, :, 1:1]
+    @test pendulum_energy(first(solution)) ≈ energy[:, 1]
 end
 
 @testset "DataLoader and SymplecticAutoencoder" begin

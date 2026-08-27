@@ -1,0 +1,1043 @@
+# DocInventory version 1
+project = "GeometricMachineLearning.jl"
+version = "0.6.0"
+
+[[jl.function]]
+name = "GeometricMachineLearning.Transformer"
+uri = "architectures/transformer/#$"
+[[jl.function]]
+name = "GeometricMachineLearning._get_contents"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.function]]
+name = "GeometricMachineLearning._get_params"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.function]]
+name = "GeometricMachineLearning._processing"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.accuracy"
+uri = "data_loader/data_loader/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.assign_output_estimate"
+uri = "architectures/transformer/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.build_f_reduced"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.build_v_reduced"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.convert_input_and_batch_indices_to_array"
+uri = "data_loader/data_loader/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.decoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.encoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.number_of_batches"
+uri = "data_loader/data_loader/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.optimization_step!"
+uri = "optimizers/optimizer/#GeometricMachineLearning.optimization_step%21"
+[[jl.function]]
+name = "GeometricMachineLearning.optimization_step!-introduction"
+uri = "introduction/#GeometricMachineLearning.optimization_step%21-introduction"
+[[jl.function]]
+name = "GeometricMachineLearning.optimize_for_one_epoch!"
+uri = "optimizers/optimizer/#GeometricMachineLearning.optimize_for_one_epoch%21"
+[[jl.function]]
+name = "GeometricMachineLearning.projection_error"
+uri = "reduced_order_modeling/losses/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.reduction_error"
+uri = "reduced_order_modeling/losses/#$"
+[[jl.function]]
+name = "GeometricMachineLearning.tensor_mat_skew_sym_assign"
+uri = "layers/attention_layer/#$"
+[[jl.function]]
+name = "SimpleSolvers.solve!"
+uri = "reduced_order_modeling/symplectic_mor/#SimpleSolvers.solve%21"
+
+[[jl.method]]
+name = "Base.iterate-Union{Tuple{AT}, Tuple{T}, Tuple{NeuralNetwork{<:TransformerIntegrator}, @NamedTuple{q::AT, p::AT}}} where {T, AT<:AbstractMatrix{T}}"
+uri = "architectures/neural_network_integrators/#Base.iterate-Union%7BTuple%7BAT%7D%2C%20Tuple%7BT%7D%2C%20Tuple%7BNeuralNetwork%7B%3C%3ATransformerIntegrator%7D%2C%20%40NamedTuple%7Bq%3A%3AAT%2C%20p%3A%3AAT%7D%7D%7D%20where%20%7BT%2C%20AT%3C%3AAbstractMatrix%7BT%7D%7D"
+[[jl.method]]
+name = "Base.iterate-Union{Tuple{BT}, Tuple{AT}, Tuple{T}, Tuple{NeuralNetwork{<:NeuralNetworkIntegrator}, BT}} where {T, AT<:AbstractVector{T}, BT<:@NamedTuple{q::AT, p::AT}}"
+uri = "architectures/neural_network_integrators/#Base.iterate-Union%7BTuple%7BBT%7D%2C%20Tuple%7BAT%7D%2C%20Tuple%7BT%7D%2C%20Tuple%7BNeuralNetwork%7B%3C%3ANeuralNetworkIntegrator%7D%2C%20BT%7D%7D%20where%20%7BT%2C%20AT%3C%3AAbstractVector%7BT%7D%2C%20BT%3C%3A%40NamedTuple%7Bq%3A%3AAT%2C%20p%3A%3AAT%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.Batch-Tuple{Int64, Int64, Int64}"
+uri = "data_loader/data_loader/#GeometricMachineLearning.Batch-Tuple%7BInt64%2C%20Int64%2C%20Int64%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.Batch-Tuple{Int64}"
+uri = "data_loader/data_loader/#GeometricMachineLearning.Batch-Tuple%7BInt64%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.hamiltonian_vector_field-Tuple{HamiltonianArchitecture}"
+uri = "architectures/hamiltonian_neural_network/#GeometricMachineLearning.hamiltonian_vector_field-Tuple%7BHamiltonianArchitecture%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul!-Tuple{AbstractArray{<:Number, 3}, AbstractMatrix, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20AbstractMatrix%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul!-Tuple{AbstractArray{<:Number, 3}, LowerTriangular, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20LowerTriangular%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul!-Tuple{AbstractArray{<:Number, 3}, SkewSymMatrix, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20SkewSymMatrix%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul!-Tuple{AbstractArray{<:Number, 3}, SymmetricMatrix, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20SymmetricMatrix%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul!-Tuple{AbstractArray{<:Number, 3}, UpperTriangular, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20UpperTriangular%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.mat_tensor_mul-Tuple{AbstractMatrix, AbstractArray{<:Number, 3}}"
+uri = "arrays/tensors/#GeometricMachineLearning.mat_tensor_mul-Tuple%7BAbstractMatrix%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.symbolic_hamiltonian_vector_field-Tuple{SymbolicNeuralNetworks.SymbolicNeuralNetwork}"
+uri = "architectures/hamiltonian_neural_network/#GeometricMachineLearning.symbolic_hamiltonian_vector_field-Tuple%7BSymbolicNeuralNetworks.SymbolicNeuralNetwork%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.tensor_mat_mul!-Tuple{AbstractArray{<:Number, 3}, AbstractArray{<:Number, 3}, AbstractMatrix}"
+uri = "arrays/tensors/#GeometricMachineLearning.tensor_mat_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20AbstractMatrix%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.tensor_mat_mul!-Tuple{AbstractArray{<:Number, 3}, AbstractArray{<:Number, 3}, SymmetricMatrix}"
+uri = "arrays/tensors/#GeometricMachineLearning.tensor_mat_mul%21-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20AbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20SymmetricMatrix%7D"
+[[jl.method]]
+name = "GeometricMachineLearning.tensor_mat_mul-Tuple{AbstractArray{<:Number, 3}, AbstractMatrix}"
+uri = "arrays/tensors/#GeometricMachineLearning.tensor_mat_mul-Tuple%7BAbstractArray%7B%3C%3ANumber%2C%203%7D%2C%20AbstractMatrix%7D"
+[[jl.method]]
+name = "NeuralNetworkParameters.load-Tuple{Type{NeuralNetwork}, AbstractString, AbstractNeuralNetworks.Architecture}"
+uri = "architectures/abstract_neural_networks/#NeuralNetworkParameters.load-Tuple%7BType%7BNeuralNetwork%7D%2C%20AbstractString%2C%20AbstractNeuralNetworks.Architecture%7D"
+[[jl.method]]
+name = "NeuralNetworkParameters.load-Tuple{Type{NeuralNetwork}, HDF5.H5DataStore, AbstractNeuralNetworks.Architecture}"
+uri = "architectures/abstract_neural_networks/#NeuralNetworkParameters.load-Tuple%7BType%7BNeuralNetwork%7D%2C%20HDF5.H5DataStore%2C%20AbstractNeuralNetworks.Architecture%7D"
+[[jl.method]]
+name = "NeuralNetworkParameters.save-Tuple{AbstractString, NeuralNetwork}"
+uri = "architectures/abstract_neural_networks/#NeuralNetworkParameters.save-Tuple%7BAbstractString%2C%20NeuralNetwork%7D"
+[[jl.method]]
+name = "NeuralNetworkParameters.save-Tuple{HDF5.H5DataStore, NeuralNetwork}"
+uri = "architectures/abstract_neural_networks/#NeuralNetworkParameters.save-Tuple%7BHDF5.H5DataStore%2C%20NeuralNetwork%7D"
+[[jl.method]]
+name = "SymbolicNeuralNetworks.SymbolicPullback-Tuple{HamiltonianArchitecture}"
+uri = "architectures/hamiltonian_neural_network/#SymbolicNeuralNetworks.SymbolicPullback-Tuple%7BHamiltonianArchitecture%7D"
+
+[[jl.type]]
+name = "GeometricMachineLearning.ActivationLayer"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ActivationLayerP"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ActivationLayerQ"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.AutoEncoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.AutoEncoderLoss"
+uri = "reduced_order_modeling/losses/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.Batch"
+uri = "data_loader/data_loader/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ClassificationLayer"
+uri = "architectures/transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ClassificationTransformer"
+uri = "architectures/transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.DataLoader"
+uri = "data_loader/data_loader/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.Decoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.DummyNNIntegrator"
+uri = "tutorials/volume_preserving_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.DummyTransformer"
+uri = "tutorials/volume_preserving_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.Encoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GSympNet"
+uri = "architectures/sympnet/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GeneralizedHamiltonianArchitecture"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GradientLayer"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GradientLayerP"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GradientLayerQ"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.GrassmannLayer"
+uri = "tutorials/grassmann_layer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.HNNLoss"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.HRedSys"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.HamiltonianArchitecture"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LASympNet"
+uri = "architectures/sympnet/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearLayer"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearLayerP"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearLayerQ"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearSymplecticAttention"
+uri = "layers/linear_symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearSymplecticAttentionP"
+uri = "layers/linear_symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearSymplecticAttentionQ"
+uri = "layers/linear_symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.LinearSymplecticTransformer"
+uri = "architectures/linear_symplectic_transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.MatrixSoftmax"
+uri = "layers/symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.MultiHeadAttention"
+uri = "layers/multihead_attention_layer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.NeuralNetworkIntegrator"
+uri = "architectures/neural_network_integrators/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.NonLinearSymplecticDecoder"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.NonLinearSymplecticEncoder"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.Optimizer"
+uri = "optimizers/optimizer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.PSDArch"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.PSDLayer"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.PoissonTensor"
+uri = "structure_preservation/symplecticity/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.QPT"
+uri = "structure_preservation/symplecticity/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.QPTOAT"
+uri = "structure_preservation/symplecticity/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ReducedLoss"
+uri = "reduced_order_modeling/losses/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ResNet"
+uri = "architectures/neural_network_integrators/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ResNetLayer"
+uri = "architectures/neural_network_integrators/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.StandardHamiltonianArchitecture"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.StandardTransformerIntegrator"
+uri = "architectures/transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SympNet"
+uri = "architectures/sympnet/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SympNetLayer"
+uri = "layers/sympnet_gradient/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticAttention"
+uri = "layers/symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticAttentionP"
+uri = "layers/symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticAttentionQ"
+uri = "layers/symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticAutoencoder"
+uri = "architectures/symplectic_autoencoder/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticDecoder"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticEncoder"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.SymplecticTransformer"
+uri = "architectures/symplectic_transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.TransformerIntegrator"
+uri = "architectures/neural_network_integrators/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.TransformerLoss"
+uri = "reduced_order_modeling/losses/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.UnknownDecoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.UnknownEncoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VectorSoftmax"
+uri = "layers/symplectic_attention/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingAttention"
+uri = "layers/attention_layer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingFeedForward"
+uri = "architectures/volume_preserving_feedforward/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingFeedForwardLayer"
+uri = "layers/volume_preserving_feedforward/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingLowerLayer"
+uri = "layers/volume_preserving_feedforward/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingTransformer"
+uri = "architectures/volume_preserving_transformer/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.VolumePreservingUpperLayer"
+uri = "layers/volume_preserving_feedforward/#$"
+[[jl.type]]
+name = "GeometricMachineLearning.ZygotePullback"
+uri = "pullbacks/computation_of_pullbacks/#$"
+
+[[std.doc]]
+dispname = "Using Architectures with `NeuralNetwork`"
+name = "architectures/abstract_neural_networks"
+uri = "architectures/abstract_neural_networks/"
+[[std.doc]]
+dispname = "Hamiltonian Neural Network"
+name = "architectures/hamiltonian_neural_network"
+uri = "architectures/hamiltonian_neural_network/"
+[[std.doc]]
+dispname = "Linear Symplectic Transformer"
+name = "architectures/linear_symplectic_transformer"
+uri = "architectures/linear_symplectic_transformer/"
+[[std.doc]]
+dispname = "Neural Network Integrators"
+name = "architectures/neural_network_integrators"
+uri = "architectures/neural_network_integrators/"
+[[std.doc]]
+dispname = "Symplectic Autoencoders"
+name = "architectures/symplectic_autoencoder"
+uri = "architectures/symplectic_autoencoder/"
+[[std.doc]]
+dispname = "Symplectic Transformer"
+name = "architectures/symplectic_transformer"
+uri = "architectures/symplectic_transformer/"
+[[std.doc]]
+dispname = "SympNet"
+name = "architectures/sympnet"
+uri = "architectures/sympnet/"
+[[std.doc]]
+dispname = "Standard Transformer"
+name = "architectures/transformer"
+uri = "architectures/transformer/"
+[[std.doc]]
+dispname = "Volume-Preserving FeedForward"
+name = "architectures/volume_preserving_feedforward"
+uri = "architectures/volume_preserving_feedforward/"
+[[std.doc]]
+dispname = "Volume-Preserving Transformer"
+name = "architectures/volume_preserving_transformer"
+uri = "architectures/volume_preserving_transformer/"
+[[std.doc]]
+dispname = "Tensors"
+name = "arrays/tensors"
+uri = "arrays/tensors/"
+[[std.doc]]
+dispname = "Routines"
+name = "data_loader/data_loader"
+uri = "data_loader/data_loader/"
+[[std.doc]]
+dispname = "Snapshot matrix & tensor"
+name = "data_loader/snapshot_matrix"
+uri = "data_loader/snapshot_matrix/"
+[[std.doc]]
+dispname = "Index of Docstrings"
+name = "docstring_index"
+uri = "docstring_index/"
+[[std.doc]]
+dispname = "HOME"
+name = "index"
+uri = ""
+[[std.doc]]
+dispname = "(Volume-Preserving) Attention"
+name = "layers/attention_layer"
+uri = "layers/attention_layer/"
+[[std.doc]]
+dispname = "Linear Symplectic Attention"
+name = "layers/linear_symplectic_attention"
+uri = "layers/linear_symplectic_attention/"
+[[std.doc]]
+dispname = "Multihead Attention"
+name = "layers/multihead_attention_layer"
+uri = "layers/multihead_attention_layer/"
+[[std.doc]]
+dispname = "Symplectic Attention"
+name = "layers/symplectic_attention"
+uri = "layers/symplectic_attention/"
+[[std.doc]]
+dispname = "Sympnet Layers"
+name = "layers/sympnet_gradient"
+uri = "layers/sympnet_gradient/"
+[[std.doc]]
+dispname = "Volume-Preserving Layers"
+name = "layers/volume_preserving_feedforward"
+uri = "layers/volume_preserving_feedforward/"
+[[std.doc]]
+dispname = "Optimizer"
+name = "optimizers/optimizer"
+uri = "optimizers/optimizer/"
+[[std.doc]]
+dispname = "port-Hamiltonian Systems"
+name = "port_hamiltonian_systems"
+uri = "port_hamiltonian_systems/"
+[[std.doc]]
+dispname = "Pullbacks"
+name = "pullbacks/computation_of_pullbacks"
+uri = "pullbacks/computation_of_pullbacks/"
+[[std.doc]]
+dispname = "Losses and Errors"
+name = "reduced_order_modeling/losses"
+uri = "reduced_order_modeling/losses/"
+[[std.doc]]
+dispname = "POD and Autoencoders"
+name = "reduced_order_modeling/pod_autoencoders"
+uri = "reduced_order_modeling/pod_autoencoders/"
+[[std.doc]]
+dispname = "General Framework"
+name = "reduced_order_modeling/reduced_order_modeling"
+uri = "reduced_order_modeling/reduced_order_modeling/"
+[[std.doc]]
+dispname = "Symplectic Model Order Reduction"
+name = "reduced_order_modeling/symplectic_mor"
+uri = "reduced_order_modeling/symplectic_mor/"
+[[std.doc]]
+dispname = "References"
+name = "references"
+uri = "references/"
+[[std.doc]]
+dispname = "Structure-Preserving Neural Networks"
+name = "structure_preservation/structure_preserving_neural_networks"
+uri = "structure_preservation/structure_preserving_neural_networks/"
+[[std.doc]]
+dispname = "Symplecticity"
+name = "structure_preservation/symplecticity"
+uri = "structure_preservation/symplecticity/"
+[[std.doc]]
+dispname = "Volume-Preservation"
+name = "structure_preservation/volume_preservation"
+uri = "structure_preservation/volume_preservation/"
+[[std.doc]]
+dispname = "Adjusting the Loss Function"
+name = "tutorials/adjusting_the_loss_function"
+uri = "tutorials/adjusting_the_loss_function/"
+[[std.doc]]
+dispname = "Grassmann Manifold"
+name = "tutorials/grassmann_layer"
+uri = "tutorials/grassmann_layer/"
+[[std.doc]]
+dispname = "Hamiltonian Neural Network"
+name = "tutorials/hamiltonian_neural_network"
+uri = "tutorials/hamiltonian_neural_network/"
+[[std.doc]]
+dispname = "Linear Symplectic Transformer"
+name = "tutorials/linear_symplectic_transformer"
+uri = "tutorials/linear_symplectic_transformer/"
+[[std.doc]]
+dispname = "Matrix Attention"
+name = "tutorials/matrix_softmax"
+uri = "tutorials/matrix_softmax/"
+[[std.doc]]
+dispname = "Comparing Optimizers"
+name = "tutorials/optimizer_comparison"
+uri = "tutorials/optimizer_comparison/"
+[[std.doc]]
+dispname = "Symplectic Autoencoders"
+name = "tutorials/symplectic_autoencoder"
+uri = "tutorials/symplectic_autoencoder/"
+[[std.doc]]
+dispname = "Symplectic Transformer"
+name = "tutorials/symplectic_transformer"
+uri = "tutorials/symplectic_transformer/"
+[[std.doc]]
+dispname = "SympNets"
+name = "tutorials/sympnet_tutorial"
+uri = "tutorials/sympnet_tutorial/"
+[[std.doc]]
+dispname = "Volume-Preserving Attention"
+name = "tutorials/volume_preserving_attention"
+uri = "tutorials/volume_preserving_attention/"
+[[std.doc]]
+dispname = "Volume-Preserving Transformer for the Rigid Body"
+name = "tutorials/volume_preserving_transformer_rigid_body"
+uri = "tutorials/volume_preserving_transformer_rigid_body/"
+
+[[std.label]]
+dispname = "1. Vertical Space (Fiber Directions)"
+name = "1.-Vertical-Space-(Fiber-Directions)"
+uri = "layers/attention_layer/#1.-Vertical-Space-%28Fiber-Directions%29"
+[[std.label]]
+dispname = "2. Horizontal Space (Base Directions)"
+name = "2.-Horizontal-Space-(Base-Directions)"
+uri = "layers/attention_layer/#2.-Horizontal-Space-%28Base-Directions%29"
+[[std.label]]
+dispname = "3. The Jacobian Determinant"
+name = "3.-The-Jacobian-Determinant"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "A Note on Physics-Informed Neural Networks"
+name = "A-Note-on-Physics-Informed-Neural-Networks"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+dispname = "Adjusting the Loss Function"
+name = "Adjusting-the-Loss-Function"
+uri = "tutorials/adjusting_the_loss_function/#$"
+[[std.label]]
+dispname = "Associated Papers and Contributions"
+name = "Associated-Papers-and-Contributions"
+uri = "introduction/#$"
+[[std.label]]
+name = "Autoencoders"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[std.label]]
+dispname = "Background Information"
+name = "Background-Information"
+uri = "introduction/#$"
+[[std.label]]
+dispname = "Basic Concepts of Reduced Order Modeling"
+name = "Basic-Concepts-of-Reduced-Order-Modeling"
+uri = "reduced_order_modeling/reduced_order_modeling/#$"
+[[std.label]]
+dispname = "Classification Transformer"
+name = "Classification-Transformer"
+uri = "architectures/transformer/#$"
+[[std.label]]
+dispname = "Comparing Different VolumePreservingAttention Mechanisms"
+name = "Comparing-Different-VolumePreservingAttention-Mechanisms"
+uri = "tutorials/volume_preserving_attention/#$"
+[[std.label]]
+dispname = "Comparing Matrix and Vector Softmax as Activation Functions in a Transformer"
+name = "Comparing-Matrix-and-Vector-Softmax-as-Activation-Functions-in-a-Transformer"
+uri = "tutorials/softmax_comparison/#$"
+[[std.label]]
+dispname = "Comparison of Optimizers"
+name = "Comparison-of-Optimizers"
+uri = "tutorials/optimizer_comparison/#$"
+[[std.label]]
+dispname = "Comparison with a ResNet"
+name = "Comparison-with-a-ResNet"
+uri = "tutorials/sympnet_tutorial/#$"
+[[std.label]]
+dispname = "Computing Correlations in the Multihead-Attention Layer"
+name = "Computing-Correlations-in-the-Multihead-Attention-Layer"
+uri = "layers/multihead_attention_layer/#$"
+[[std.label]]
+name = "Conclusion"
+uri = "outlook/#$"
+[[std.label]]
+dispname = "DATA Loader TODO"
+name = "DATA-Loader-TODO"
+uri = "data_loader/TODO/#$"
+[[std.label]]
+dispname = "Data-Driven Reduced Order Modeling"
+name = "Data-Driven-Reduced-Order-Modeling"
+uri = "#$"
+[[std.label]]
+dispname = "Data Loader"
+name = "Data-Loader"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Different Neural Network Losses"
+name = "Different-Neural-Network-Losses"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+dispname = "Divergence-Free Vector Fields"
+name = "Divergence-Free-Vector-Fields"
+uri = "structure_preservation/volume_preservation/#$"
+[[std.label]]
+dispname = "Drawing Batches with GeometricMachineLearning"
+name = "Drawing-Batches-with-GeometricMachineLearning"
+uri = "data_loader/data_loader/#$"
+[[std.label]]
+name = "Example"
+uri = "architectures/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Example of a Neural Network with a Grassmann Layer"
+name = "Example-of-a-Neural-Network-with-a-Grassmann-Layer"
+uri = "tutorials/grassmann_layer/#$"
+[[std.label]]
+name = "Examples"
+uri = "introduction/#$"
+[[std.label]]
+dispname = "First approach: scalar products with a skew-symmetric weighting"
+name = "First-approach:-scalar-products-with-a-skew-symmetric-weighting"
+uri = "layers/attention_layer/#First-approach%3A-scalar-products-with-a-skew-symmetric-weighting"
+[[std.label]]
+dispname = "From the Reduced Space to the Full Space for Rneq0"
+name = "From-the-Reduced-Space-to-the-Full-Space-for-R\\neq0"
+uri = "port_hamiltonian_systems/#From-the-Reduced-Space-to-the-Full-Space-for-R%5Cneq0"
+[[std.label]]
+name = "G-SympNets"
+uri = "architectures/sympnet/#$"
+[[std.label]]
+dispname = "GPU Support"
+name = "GPU-Support"
+uri = "#$"
+[[std.label]]
+dispname = "General Workflow"
+name = "General-Workflow"
+uri = "reduced_order_modeling/reduced_order_modeling/#$"
+[[std.label]]
+dispname = "Geometric Machine Learning"
+name = "Geometric-Machine-Learning"
+uri = "#$"
+[[std.label]]
+dispname = "Geometric Structure"
+name = "Geometric-Structure"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Get the data"
+name = "Get-the-data"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Graph of Rosenbrock Function as Example"
+name = "Graph-of-Rosenbrock-Function-as-Example"
+uri = "tutorials/grassmann_layer/#$"
+[[std.label]]
+dispname = "HNN Loss for Phase Space Data"
+name = "HNN-Loss-for-Phase-Space-Data"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "HNN Loss for Vector Field Data"
+name = "HNN-Loss-for-Vector-Field-Data"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "Hamiltonian Model Order Reduction"
+name = "Hamiltonian-Model-Order-Reduction"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[std.label]]
+dispname = "Historical Note"
+name = "Historical-Note"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "How is Structure Preserved?"
+name = "How-is-Structure-Preserved?"
+uri = "layers/attention_layer/#How-is-Structure-Preserved%3F"
+[[std.label]]
+dispname = "How to Compute Pullbacks"
+name = "How-to-Compute-Pullbacks"
+uri = "pullbacks/computation_of_pullbacks/#$"
+[[std.label]]
+dispname = "Illustrative example"
+name = "Illustrative-example"
+uri = "pullbacks/computation_of_pullbacks/#$"
+[[std.label]]
+dispname = "Index of Docstrings"
+name = "Index-of-Docstrings"
+uri = "docstring_index/#$"
+[[std.label]]
+name = "Installation"
+uri = "#$"
+[[std.label]]
+dispname = "Intermediate Dimensions"
+name = "Intermediate-Dimensions"
+uri = "architectures/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Introduction and Outline"
+name = "Introduction-and-Outline"
+uri = "introduction/#$"
+[[std.label]]
+dispname = "Kolmogorov n-width"
+name = "Kolmogorov-n-width"
+uri = "reduced_order_modeling/reduced_order_modeling/#$"
+[[std.label]]
+name = "LA-SympNet"
+uri = "architectures/sympnet/#$"
+[[std.label]]
+name = "Layers"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Learning Nonlinear Spaces"
+name = "Learning-Nonlinear-Spaces"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Linear Symplectic Attention"
+name = "Linear-Symplectic-Attention"
+uri = "layers/linear_symplectic_attention/#$"
+[[std.label]]
+dispname = "Linear Symplectic Transformer"
+name = "Linear-Symplectic-Transformer"
+uri = "architectures/linear_symplectic_transformer/#$"
+[[std.label]]
+dispname = "Losses and Errors"
+name = "Losses-and-Errors"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+name = "Manifolds"
+uri = "#$"
+[[std.label]]
+dispname = "Matrix Softmax"
+name = "Matrix-Softmax"
+uri = "layers/symplectic_attention/#$"
+[[std.label]]
+dispname = "Matrix Softmax v Vector Softmax"
+name = "Matrix-Softmax-v-Vector-Softmax"
+uri = "tutorials/matrix_softmax/#$"
+[[std.label]]
+dispname = "Motivation from a differential-geometric perspective"
+name = "Motivation-from-a-differential-geometric-perspective"
+uri = "pullbacks/computation_of_pullbacks/#$"
+[[std.label]]
+dispname = "Multi-step methods"
+name = "Multi-step-methods"
+uri = "architectures/neural_network_integrators/#$"
+[[std.label]]
+dispname = "Multihead Attention"
+name = "Multihead-Attention"
+uri = "layers/multihead_attention_layer/#$"
+[[std.label]]
+dispname = "Neural Network Integrators"
+name = "Neural-Network-Integrators"
+uri = "architectures/neural_network_integrators/#$"
+[[std.label]]
+dispname = "Neural network architecture"
+name = "Neural-network-architecture"
+uri = "architectures/volume_preserving_feedforward/#$"
+[[std.label]]
+dispname = "NeuralNetworks in GeometricMachineLearning"
+name = "NeuralNetworks-in-GeometricMachineLearning"
+uri = "architectures/abstract_neural_networks/#$"
+[[std.label]]
+dispname = "Note on Sympnets"
+name = "Note-on-Sympnets"
+uri = "architectures/volume_preserving_feedforward/#$"
+[[std.label]]
+dispname = "Obtaining the Reduced System via Galerkin Projection"
+name = "Obtaining-the-Reduced-System-via-Galerkin-Projection"
+uri = "reduced_order_modeling/reduced_order_modeling/#$"
+[[std.label]]
+name = "Optimizer"
+uri = "docstring_index/#$"
+[[std.label]]
+name = "Outlook"
+uri = "outlook/#$"
+[[std.label]]
+dispname = "Preliminary Remarks and Acknowledgements"
+name = "Preliminary-Remarks-and-Acknowledgements"
+uri = "acknowledgements/#$"
+[[std.label]]
+name = "Principle"
+uri = "architectures/sympnet/#$"
+[[std.label]]
+dispname = "Projection Error"
+name = "Projection-Error"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+dispname = "Projection and Reduction Errors of Reduced Models"
+name = "Projection-and-Reduction-Errors-of-Reduced-Models"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+dispname = "Proper Orthogonal Decomposition"
+name = "Proper-Orthogonal-Decomposition"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[std.label]]
+dispname = "Proper Symplectic Decomposition"
+name = "Proper-Symplectic-Decomposition"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[std.label]]
+dispname = "Pullbacks and Automatic Differentiation"
+name = "Pullbacks-and-Automatic-Differentiation"
+uri = "pullbacks/computation_of_pullbacks/#$"
+[[std.label]]
+dispname = "Reduced Order Modeling"
+name = "Reduced-Order-Modeling"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Reduced Order Modeling as Motivation"
+name = "Reduced-Order-Modeling-as-Motivation"
+uri = "outlook/#$"
+[[std.label]]
+dispname = "Reduction Error"
+name = "Reduction-Error"
+uri = "reduced_order_modeling/losses/#$"
+[[std.label]]
+dispname = "Reweighting of the Input Sequence"
+name = "Reweighting-of-the-Input-Sequence"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "Sampling from a tensor"
+name = "Sampling-from-a-tensor"
+uri = "data_loader/data_loader/#$"
+[[std.label]]
+dispname = "Saving and Loading"
+name = "Saving-and-Loading"
+uri = "architectures/abstract_neural_networks/#$"
+[[std.label]]
+dispname = "Second approach: scalar products with an arbitrary weighting"
+name = "Second-approach:-scalar-products-with-an-arbitrary-weighting"
+uri = "layers/attention_layer/#Second-approach%3A-scalar-products-with-an-arbitrary-weighting"
+[[std.label]]
+dispname = "Snapshot Matrix"
+name = "Snapshot-Matrix"
+uri = "data_loader/snapshot_matrix/#$"
+[[std.label]]
+dispname = "Snapshot Tensor"
+name = "Snapshot-Tensor"
+uri = "data_loader/snapshot_matrix/#$"
+[[std.label]]
+dispname = "Solution of Symplectic Systems"
+name = "Solution-of-Symplectic-Systems"
+uri = "structure_preservation/symplecticity/#$"
+[[std.label]]
+dispname = "Special Neural Network Layer"
+name = "Special-Neural-Network-Layer"
+uri = "#$"
+[[std.label]]
+dispname = "Special Neural Network Layers and Architectures"
+name = "Special-Neural-Network-Layers-and-Architectures"
+uri = "introduction/#$"
+[[std.label]]
+dispname = "Standard Transformer"
+name = "Standard-Transformer"
+uri = "architectures/transformer/#$"
+[[std.label]]
+dispname = "Structure-Preserving Neural Network-Based Integrators - The Online Phase"
+name = "Structure-Preserving-Neural-Network-Based-Integrators-The-Online-Phase"
+uri = "outlook/#$"
+[[std.label]]
+dispname = "Structure-Preserving Neural Networks"
+name = "Structure-Preserving-Neural-Networks"
+uri = "structure_preservation/structure_preserving_neural_networks/#$"
+[[std.label]]
+dispname = "Structure-Preserving Optimizers"
+name = "Structure-Preserving-Optimizers"
+uri = "outlook/#$"
+[[std.label]]
+dispname = "Structure-Preserving Reduced Order Modeling of Hamiltonian Systems - The Offline Phase"
+name = "Structure-Preserving-Reduced-Order-Modeling-of-Hamiltonian-Systems-The-Offline-Phase"
+uri = "outlook/#$"
+[[std.label]]
+name = "Summary"
+uri = "abstract/#$"
+[[std.label]]
+dispname = "SympNet Architecture"
+name = "SympNet-Architecture"
+uri = "architectures/sympnet/#$"
+[[std.label]]
+dispname = "SympNet Gradient Layer"
+name = "SympNet-Gradient-Layer"
+uri = "layers/sympnet_gradient/#$"
+[[std.label]]
+dispname = "SympNet Layers"
+name = "SympNet-Layers"
+uri = "layers/sympnet_gradient/#$"
+[[std.label]]
+dispname = "SympNet Linear Layer"
+name = "SympNet-Linear-Layer"
+uri = "layers/sympnet_gradient/#$"
+[[std.label]]
+dispname = "SympNets with GeometricMachineLearning"
+name = "SympNets-with-GeometricMachineLearning"
+uri = "tutorials/sympnet_tutorial/#$"
+[[std.label]]
+dispname = "Symplectic Attention"
+name = "Symplectic-Attention"
+uri = "layers/symplectic_attention/#$"
+[[std.label]]
+dispname = "Symplectic Autoencoders"
+name = "Symplectic-Autoencoders"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[std.label]]
+dispname = "Symplectic Autoencoders and the Toda Lattice"
+name = "Symplectic-Autoencoders-and-the-Toda-Lattice"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Symplectic Systems"
+name = "Symplectic-Systems"
+uri = "structure_preservation/symplecticity/#$"
+[[std.label]]
+dispname = "Tensors and Pullbacks"
+name = "Tensors-and-Pullbacks"
+uri = "docstring_index/#$"
+[[std.label]]
+dispname = "Tensors in GeometricMachineLearning"
+name = "Tensors-in-GeometricMachineLearning"
+uri = "arrays/tensors/#$"
+[[std.label]]
+dispname = "The Attention Layer"
+name = "The-Attention-Layer"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "The Cayley Transform"
+name = "The-Cayley-Transform"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "The Data Loader"
+name = "The-Data-Loader"
+uri = "data_loader/data_loader/#$"
+[[std.label]]
+dispname = "The Optimizer Framework"
+name = "The-Optimizer-Framework"
+uri = "introduction/#$"
+[[std.label]]
+dispname = "The Optimizer in GeometricMachineLearning"
+name = "The-Optimizer-in-GeometricMachineLearning"
+uri = "optimizers/optimizer/#$"
+[[std.label]]
+dispname = "The Reduced Equations for the Autoencoder"
+name = "The-Reduced-Equations-for-the-Autoencoder"
+uri = "reduced_order_modeling/pod_autoencoders/#$"
+[[std.label]]
+dispname = "The Solution Manifold"
+name = "The-Solution-Manifold"
+uri = "reduced_order_modeling/reduced_order_modeling/#$"
+[[std.label]]
+dispname = "The Special Case R = 0"
+name = "The-Special-Case-R-0"
+uri = "port_hamiltonian_systems/#$"
+[[std.label]]
+dispname = "The Symplectic Autoencoder"
+name = "The-Symplectic-Autoencoder"
+uri = "architectures/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "The Symplectic Solution Manifold"
+name = "The-Symplectic-Solution-Manifold"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[std.label]]
+dispname = "The Symplectic Transformer"
+name = "The-Symplectic-Transformer"
+uri = "architectures/symplectic_transformer/#$"
+[[std.label]]
+dispname = "The Upscaling"
+name = "The-Upscaling"
+uri = "architectures/transformer/#$"
+[[std.label]]
+dispname = "The Volume-Preserving Transformer for the Rigid Body"
+name = "The-Volume-Preserving-Transformer-for-the-Rigid-Body"
+uri = "tutorials/volume_preserving_transformer_rigid_body/#$"
+[[std.label]]
+dispname = "The online stage with a neural network"
+name = "The-online-stage-with-a-neural-network"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "The online stage with a standard integrator"
+name = "The-online-stage-with-a-standard-integrator"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "The system"
+name = "The-system"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Train the network"
+name = "Train-the-network"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Training a HNN Based on Phase Space Data"
+name = "Training-a-HNN-Based-on-Phase-Space-Data"
+uri = "tutorials/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "Training a HNN Based on VectorField Data"
+name = "Training-a-HNN-Based-on-VectorField-Data"
+uri = "tutorials/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "Training a Harmonic Oscillator"
+name = "Training-a-Harmonic-Oscillator"
+uri = "tutorials/sympnet_tutorial/#$"
+[[std.label]]
+dispname = "Transformers with Structure"
+name = "Transformers-with-Structure"
+uri = "docstring_index/#$"
+[[std.label]]
+name = "Tutorials"
+uri = "#$"
+[[std.label]]
+dispname = "Universal Approximation Theorems"
+name = "Universal-Approximation-Theorems"
+uri = "architectures/sympnet/#$"
+[[std.label]]
+dispname = "Using Symplectic Autoencoders for Port-Hamiltonian Systems"
+name = "Using-Symplectic-Autoencoders-for-Port-Hamiltonian-Systems"
+uri = "port_hamiltonian_systems/#$"
+[[std.label]]
+dispname = "Using a Matrix Softmax"
+name = "Using-a-Matrix-Softmax"
+uri = "layers/multihead_attention_layer/#$"
+[[std.label]]
+dispname = "Using the Toda lattice in numerical experiments"
+name = "Using-the-Toda-lattice-in-numerical-experiments"
+uri = "tutorials/symplectic_autoencoder/#$"
+[[std.label]]
+dispname = "Vector Softmax"
+name = "Vector-Softmax"
+uri = "layers/symplectic_attention/#$"
+[[std.label]]
+dispname = "Volume-Preserving Attention"
+name = "Volume-Preserving-Attention"
+uri = "layers/attention_layer/#$"
+[[std.label]]
+dispname = "Volume-Preserving Feedforward Layer"
+name = "Volume-Preserving-Feedforward-Layer"
+uri = "layers/volume_preserving_feedforward/#$"
+[[std.label]]
+dispname = "Volume-Preserving Feedforward Neural Network"
+name = "Volume-Preserving-Feedforward-Neural-Network"
+uri = "architectures/volume_preserving_feedforward/#$"
+[[std.label]]
+dispname = "Volume-Preserving Transformer"
+name = "Volume-Preserving-Transformer"
+uri = "architectures/volume_preserving_transformer/#$"
+[[std.label]]
+dispname = "What is a Pullback?"
+name = "What-is-a-Pullback?"
+uri = "pullbacks/computation_of_pullbacks/#What-is-a-Pullback%3F"
+[[std.label]]
+dispname = "Why use Transformers for Model Order Reduction"
+name = "Why-use-Transformers-for-Model-Order-Reduction"
+uri = "architectures/linear_symplectic_transformer/#$"
+[[std.label]]
+dispname = "Workflow for Symplectic ROM"
+name = "Workflow-for-Symplectic-ROM"
+uri = "reduced_order_modeling/symplectic_mor/#$"
+[[std.label]]
+name = "Zusammenfassung"
+uri = "zusammenfassung/#$"
+[[std.label]]
+dispname = "Hamiltonian Neural Network"
+name = "hnn_architecture"
+uri = "architectures/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "Hamiltonian Neural Network"
+name = "hnn_tutorial"
+uri = "tutorials/hamiltonian_neural_network/#$"
+[[std.label]]
+dispname = "Linear Symplectic Transformer"
+name = "linear_symplectic_transformer_tutorial"
+uri = "tutorials/linear_symplectic_transformer/#$"
+[[std.label]]
+dispname = "Symplectic Transformer"
+name = "symplectic_transformer_tutorial"
+uri = "tutorials/symplectic_transformer/#$"

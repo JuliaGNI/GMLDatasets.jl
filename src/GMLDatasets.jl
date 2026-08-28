@@ -17,6 +17,15 @@ using GMLDatasets
 dl      = mnist_data_loader(:train; patch_length = 7)
 dl_test = mnist_data_loader(:test;  patch_length = 7)
 ```
+
+Not everything here is an image. [`pendulum`](@ref) integrates a grid of mathematical pendula with
+`GeometricProblems` and `GeometricIntegrators`, and [`angular_to_euclidean`](@ref) lifts them into
+four dimensions, where they sit on a two-dimensional submanifold — a data set with a geometry worth
+recovering, for the symplectic autoencoders:
+
+```julia
+dl = DataLoader(angular_to_euclidean(pendulum()); autoencoder = true)
+```
 """
 module GMLDatasets
 
@@ -32,9 +41,12 @@ export DataLoader
 export split_and_flatten, onehotbatch
 export mnist, fashion_mnist
 export mnist_data_loader, fashion_mnist_data_loader
+export pendulum, pendulum_energy
+export angular_to_euclidean, euclidean_to_angular
 
 include("mnist_utils.jl")
 include("data_loader.jl")
 include("datasets.jl")
+include("pendulum.jl")
 
 end

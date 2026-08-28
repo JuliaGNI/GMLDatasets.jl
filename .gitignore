@@ -22,6 +22,10 @@ lcov.info
 # Trained parameters saved by the example scripts
 *.jld2
 
+# Weights saved by scripts/pendulum/train_sae.jl. The figures its companion draws are covered by the
+# `*.png` rule above.
+/pendulum_sae.h5
+
 # Reports, loss curves and logs written by scripts/geometric_optimizers/mnist_cuda.jl and
 # scripts/geometric_optimizers/mnist_cuda_repetitions.jl, wherever they are started from
 /results

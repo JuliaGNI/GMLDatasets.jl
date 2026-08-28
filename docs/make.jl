@@ -37,6 +37,16 @@ links = InterLinks(
 # set. It is set here rather than only in CI so that a local build behaves the same way.
 ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 
+# The trained weights the MNIST tutorial reads live in `docs/artifacts/` rather than under
+# `docs/src/`, because Documenter copies everything in `src` verbatim into `build` and `deploydocs`
+# then publishes it: 3 MB of HDF5 that only the build reads and no reader of the site ever
+# downloads. They are inputs to the build, not part of it.
+#
+# The path travels through the environment because an `@setup` block cannot see anything defined
+# here, and because the alternative -- a path relative to the block's working directory, which is
+# the built page's own directory -- would silently break if the tutorial ever moved.
+ENV["GMLDATASETS_DOCS_ARTIFACTS"] = joinpath(@__DIR__, "artifacts")
+
 DocMeta.setdocmeta!(GMLDatasets, :DocTestSetup, :(using GMLDatasets); recursive=true)
 
 makedocs(;

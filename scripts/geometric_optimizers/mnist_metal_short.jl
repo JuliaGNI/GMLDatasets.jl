@@ -93,7 +93,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, flatten!, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
@@ -272,7 +272,12 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
             glorot_uniform(rng, size)
         end
     end
-    NamedTuple{parameter_keys}(Tuple(values))
+    # `NetworkParameters` and not a bare `NamedTuple`: `GeometricOptimizers` takes a whole set of
+    # parameters only as a container, because a `NamedTuple` alias is a type nobody owns and a method
+    # on one is a method on `Base.NamedTuple`. The wrap shares the leaf arrays rather than copying
+    # them, and the container forwards `keys`, `values`, `ps[i]` and `ps.field`, so `regroup`, `F` and
+    # `∇F!` below read it exactly as they read the `NamedTuple` underneath.
+    NetworkParameters(NamedTuple{parameter_keys}(Tuple(values)))
 end
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
@@ -320,10 +325,10 @@ const n_parameters = flatlength(parameter_flat_layout)
 """
     flatten_parameters!(v, ps)
 
-Write the parameter `NamedTuple` into the flat vector `v`, in the order of `parameter_ranges`
+Write the parameter container into the flat vector `v`, in the order of `parameter_ranges`
 (which is the order `NeuralNetworkParameters.flatten` uses).
 """
-function flatten_parameters!(v::AbstractVector{T}, ps::NamedTuple)
+function flatten_parameters!(v::AbstractVector{T}, ps::NetworkParameters)
     flatten!(v, ps, parameter_flat_layout)
 end
 
@@ -332,7 +337,7 @@ function regroup_device(v::AbstractVector{T})
     regroup(i -> reshape(device_parameters[parameter_ranges[i]], parameter_sizes[i]...))
 end
 
-regroup_device(ps::NamedTuple) = regroup_device(flatten_parameters!(host_parameters, ps))
+regroup_device(ps::NetworkParameters) = regroup_device(flatten_parameters!(host_parameters, ps))
 
 # ---------------------------------------------------------------------------- model ---
 
@@ -401,7 +406,7 @@ network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) 
 The ratio of correctly classified images. `ps` are the parameters as stored by the optimizer
 and `input`/`output` live on the host; only one chunk at a time is moved to the device.
 """
-function accuracy(ps::NamedTuple, input, output; chunk_size=batch_size)
+function accuracy(ps::NetworkParameters, input, output; chunk_size=batch_size)
     regrouped = regroup_device(ps)
     correct = 0
     for k in Iterators.partition(axes(input, 3), chunk_size)
@@ -419,7 +424,7 @@ end
 
 const current_batch = Ref{Tuple{AbstractArray{T,3},AbstractMatrix{T}}}()
 
-function F(ps::NamedTuple)
+function F(ps::NetworkParameters)
     input, output = current_batch[]     # the function barrier keeps `network_loss` inferred
     network_loss(regroup_device(ps), input, output)
 end
@@ -466,7 +471,7 @@ the difference quotient is of the same order as the quantity itself. `ForwardDif
 needs a single dual number instead — and `ForwardDiff.Dual`s cannot be multiplied on the GPU,
 so the reference has to be computed on the host.
 """
-function check_gradient(ps::NamedTuple)
+function check_gradient(ps::NetworkParameters)
     v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
@@ -488,7 +493,7 @@ end
 The worst ``\\|Y^TY - I\\|`` over the attention projections, i.e. how far the parameters have
 drifted off the Stiefel manifold. `NaN` if they are not on a manifold to begin with.
 """
-function orthonormality_error(ps::NamedTuple)
+function orthonormality_error(ps::NetworkParameters)
     ps[1] isa StiefelManifold || return T(NaN)
     worst = zero(T)
     for i in 1:n_attention_parameters
@@ -504,7 +509,7 @@ end
 Every parameter is finite and still stored in `T`. A retraction that produced a `NaN`, or a
 step that silently promoted the parameters to `Float64`, shows up here.
 """
-function parameters_are_sound(ps::NamedTuple)
+function parameters_are_sound(ps::NetworkParameters)
     all(values(ps)) do p
         A = freeparameters(p)
         eltype(A) === T && all(isfinite, A)
@@ -521,7 +526,7 @@ supplied through the line search — the *methods* only determine the direction 
 `Static(learning_rate)` is what `Optimizer` defaults to for these three anyway; it is written
 out so that the rate is visible.
 """
-function build_optimizer(ps::NamedTuple, algorithm::GeometricOptimizers.OptimizerMethod)
+function build_optimizer(ps::NetworkParameters, algorithm::GeometricOptimizers.OptimizerMethod)
     optimizer = Optimizer(ps, F; (∇F!)=∇F!, algorithm=algorithm, linesearch=Static(learning_rate))
     state = OptimizerState(algorithm, ps)
     initialize_state!(state)

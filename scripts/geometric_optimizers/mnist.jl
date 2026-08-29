@@ -25,7 +25,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, Adjoint, Transpose
@@ -124,7 +124,12 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
             glorot_uniform(rng, size)
         end
     end
-    NamedTuple{parameter_keys}(Tuple(values))
+    # `NetworkParameters` and not a bare `NamedTuple`: `GeometricOptimizers` takes a whole set of
+    # parameters only as a container, because a `NamedTuple` alias is a type nobody owns and a method
+    # on one is a method on `Base.NamedTuple`. The wrap shares the leaf arrays rather than copying
+    # them, and the container forwards `keys`, `values`, `ps[i]` and `ps.field`, so `regroup`, `F` and
+    # `∇F!` below read it exactly as they read the `NamedTuple` underneath.
+    NetworkParameters(NamedTuple{parameter_keys}(Tuple(values)))
 end
 
 # The layout of the parameter set, and the ranges this script indexes the flat vector by.
@@ -160,7 +165,7 @@ function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
         Wclass=get_parameter(classification_index))
 end
 
-regroup(ps::NamedTuple) = regroup(let p = values(ps)
+regroup(ps::NetworkParameters) = regroup(let p = values(ps)
     i -> freeparameters(p[i])
 end)
 
@@ -249,11 +254,11 @@ end
 
 # --------------------------------------------------------------- objective & gradient ---
 
-# The `Optimizer` calls the objective on the parameter `NamedTuple` and `∇F!` on the
+# The `Optimizer` calls the objective on the parameter container and `∇F!` on the
 # *flattened* parameters. Both read the current batch from `current_batch`.
 const current_batch = Ref{Tuple{Array{T,3},Matrix{T}}}()
 
-F(ps::NamedTuple) = network_loss(regroup(ps), current_batch[]...)
+F(ps::NetworkParameters) = network_loss(regroup(ps), current_batch[]...)
 
 # the cotangent of a `transpose(ps.Q[i])` is a lazy `Transpose`, which `vec` turns into a
 # wrapped array that the device cannot copy from — hence `_dense` here as well
@@ -289,7 +294,7 @@ Note that a central difference is not a useful comparison here: the objective is
 `Float32` and the directional derivative is of the order of ``\\|g\\|/\\sqrt{n}``, so the
 cancellation error of the difference quotient is of the same order as the quantity itself.
 """
-function check_gradient(ps::NamedTuple)
+function check_gradient(ps::NetworkParameters)
     v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)

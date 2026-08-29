@@ -13,22 +13,18 @@ KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 
 [compat]
-AbstractNeuralNetworks = "0.7"
+AbstractNeuralNetworks = "0.7, 0.8"
 GeometricIntegrators = "0.18"
 GeometricMachineLearning = "0.6"
 GeometricProblems = "0.8"
 GeometricSolutions = "0.6"
 KernelAbstractions = "0.9"
 MLDatasets = "0.7"
-# A test dependency: `test/mnist_utils.jl` annotates against `ParameterSet`, added in 0.2.2.
 NeuralNetworkParameters = "0.2.2"
 Random = "1"
 SafeTestsets = "0.1"
 Test = "1"
 Zygote = "0.7"
-# 1.11 is the floor across this family of packages. It used to be 1.11 for a local reason as well --
-# the `[sources]` block that pinned `GeometricMachineLearning` to `main` is a Julia 1.11 feature -- and
-# that reason is gone: 0.6.0 is registered and the block with it.
 julia = "1.11"
 
 [extras]

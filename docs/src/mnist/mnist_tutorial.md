@@ -121,7 +121,12 @@ And we get the following result:
 using HDF5
 using CairoMakie
 
-HDF5.h5open("mnist_metadata.h5", "r") do meta
+# The trained weights are build inputs, not part of the site, so they sit in `docs/artifacts/` --
+# outside `docs/src/`, which Documenter copies wholesale into the published documentation.
+# `docs/make.jl` puts the directory here.
+artifact(name) = joinpath(ENV["GMLDATASETS_DOCS_ARTIFACTS"], name)
+
+HDF5.h5open(artifact("mnist_metadata.h5"), "r") do meta
     global loss_array1    = read(meta["loss_array1"])
     global loss_array2    = read(meta["loss_array2"])
     global loss_array3    = read(meta["loss_array3"])
@@ -132,10 +137,10 @@ HDF5.h5open("mnist_metadata.h5", "r") do meta
     global accuracy_score4 = read(meta["accuracy_score4"])
 end
 
-nn1 = load(NeuralNetwork, "mnist_nn1.h5", nn1.architecture)
-nn2 = load(NeuralNetwork, "mnist_nn2.h5", nn2.architecture)
-nn3 = load(NeuralNetwork, "mnist_nn3.h5", nn3.architecture)
-nn4 = load(NeuralNetwork, "mnist_nn4.h5", nn4.architecture)
+nn1 = load(NeuralNetwork, artifact("mnist_nn1.h5"), nn1.architecture)
+nn2 = load(NeuralNetwork, artifact("mnist_nn2.h5"), nn2.architecture)
+nn3 = load(NeuralNetwork, artifact("mnist_nn3.h5"), nn3.architecture)
+nn4 = load(NeuralNetwork, artifact("mnist_nn4.h5"), nn4.architecture)
 
 morange = RGBf(255 / 256, 127 / 256, 14 / 256) # hide
 mred = RGBf(214 / 256, 39 / 256, 40 / 256) # hide

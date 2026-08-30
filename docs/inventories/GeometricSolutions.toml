@@ -1,0 +1,62 @@
+# DocInventory version 1
+project = "GeometricSolutions.jl"
+version = "0.6.5"
+
+[[jl.method]]
+name = "GeometricSolutions.arrays-Tuple{EnsembleSolution}"
+uri = "#GeometricSolutions.arrays-Tuple%7BEnsembleSolution%7D"
+[[jl.method]]
+name = "GeometricSolutions.compute_difference-Union{Tuple{DT}, Tuple{DataSeries{DT, AT} where AT<:Union{AbstractArray{DT}, DT}, DataSeries{DT, AT} where AT<:Union{AbstractArray{DT}, DT}}} where DT"
+uri = "#GeometricSolutions.compute_difference-Union%7BTuple%7BDT%7D%2C%20Tuple%7BDataSeries%7BDT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BDT%7D%2C%20DT%7D%2C%20DataSeries%7BDT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BDT%7D%2C%20DT%7D%7D%7D%20where%20DT"
+[[jl.method]]
+name = "GeometricSolutions.compute_error_drift-Union{Tuple{T}, Tuple{Union{ScalarDataSeries{T}, TimeSeries{T, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T, AA} where AA<:AbstractVector{T})}}, ScalarDataSeries{T}}, Tuple{Union{ScalarDataSeries{T}, TimeSeries{T, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T, AA} where AA<:AbstractVector{T})}}, ScalarDataSeries{T}, Any}} where T"
+uri = "#GeometricSolutions.compute_error_drift-Union%7BTuple%7BT%7D%2C%20Tuple%7BUnion%7BScalarDataSeries%7BT%7D%2C%20TimeSeries%7BT%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT%7D%29%7D%7D%2C%20ScalarDataSeries%7BT%7D%7D%2C%20Tuple%7BUnion%7BScalarDataSeries%7BT%7D%2C%20TimeSeries%7BT%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT%7D%29%7D%7D%2C%20ScalarDataSeries%7BT%7D%2C%20Any%7D%7D%20where%20T"
+[[jl.method]]
+name = "GeometricSolutions.compute_invariant-Union{Tuple{T}, Tuple{Union{ScalarDataSeries{T}, TimeSeries{T, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T, AA} where AA<:AbstractVector{T})}}, DataSeries{T, AT} where AT<:Union{AbstractArray{T}, T}, DataSeries{T, AT} where AT<:Union{AbstractArray{T}, T}, GeometricBase.OptionalParameters, Union{Function, Type}}} where T"
+uri = "#GeometricSolutions.compute_invariant-Union%7BTuple%7BT%7D%2C%20Tuple%7BUnion%7BScalarDataSeries%7BT%7D%2C%20TimeSeries%7BT%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT%7D%29%7D%7D%2C%20DataSeries%7BT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20T%7D%2C%20DataSeries%7BT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20T%7D%2C%20GeometricBase.OptionalParameters%2C%20Union%7BFunction%2C%20Type%7D%7D%7D%20where%20T"
+[[jl.method]]
+name = "GeometricSolutions.compute_invariant-Union{Tuple{T}, Tuple{Union{ScalarDataSeries{T}, TimeSeries{T, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T, AA} where AA<:AbstractVector{T})}}, DataSeries{T, AT} where AT<:Union{AbstractArray{T}, T}, GeometricBase.OptionalParameters, Union{Function, Type}}} where T"
+uri = "#GeometricSolutions.compute_invariant-Union%7BTuple%7BT%7D%2C%20Tuple%7BUnion%7BScalarDataSeries%7BT%7D%2C%20TimeSeries%7BT%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT%7D%29%7D%7D%2C%20DataSeries%7BT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20T%7D%2C%20GeometricBase.OptionalParameters%2C%20Union%7BFunction%2C%20Type%7D%7D%7D%20where%20T"
+[[jl.method]]
+name = "GeometricSolutions.compute_invariant_error-Tuple{Union{TimeSeries, ScalarDataSeries}, DataSeries, GeometricBase.OptionalParameters, Union{Function, Type}}"
+uri = "#GeometricSolutions.compute_invariant_error-Tuple%7BUnion%7BTimeSeries%2C%20ScalarDataSeries%7D%2C%20DataSeries%2C%20GeometricBase.OptionalParameters%2C%20Union%7BFunction%2C%20Type%7D%7D"
+[[jl.method]]
+name = "GeometricSolutions.compute_invariant_error-Union{Tuple{T}, Tuple{Union{ScalarDataSeries{T}, TimeSeries{T, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T, AA} where AA<:AbstractVector{T})}}, DataSeries{T, AT} where AT<:Union{AbstractArray{T}, T}, DataSeries{T, AT} where AT<:Union{AbstractArray{T}, T}, GeometricBase.OptionalParameters, Union{Function, Type}}} where T"
+uri = "#GeometricSolutions.compute_invariant_error-Union%7BTuple%7BT%7D%2C%20Tuple%7BUnion%7BScalarDataSeries%7BT%7D%2C%20TimeSeries%7BT%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT%7D%29%7D%7D%2C%20DataSeries%7BT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20T%7D%2C%20DataSeries%7BT%2C%20AT%7D%20where%20AT%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20T%7D%2C%20GeometricBase.OptionalParameters%2C%20Union%7BFunction%2C%20Type%7D%7D%7D%20where%20T"
+[[jl.method]]
+name = "GeometricSolutions.compute_momentum_error-Union{Tuple{GeometricSolution{dType, tType, tsType, dsType, stType, probType, perType}}, Tuple{probType}, Tuple{perType}, Tuple{stType}, Tuple{dsType}, Tuple{tsType}, Tuple{tType}, Tuple{dType}} where {dType, tType, tsType, dsType, stType, perType, probType<:GeometricEquations.AbstractProblemIODE{dType, tType} where {dType<:Number, tType<:Real}}"
+uri = "#GeometricSolutions.compute_momentum_error-Union%7BTuple%7BGeometricSolution%7BdType%2C%20tType%2C%20tsType%2C%20dsType%2C%20stType%2C%20probType%2C%20perType%7D%7D%2C%20Tuple%7BprobType%7D%2C%20Tuple%7BperType%7D%2C%20Tuple%7BstType%7D%2C%20Tuple%7BdsType%7D%2C%20Tuple%7BtsType%7D%2C%20Tuple%7BtType%7D%2C%20Tuple%7BdType%7D%7D%20where%20%7BdType%2C%20tType%2C%20tsType%2C%20dsType%2C%20stType%2C%20perType%2C%20probType%3C%3AGeometricEquations.AbstractProblemIODE%7BdType%2C%20tType%7D%20where%20%7BdType%3C%3ANumber%2C%20tType%3C%3AReal%7D%7D"
+[[jl.method]]
+name = "GeometricSolutions.compute_one_form-Union{Tuple{GeometricSolution{dType, tType, tsType, dsType, stType, probType, perType}}, Tuple{probType}, Tuple{perType}, Tuple{stType}, Tuple{dsType}, Tuple{tsType}, Tuple{tType}, Tuple{dType}} where {dType, tType, tsType, dsType, stType, perType, probType<:GeometricEquations.AbstractProblemIODE{dType, tType} where {dType<:Number, tType<:Real}}"
+uri = "#GeometricSolutions.compute_one_form-Union%7BTuple%7BGeometricSolution%7BdType%2C%20tType%2C%20tsType%2C%20dsType%2C%20stType%2C%20probType%2C%20perType%7D%7D%2C%20Tuple%7BprobType%7D%2C%20Tuple%7BperType%7D%2C%20Tuple%7BstType%7D%2C%20Tuple%7BdsType%7D%2C%20Tuple%7BtsType%7D%2C%20Tuple%7BtType%7D%2C%20Tuple%7BdType%7D%7D%20where%20%7BdType%2C%20tType%2C%20tsType%2C%20dsType%2C%20stType%2C%20perType%2C%20probType%3C%3AGeometricEquations.AbstractProblemIODE%7BdType%2C%20tType%7D%20where%20%7BdType%3C%3ANumber%2C%20tType%3C%3AReal%7D%7D"
+[[jl.method]]
+name = "GeometricSolutions.compute_relative_error-Union{Tuple{ScalarDataSeries{T}}, Tuple{T}} where T"
+uri = "#GeometricSolutions.compute_relative_error-Union%7BTuple%7BScalarDataSeries%7BT%7D%7D%2C%20Tuple%7BT%7D%7D%20where%20T"
+[[jl.method]]
+name = "GeometricSolutions.maximum_error-Tuple{Any, Any}"
+uri = "#GeometricSolutions.maximum_error-Tuple%7BAny%2C%20Any%7D"
+[[jl.method]]
+name = "GeometricSolutions.relative_maximum_error-Tuple{Any, Any}"
+uri = "#GeometricSolutions.relative_maximum_error-Tuple%7BAny%2C%20Any%7D"
+[[jl.method]]
+name = "GeometricSolutions.relative_maximum_error-Tuple{DataSeries, DataSeries}"
+uri = "#GeometricSolutions.relative_maximum_error-Tuple%7BDataSeries%2C%20DataSeries%7D"
+[[jl.method]]
+name = "GeometricSolutions.relative_maximum_error-Tuple{EnsembleSolution, EnsembleSolution}"
+uri = "#GeometricSolutions.relative_maximum_error-Tuple%7BEnsembleSolution%2C%20EnsembleSolution%7D"
+
+[[jl.type]]
+name = "GeometricSolutions.EnsembleSolution"
+uri = "#$"
+[[jl.type]]
+name = "GeometricSolutions.GeometricSolution"
+uri = "#$"
+
+[[std.doc]]
+dispname = "Home"
+name = "index"
+uri = ""
+
+[[std.label]]
+name = "GeometricSolutions"
+uri = "#$"

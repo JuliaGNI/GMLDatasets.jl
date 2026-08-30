@@ -39,6 +39,22 @@ const COLORMAP = :viridis
 # Below mgl the pendulum swings back and forth about θ = π, above it the pendulum goes over the top.
 const SEPARATRIX = parameters.m * parameters.g * parameters.l
 
+# The separatrix itself, drawn so that the boundary the colour map encodes is visible rather than
+# inferred. Setting H = mgl and solving for the momentum gives pθ = ±ml·√(2gl(1 − cos θ)), and the
+# lift carries that curve into the Euclidean panel as (q₁, p₁) = (l·sin θ, pθ·cos θ / l).
+const SEPARATRIX_θ = range(0, 2π; length = 401)
+const SEPARATRIX_pθ = parameters.m * parameters.l .*
+                      sqrt.(max.(2 * parameters.g * parameters.l .* (1 .- cos.(SEPARATRIX_θ)), 0))
+
+"Draw both branches of the separatrix, in whichever coordinates `f` maps it to."
+function separatrix!(axis, f)
+    for (sign, label) in ((+1, "separatrix, H = mgl"), (-1, nothing))
+        line = lines!(axis, f(SEPARATRIX_θ, sign .* SEPARATRIX_pθ)...;
+                      color = INK, linewidth = 1.5, linestyle = :dash)
+        label === nothing || (line.label = label)
+    end
+end
+
 "An axis with recessive chrome, matching the MNIST figures."
 function plain_axis(position; kwargs...)
     Axis(position; backgroundcolor = :transparent,
@@ -56,6 +72,8 @@ figure = Figure(size = (960, 420), backgroundcolor = :transparent, fontsize = 14
 canonical = plain_axis(figure[1, 1]; xlabel = "θ", ylabel = "pθ",
                        title = "canonical coordinates")
 scatter!(canonical, mod2pi.(θ), pθ; color = vec(energy), colormap = COLORMAP, markersize = 1.5)
+separatrix!(canonical, (a, m) -> (a, m))
+axislegend(canonical; position = :lt, framevisible = false, labelcolor = INK, labelsize = 11)
 
 # Right: the same data in two of the four Euclidean rows. This is the projection the autoencoder is
 # given — the full picture is the tangent bundle of a circle, a two-dimensional surface in ℝ⁴.
@@ -65,6 +83,7 @@ for i in 1:n_trajectories
     lines!(euclidean, data[1, :, i], data[3, :, i];
            color = energy[:, i], colormap = COLORMAP, colorrange = extrema(energy), linewidth = 1)
 end
+separatrix!(euclidean, (a, m) -> (parameters.l .* sin.(a), m .* cos.(a) ./ parameters.l))
 
 Colorbar(figure[1, 3]; colormap = COLORMAP, limits = extrema(energy), label = "H",
          labelcolor = INK, ticklabelcolor = INK, tickcolor = INK,

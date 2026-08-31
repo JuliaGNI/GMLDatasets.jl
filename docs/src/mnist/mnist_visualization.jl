@@ -21,11 +21,11 @@ function split_image(image::AbstractMatrix, pl)
     @assert n%pl == 0
     #square root of patch number
     pnsq = n ÷ pl
-    small_images = Tuple(map(i -> zeros(eltype(image), pl, pl), 1:pnsq^2))
+    small_images = Tuple(map(i -> zeros(eltype(image), pl, pl), 1:(pnsq ^ 2)))
     for i in 1:pnsq
         for j in 1:pnsq
-            small_images[pnsq*(j-1)+i] .= image[pl*(i-1)+1:pl*i,pl*(j-1)+1:pl*j]
-        end 
+            small_images[pnsq * (j - 1) + i] .= image[(pl * (i - 1) + 1):(pl * i), (pl * (j - 1) + 1):(pl * j)]
+        end
     end
     #Tuple(vcat(map(j -> map(i -> image[pl*(i-1)+1:pl*i,pl*(j-1)+1:pl*j,1]), 1:pnsq),1:pnsq)...)
     small_images
@@ -34,25 +34,26 @@ end
 processed_image₁ = split_image(first_image, patch_length)
 processed_image₂ = Tuple(map(i -> reshape(processed_image₁[i], 49, 1), 1:16))
 
-fully_processed_image = split_and_flatten(first_image; patch_length = patch_length, number_of_patches = patch_number)
+fully_processed_image = split_and_flatten(
+    first_image; patch_length = patch_length, number_of_patches = patch_number)
 
 #see https://github.com/JuliaImages/ImageView.jl/issues/28
 function plot_image!(fig::Figure, pic::AbstractMatrix)
     first_axis, second_axis = axes(pic)
-    ax = Axis(fig[1, 1], 
-                        backgroundcolor = :transparent,
-                        aspect=DataAspect(), 
-                        xticksvisible = false, 
-                        xticklabelsvisible = false, 
-                        yticksvisible = false, 
-                        yticklabelsvisible = false,
-                        leftspinevisible = false,
-                        rightspinevisible = false,
-                        topspinevisible = false,
-                        bottomspinevisible = false,
-                        xautolimitmargin = (zero(Float32),zero(Float32)),
-                        yautolimitmargin = (zero(Float32),zero(Float32))
-            )
+    ax = Axis(fig[1, 1],
+        backgroundcolor = :transparent,
+        aspect = DataAspect(),
+        xticksvisible = false,
+        xticklabelsvisible = false,
+        yticksvisible = false,
+        yticklabelsvisible = false,
+        leftspinevisible = false,
+        rightspinevisible = false,
+        topspinevisible = false,
+        bottomspinevisible = false,
+        xautolimitmargin = (zero(Float32), zero(Float32)),
+        yautolimitmargin = (zero(Float32), zero(Float32))
+    )
     heatmap!(ax, first_axis, second_axis, pic; colormap = :oslo)
     ax
 end
@@ -88,7 +89,7 @@ CairoMakie.save(filename, fig.content[1, 1].scene)
 for i in 1:16
     global fig = Figure(; backgroundcolor = :transparent)
     force_render!(fig)
-    p_small = processed_image₁[i];
+    p_small = processed_image₁[i]
     file_name = "split/"*string(i)*".png"
     global ax = plot_image!(fig, p_small')
     CairoMakie.save(file_name, ax.scene)

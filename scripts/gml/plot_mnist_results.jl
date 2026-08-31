@@ -31,22 +31,23 @@ import JLD2
 const results_file = isempty(ARGS) ? "mnist_parameters.jld2" : ARGS[1]
 const prefix = replace(basename(results_file), r"_parameters\.jld2$" => "", r"\.jld2$" => "")
 
-isfile(results_file) || error("no such file: $results_file — run `transformer_mnist.jl` first, " *
-                              "or pass the path of a `.jld2` it wrote")
+isfile(results_file) ||
+    error("no such file: $results_file — run `transformer_mnist.jl` first, " *
+          "or pass the path of a `.jld2` it wrote")
 
 # Read only the datasets that are needed. `JLD2.load` would pull in the `nn*weights` too, and
 # reconstructing a `NetworkParameters` of `StiefelManifold`s needs `GeometricMachineLearning`
 # loaded just to be thrown away again.
 losses, times, accuracies = JLD2.jldopen(results_file, "r") do file
     ([file["loss_array$i"] for i in 1:4],
-     [file["total_time$i"] for i in 1:4],
-     [file["accuracy_score$i"] for i in 1:4])
+        [file["total_time$i"] for i in 1:4],
+        [file["accuracy_score$i"] for i in 1:4])
 end
 
 # The index order `transformer_mnist.jl` saves in. Only the projections of the attention layers are
 # constrained; the feedforward and classification weights are unconstrained in all four.
 const RUNS = ("regular weights, Adam", "Stiefel weights, Adam",
-              "Stiefel weights, gradient", "Stiefel weights, momentum")
+    "Stiefel weights, gradient", "Stiefel weights, momentum")
 
 # The palette of `docs/src/homogeneous_spaces_experiment.md`: recessive chrome, colorblind-safe, and
 # a series that keeps its color across both figures.
@@ -54,19 +55,19 @@ CairoMakie.activate!(type = "png", px_per_unit = 2)
 
 const INK = "#898781"
 const GRID = (INK, 0.3)
-const REGULAR  = "#eda100"
-const ADAM     = "#2a78d6"
+const REGULAR = "#eda100"
+const ADAM = "#2a78d6"
 const GRADIENT = "#e87ba4"
 const MOMENTUM = "#008300"
 
 "An axis with recessive chrome: no top or right spine, horizontal gridlines only."
 function loss_axis(figure)
     Axis(figure[1, 1]; xlabel = "epoch", ylabel = "training loss",
-         limits = (nothing, (0., 1.4)), backgroundcolor = :transparent,
-         xgridvisible = false, ygridcolor = GRID, ygridwidth = 1,
-         topspinevisible = false, rightspinevisible = false,
-         leftspinecolor = INK, bottomspinecolor = INK, xtickcolor = INK, ytickcolor = INK,
-         xticklabelcolor = INK, yticklabelcolor = INK, xlabelcolor = INK, ylabelcolor = INK)
+        limits = (nothing, (0.0, 1.4)), backgroundcolor = :transparent,
+        xgridvisible = false, ygridcolor = GRID, ygridwidth = 1,
+        topspinevisible = false, rightspinevisible = false,
+        leftspinecolor = INK, bottomspinecolor = INK, xtickcolor = INK, ytickcolor = INK,
+        xticklabelcolor = INK, yticklabelcolor = INK, xlabelcolor = INK, ylabelcolor = INK)
 end
 
 "A figure with one axis, one line per `(loss, color, label)`, and a horizontal legend below."
@@ -77,7 +78,7 @@ function loss_figure(series)
         lines!(ax, loss; color = color, linewidth = 2, label = label)
     end
     Legend(figure[2, 1], ax; orientation = :horizontal, framevisible = false,
-           labelcolor = INK, padding = (0, 0, 0, 0))
+        labelcolor = INK, padding = (0, 0, 0, 0))
     figure
 end
 
@@ -85,17 +86,19 @@ end
 # unconstrained baseline plateaus at √1.8 ≈ 1.34, a trivial prediction.
 CairoMakie.save("$(prefix)_regular_vs_stiefel.png",
     loss_figure([(losses[1], REGULAR, "Regular weights"),
-                 (losses[2], ADAM, "Weights on Stiefel manifold")]))
+        (losses[2], ADAM, "Weights on Stiefel manifold")]))
 
 # The three optimizers, all with the projections on the Stiefel manifold.
 CairoMakie.save("$(prefix)_optimizer_comparison.png",
     loss_figure([(losses[2], ADAM, "Adam"),
-                 (losses[3], GRADIENT, "Gradient"),
-                 (losses[4], MOMENTUM, "Momentum")]))
+        (losses[3], GRADIENT, "Gradient"),
+        (losses[4], MOMENTUM, "Momentum")]))
 
 text_string = "epochs: " * string(length(losses[1])) * "\n" *
-    join(("$(rpad(RUNS[i], 26)) time: $(times[i]) s   classification accuracy: $(accuracies[i])"
-          for i in 1:4), "\n") * "\n"
+              join(
+                  ("$(rpad(RUNS[i], 26)) time: $(times[i]) s   classification accuracy: $(accuracies[i])"
+                  for i in 1:4),
+                  "\n") * "\n"
 
 print(text_string)
 

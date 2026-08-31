@@ -21,31 +21,31 @@ ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 # the built page's own directory -- would silently break if the tutorial ever moved.
 ENV["GMLDATASETS_DOCS_ARTIFACTS"] = joinpath(@__DIR__, "artifacts")
 
-DocMeta.setdocmeta!(GMLDatasets, :DocTestSetup, :(using GMLDatasets); recursive=true)
+DocMeta.setdocmeta!(GMLDatasets, :DocTestSetup, :(using GMLDatasets); recursive = true)
 
 makedocs(;
-    plugins=[bib],
-    modules=[GMLDatasets],
-    authors="Michael Kraus",
-    repo="https://github.com/JuliaGNI/GMLDatasets.jl/blob/{commit}{path}#{line}",
-    sitename="GMLDatasets.jl",
-    format=Documenter.HTML(;
-        prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://JuliaGNI.github.io/GMLDatasets.jl",
-        edit_link="main",
-        assets=String[],
+    plugins = [bib],
+    modules = [GMLDatasets],
+    authors = "Michael Kraus",
+    repo = "https://github.com/JuliaGNI/GMLDatasets.jl/blob/{commit}{path}#{line}",
+    sitename = "GMLDatasets.jl",
+    format = Documenter.HTML(;
+        prettyurls = get(ENV, "CI", "false") == "true",
+        canonical = "https://JuliaGNI.github.io/GMLDatasets.jl",
+        edit_link = "main",
+        assets = String[]
     ),
-    pages=[
+    pages = [
         "Home" => "index.md",
         "MNIST Tutorial" => "mnist/mnist_tutorial.md",
         "The Numerical Experiment on Homogeneous Spaces" => "homogeneous_spaces_experiment.md",
         "Running the Experiments" => "running_the_experiments.md",
-        "References" => "references.md",
-    ],
+        "References" => "references.md"
+    ]
 )
 
 deploydocs(;
-    repo="github.com/JuliaGNI/GMLDatasets.jl",
-    devurl="latest",
-    devbranch="main",
+    repo = "github.com/JuliaGNI/GMLDatasets.jl",
+    devurl = "latest",
+    devbranch = "main"
 )

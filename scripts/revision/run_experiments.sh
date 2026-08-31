@@ -43,6 +43,18 @@ while (( $# )); do
     esac
 done
 
+required_archive_inputs=(
+    "Project.toml"
+    "scripts/Project.toml"
+    "scripts/Manifest.toml"
+)
+for required_input in "${required_archive_inputs[@]}"; do
+    if [[ ! -s "$required_input" ]]; then
+        echo "missing required archive input: $repo_root/$required_input" >&2
+        exit 1
+    fi
+done
+
 IFS=',' read -r -a seed_array <<< "$seeds"
 (( ${#seed_array[@]} > 0 )) || { echo "no seeds supplied" >&2; exit 2; }
 if [[ "$mode" == full && ${#seed_array[@]} -ne 10 ]]; then
@@ -75,10 +87,19 @@ status_file="$run_dir/stages.csv"
 
 archive_results() {
     local exit_code=$?
+    local archive_failed=0
     set +e
     mkdir -p "$run_dir/environments/root" "$run_dir/environments/scripts"
-    cp Project.toml Manifest.toml "$run_dir/environments/root/" 2>/dev/null
-    cp scripts/Project.toml scripts/Manifest.toml "$run_dir/environments/scripts/" 2>/dev/null
+    if ! cp Project.toml "$run_dir/environments/root/"; then
+        echo "failed to archive required input: $repo_root/Project.toml" >&2
+        archive_failed=1
+    fi
+    for required_input in scripts/Project.toml scripts/Manifest.toml; do
+        if ! cp "$required_input" "$run_dir/environments/scripts/"; then
+            echo "failed to archive required input: $repo_root/$required_input" >&2
+            archive_failed=1
+        fi
+    done
     git rev-parse HEAD > "$run_dir/gmldatasets.sha"
     git status --porcelain=v1 > "$run_dir/gmldatasets.status"
     git diff --binary > "$run_dir/gmldatasets.patch"
@@ -97,6 +118,9 @@ archive_results() {
     fi
     echo "artifact: $run_dir.tar.gz"
     echo "checksum: $run_dir.tar.gz.sha256"
+    if [[ "$archive_failed" -ne 0 && "$exit_code" -eq 0 ]]; then
+        exit_code=1
+    fi
     exit "$exit_code"
 }
 trap archive_results EXIT

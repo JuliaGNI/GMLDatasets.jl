@@ -1,7 +1,10 @@
 using CUDA
 using GeometricMachineLearning
 using GeometricOptimizers
+using NeuralNetworkParameters
 using Pkg
+
+include(joinpath(@__DIR__, "environment_policy.jl"))
 
 required_name = get(ENV, "GML_REQUIRED_GPU", "RTX 4090")
 allow_any_gpu = parse(Bool, get(ENV, "GML_ALLOW_ANY_GPU", "0"))
@@ -20,14 +23,11 @@ println("runtime_version=", functional ? CUDA.runtime_version() : "unavailable")
 println("threads=", Threads.nthreads())
 gml_version = pkgversion(GeometricMachineLearning)
 go_version = pkgversion(GeometricOptimizers)
+nnp_version = pkgversion(NeuralNetworkParameters)
 println("geometric_machine_learning_version=", gml_version)
 println("geometric_optimizers_version=", go_version)
+println("neural_network_parameters_version=", nnp_version)
 
-if gml_version ≥ v"0.6.0" && go_version ≥ v"0.5.0"
-    error("GeometricMachineLearning $gml_version and GeometricOptimizers $go_version are not a " *
-          "released compatible stack: GML 0.6 declares GeometricOptimizers 0.4 and does not " *
-          "yet integrate ScalarMomentAdam. Pin a reviewed GML compatibility update before " *
-          "running revision experiments.")
-end
+validate_environment_versions(VERSION, gml_version, go_version, nnp_version)
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
 functional && CUDA.versioninfo()

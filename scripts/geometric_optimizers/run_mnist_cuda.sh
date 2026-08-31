@@ -68,10 +68,9 @@ echo "stdout            $stdout_log"
 echo "follow it with    tail -f $MNIST_REPORT"
 echo
 
-# A machine that has not run this before has no `scripts/Manifest.toml`. Resolving it here
-# means a dependency that cannot be installed says so now, in one line, rather than as a
-# precompilation error out of the script itself — and `errexit` stops before MNIST is even
-# downloaded. It is a no-op once the environment exists.
+# The checked-in manifest pins the reviewed experiment stack. Instantiating it here means an
+# unavailable dependency fails before MNIST is downloaded; it is a no-op once the environment
+# exists.
 "$julia_bin" --project=scripts --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 echo
 

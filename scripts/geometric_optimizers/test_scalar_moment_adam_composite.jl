@@ -24,7 +24,7 @@ using Random
 using LinearAlgebra: norm
 using GeometricOptimizers
 using GeometricOptimizers: cache, section
-using NeuralNetworkParameters: flatlength, parameterlayout
+using NeuralNetworkParameters: NetworkParameters, flatlength, parameterlayout
 
 include(joinpath(@__DIR__, "step_timing.jl"))
 include(joinpath(@__DIR__, "scalar_moment_adam_composite.jl"))
@@ -38,7 +38,7 @@ include(joinpath(@__DIR__, "scalar_moment_adam_composite.jl"))
     Y₀ = rand(rng, StiefelManifold{Float64}, 5, 2)
     v₀ = rand(rng, 3)
     W₀ = rand(rng, 4, 3)
-    ps = (Y = Y₀, v = v₀, W = W₀)
+    ps = NetworkParameters((Y = Y₀, v = v₀, W = W₀))
 
     # the two minibatches are two ambient-gradient fields over the whole flat set, as the
     # trainer's `current_batch[]` supplies them one at a time

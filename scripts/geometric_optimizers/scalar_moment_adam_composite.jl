@@ -2,7 +2,7 @@
 #
 # `ScalarMomentAdam` — the Adam of `li2020efficient`, Algorithm 2, with its scalar second
 # moment — is restricted to a single `StiefelManifold`: it rejects ordinary arrays,
-# `NamedTuple`s and mixed parameter trees on purpose, and `GeometricOptimizers` 0.6.0
+# whole parameter sets and mixed parameter trees on purpose, and `GeometricOptimizers` 0.7.0
 # deliberately does not widen it. (The method's retraction is a parameter — `Cayley`, the
 # default, or any other `AbstractRetraction`; this composite runs it with `Cayley`, which the
 # configuration records.) The transformer this harness trains is a mixed tree —
@@ -13,7 +13,7 @@
 #
 # What one step does, in `composite_step!`:
 #
-#   1. the parameter `NamedTuple` is flattened into the shared flat buffer,
+#   1. the `NetworkParameters` container is flattened into the shared flat buffer,
 #   2. one whole-tree `∇F!` evaluation — the single reverse pass of the step — writes every
 #      leaf's ambient gradient into the shared flat gradient,
 #   3. every leaf's optimizer cache is invalidated (below),
@@ -58,8 +58,8 @@ using GeometricOptimizers
 using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!,
                            cache, section, invalidate_latest_gradient!, NoStepObserver,
                            observe_optimizer_phase
-using NeuralNetworkParameters: ParameterLayout, flatten!, freeparameters, parameterlayout,
-                               parameterrange, flatlength
+using NeuralNetworkParameters: NetworkParameters, ParameterLayout, flatten!, freeparameters,
+                               parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 
 """
@@ -97,7 +97,7 @@ end
 """
     ScalarMomentAdamLeaf{T}
 
-One leaf of a [`ScalarMomentAdamComposite`](@ref): its position in the parameter `NamedTuple`,
+One leaf of a [`ScalarMomentAdamComposite`](@ref): its position in the parameter container,
 whether it lives on the Stiefel, and the optimizer/state pair that steps it.
 """
 struct ScalarMomentAdamLeaf{T}
@@ -110,7 +110,7 @@ end
 """
     ScalarMomentAdamComposite{T}
 
-The per-repetition composite over a parameter `NamedTuple` `ps`: one leaf per entry, the
+The per-repetition composite over a `NetworkParameters` container `ps`: one leaf per entry, the
 shared flat buffers the whole-tree `∇F!` and the flattening read and write, and `∇F!` itself —
 the trainer's, which reads the current batch from its own `current_batch[]`.
 """
@@ -143,20 +143,25 @@ The point the leaf's optimizer works on: the leaf itself where it is already an
 `OptimizerSolution` (a `StiefelManifold`, a `Vector`), the `vec` view where it is a bare
 `Matrix`, which is not one — `OptimizerProblem` and `Optimizer` bind their point to
 `OptimizerSolution`, and that union excludes `Matrix{T}`. The view writes through to the
-leaf, so the in-place sync of `solver_step!` reaches the `NamedTuple` without a copy.
+leaf, so the in-place sync of `solver_step!` reaches the container without a copy.
 """
 leaf_solution(x, stiefel::Bool) = (stiefel || x isa AbstractVector) ? x : vec(x)
 
-function ScalarMomentAdamComposite(ps::NamedTuple, ∇F!, config::ScalarMomentAdamConfig{T};
+function ScalarMomentAdamComposite(ps::NetworkParameters, ∇F!, config::ScalarMomentAdamConfig{T};
     observer=NoStepObserver()) where {T}
     layout = parameterlayout(ps)
-    ranges = [parameterrange(getfield(layout.children, i)) for i in eachindex(ps)]
+    # A `NetworkParameters` adds a `ParametersLayout` around the wrapped `NamedTuple` layout.
+    # Read that inner layout explicitly; `eachindex(ps)` yields the parameter keys, while the
+    # integer indices stored below are what `ps[i]` accepts during the layout-order step.
+    parameter_values = values(ps)
+    ranges = [parameterrange(getfield(layout.inner.children, i))
+              for i in eachindex(parameter_values)]
     flat_parameters = Vector{T}(undef, flatlength(layout))
     flat_gradient = Vector{T}(undef, flatlength(layout))
     leaf_observer = ScalarMomentAdamLeafObserver(observer)
 
     leaves = Vector{ScalarMomentAdamLeaf{T}}(undef, length(ps))
-    for (i, x) in enumerate(values(ps))
+    for (i, x) in enumerate(parameter_values)
         stiefel = x isa StiefelManifold
         x₀ = leaf_solution(x, stiefel)
 
@@ -189,7 +194,7 @@ One step of the composite on the current batch, replacing the trainer's
 `increase_iteration_number!` / `solver_step!` / `update!` triple: flatten, one whole-tree
 `∇F!`, invalidate every leaf cache, then step the leaves in parameter-layout order.
 """
-function composite_step!(composite::ScalarMomentAdamComposite{T}, ps::NamedTuple) where {T}
+function composite_step!(composite::ScalarMomentAdamComposite{T}, ps::NetworkParameters) where {T}
     observe_optimizer_phase(composite.observer, :optimizer_state_direction) do
         flatten!(composite.flat_parameters, ps, composite.layout)
         observe_optimizer_phase(composite.observer, :gradient) do
@@ -199,7 +204,7 @@ function composite_step!(composite::ScalarMomentAdamComposite{T}, ps::NamedTuple
             invalidate_latest_gradient!(cache(leaf.optimizer))
         end
         for leaf in composite.leaves
-            x = leaf_solution(getfield(ps, leaf.index), leaf.stiefel)
+            x = leaf_solution(ps[leaf.index], leaf.stiefel)
             increase_iteration_number!(leaf.state)
             solver_step!(x, leaf.state, leaf.optimizer)
             GeometricOptimizers.update!(leaf.state, leaf.optimizer, x)

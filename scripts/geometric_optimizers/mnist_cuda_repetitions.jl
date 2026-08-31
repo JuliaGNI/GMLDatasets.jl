@@ -101,7 +101,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters, mapparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
@@ -439,7 +439,7 @@ end
 # is what takes a `StiefelManifold` down to its dense `A` — by a method `GeometricOptimizers`
 # registers, so this script needs no copy of that knowledge.
 const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
-const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.children, i))
+const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.inner.children, i))
                           for i in eachindex(parameter_sizes)]
 const n_parameters = flatlength(parameter_flat_layout)
 
@@ -1136,7 +1136,9 @@ for (j, job) in pairs(jobs)
             stiefel=run.stiefel, learns=run.learns, optimizer_role=run.role,
             learning_rate=run.learning_rate, retraction=run.retraction,
             second_moment=run.second_moment, transport=run.transport,
-            parameters=map(freeparameters, trained.parameters), losses=trained.losses,
+            # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
+            # structured leaves by their portable free storage, as the earlier result schema did.
+            parameters=mapparameters(freeparameters, trained.parameters), losses=trained.losses,
             epoch_losses=trained.epoch_losses, epoch_times=trained.epoch_times,
             accuracy_epochs=trained.accuracy_epochs, accuracies=trained.accuracies,
             orthonormalities=trained.orthonormalities,

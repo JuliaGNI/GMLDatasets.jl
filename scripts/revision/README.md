@@ -12,11 +12,11 @@ Instantiate the pinned scripts environment before disconnecting from the network
 julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 ```
 
-The checked-in manifest currently records the last working pre-release GML stack. Do not replace it
-with the independently latest releases: `GeometricMachineLearning` v0.6.0 declares
-`GeometricOptimizers` 0.4 compatibility, while `GeometricOptimizers` v0.5.0 requires the newer
-parameter package and supplies `ScalarMomentAdam`. The environment preflight rejects that known
-incompatible combination. Pin a reviewed GML compatibility update before producing paper results.
+The checked-in manifest records the reviewed revision-experiment stack:
+`GeometricMachineLearning` v0.6.1, `GeometricOptimizers` v0.6.0, and
+`NeuralNetworkParameters` v0.2.5. The scripts project pins those exact releases and the environment
+preflight rejects substitutions. Instantiate the committed manifest from a clean checkout before
+producing paper results.
 
 The full run rejects a dirty tree and any CUDA device whose name does not contain `RTX 4090`.
 Use `--allow-dirty` only deliberately; the patch and status are included in the bundle. Use
@@ -37,16 +37,18 @@ Detach without stopping the run by pressing `Ctrl-A`, then `D`. Reconnect later 
 using the workstation command above.
 
 Limit stages with `--stages mnist,pendulum` and configurations with
-`--configurations geometric-adam-cayley`. The legacy keys `adam-stiefel` and `adam-regular` remain
-accepted aliases. Smoke mode uses one seed and two epochs.
+`--configurations geometric-adam-cayley`. `--configurations all` selects all five rows, including
+the stable key `scalar-moment-adam`, reported as
+`Scalar Moment Adam (Stiefel, Cayley retraction)`. The legacy keys `adam-stiefel` and
+`adam-regular` remain accepted aliases. Smoke mode uses one seed and two epochs.
 
 ## Full RTX 4090 run
 
-Full paper runs are intentionally blocked until GML can apply `ScalarMomentAdam` to the experiment's
-mixed parameter tree. The existing geometric-Adam row already uses the default Cayley retraction,
-but it is the proposed coordinate-wise method, not the Cayley ADAM scalar-moment baseline. Once the
-adapter and dependency pin are reviewed, remove the guard in `run_experiments.sh` and add the
-required Cayley ADAM row. `GML_ALLOW_INCOMPLETE_MATRIX=1` exists only to reproduce the legacy matrix.
+Full paper runs remain intentionally blocked while the remaining timing and retraction-record
+schema, smoke, and release gates are completed. The experiment-local mixed-tree composite is present:
+`ScalarMomentAdam` acts on Stiefel leaves and ordinary `Adam` on Euclidean leaves, and `all` includes
+that row. `GML_ALLOW_INCOMPLETE_MATRIX=1` temporarily bypasses only this development gate; output
+produced with it is not paper-ready.
 
 ```bash
 scripts/revision/run_in_screen.sh --session gml-revision --full
@@ -57,7 +59,12 @@ Full mode requires exactly ten seeds. Override them explicitly with
 `--seeds 1234,1235,1236,1237,1238,1239,1240,1241,1242,1243`. The default stage list is
 `mnist,fashion-mnist,pendulum,retraction`.
 
-Budget several days for the complete two-dataset, four-configuration, ten-seed matrix. The existing
+Give `geometric-adam-cayley` and `scalar-moment-adam` the same number of learning-rate candidates
+and the same validation protocol. Set the baseline's independently selected value with
+`MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE`; every run record stores the stable configuration key and
+the applied learning rate.
+
+Budget several days for the complete two-dataset, five-configuration, ten-seed matrix. The existing
 RTX 4090 measurement is about 95 minutes for one 500-epoch MNIST Adam configuration; use the smoke
 logs to refine the estimate before launch. Keep at least 20 GiB free until checkpoint sizes from the
 smoke run are known.

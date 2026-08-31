@@ -7,7 +7,7 @@
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --smoke            # 3 × 2 epochs, ≈4 min
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh                    # 10 × 500 epochs of Adam on Stiefel
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --repeat 3         # 3 of them, ≈4:45 h
-#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all four configurations, ≈21 h
+#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all five configurations, ≈21 h
 #
 # Detach with `C-a d`, log out, come back with `screen -r mnist`. Or start it detached in one
 # go, which is what an ssh session is for:
@@ -45,7 +45,7 @@ configurations="${MNIST_CONFIGURATIONS:-geometric-adam-cayley}"
 
 usage() {
     echo "usage: $0 [--smoke] [--repeat N] [-c|--configurations LIST]" >&2
-    echo "  LIST is comma separated: geometric-adam-cayley, standard-adam, gradient, momentum, or all" >&2
+    echo "  LIST is comma separated: geometric-adam-cayley, scalar-moment-adam, standard-adam, gradient, momentum, or all" >&2
 }
 
 while [ $# -gt 0 ]; do

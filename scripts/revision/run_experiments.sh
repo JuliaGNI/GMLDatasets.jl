@@ -64,10 +64,10 @@ fi
 
 if [[ "$mode" == full && "${GML_ALLOW_INCOMPLETE_MATRIX:-0}" != 1 ]]; then
     cat >&2 <<'MESSAGE'
-full revision runs are blocked because the required Cayley ADAM (`ScalarMomentAdam`) row is not
-yet supported by GeometricMachineLearning's mixed parameter-tree optimizer adapter. Set
-GML_ALLOW_INCOMPLETE_MATRIX=1 only to reproduce the legacy four-configuration matrix; do not use
-that output as the complete reviewer-response experiment.
+full revision runs remain blocked until the remaining timing and retraction-record schema, smoke,
+and release gates are complete. The `scalar-moment-adam` mixed-tree baseline is present and selected by `all`.
+GML_ALLOW_INCOMPLETE_MATRIX=1 temporarily bypasses only this development gate; do not use output
+created with it as the complete reviewer-response experiment.
 MESSAGE
     exit 1
 fi

@@ -25,6 +25,7 @@ usage: $0 [--smoke|--full] [--stages LIST] [--seeds LIST]
 
 MNIST and Fashion-MNIST run records use schema 4 and report exclusive gradient/AD,
 optimizer-state/direction, and retraction/application timing. See scripts/revision/README.md.
+The retraction stage writes validated schema-1 CSV plus an exact GeometricOptimizers patch.
 USAGE
 }
 
@@ -67,9 +68,9 @@ fi
 
 if [[ "$mode" == full && "${GML_ALLOW_INCOMPLETE_MATRIX:-0}" != 1 ]]; then
     cat >&2 <<'MESSAGE'
-full revision runs remain blocked until the retraction-record schema, smoke, and release gates are
-complete. Decomposed timing and schema 4 documentation are complete. The `scalar-moment-adam`
-mixed-tree baseline is present and selected by `all`.
+full revision runs remain blocked until the smoke and release gates are complete. Decomposed timing,
+schema 4 documentation, and the machine-readable retraction records are complete. The
+`scalar-moment-adam` mixed-tree baseline is present and selected by `all`.
 GML_ALLOW_INCOMPLETE_MATRIX=1 temporarily bypasses only this development gate; do not use output
 created with it as the complete reviewer-response experiment.
 MESSAGE
@@ -210,9 +211,48 @@ if contains_stage pendulum; then
 fi
 
 if contains_stage retraction; then
-    benchmark="$retraction_repo/scripts/retraction_accuracy.jl"
-    [[ -f "$benchmark" ]] || { echo "missing retraction benchmark: $benchmark" >&2; exit 1; }
-    run_stage retraction "$julia_bin" --project="$retraction_repo" "$benchmark" || exit $?
+    benchmark="$repo_root/scripts/revision/retraction_records.jl"
+    validator="$repo_root/scripts/revision/validate_retraction_records.jl"
+    upstream_benchmark="$retraction_repo/scripts/retraction_accuracy.jl"
+    [[ -f "$upstream_benchmark" ]] || {
+        echo "missing upstream retraction benchmark: $upstream_benchmark" >&2
+        exit 1
+    }
+    records="$run_dir/retraction-runs.csv"
+    source_patch="$run_dir/geometricoptimizers-retraction.patch"
+    retraction_backend="cuda"
+    retraction_precision="${RETRACTION_PRECISION:-Float32}"
+    retraction_scales="${RETRACTION_SCALES:-0.1,1,3,6,12,30,60,120}"
+    retraction_repetitions="${RETRACTION_REPETITIONS:-20}"
+    if [[ "$allow_no_cuda" -eq 1 ]]; then
+        retraction_backend="cpu"
+        retraction_precision="${RETRACTION_PRECISION:-Float64}"
+    fi
+    if [[ "$mode" == smoke ]]; then
+        retraction_scales="${RETRACTION_SCALES:-0.1}"
+        retraction_repetitions="${RETRACTION_REPETITIONS:-1}"
+    fi
+
+    load_path="$retraction_repo:$repo_root/scripts:@stdlib"
+    run_stage retraction env JULIA_LOAD_PATH="$load_path" "$julia_bin" --startup-file=no \
+        --project="$retraction_repo" "$benchmark" --go-repo "$retraction_repo" \
+        --output "$records" --patch-output "$source_patch" --backend "$retraction_backend" \
+        --precision "$retraction_precision" --rows "${RETRACTION_ROWS:-20}" \
+        --columns "${RETRACTION_COLUMNS:-3}" --scales "$retraction_scales" \
+        --repetitions "$retraction_repetitions" --seed "${RETRACTION_SEED:-1234}" || exit $?
+
+    required_paths=("AugmentedPade:CPU")
+    if [[ "$retraction_backend" == cuda ]]; then
+        required_paths+=("ScaledSquaring:CUDA" "NativePade:CUDA")
+    else
+        required_paths+=("ScaledSquaring:CPU" "NativePade:CPU")
+    fi
+    validation_command=("$julia_bin" --startup-file=no --project=scripts "$validator"
+        --input "$records" --go-repo "$retraction_repo")
+    for required_path in "${required_paths[@]}"; do
+        validation_command+=(--require "$required_path")
+    done
+    run_stage retraction-record-validation "${validation_command[@]}" || exit $?
 fi
 
 echo "all requested stages completed"

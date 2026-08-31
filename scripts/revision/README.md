@@ -100,11 +100,51 @@ The local synthetic CPU exercise used to validate this control flow and schema i
 only. It is neither a scientific experiment nor evidence about CPU or GPU performance; use only a
 gated experiment bundle for reported timings.
 
+## Retraction benchmark records
+
+The retraction stage writes schema-version-1 CSV to `retraction-runs.csv`. It is a thin
+machine-readable wrapper around the algorithms and seeded lift sweep in the checked-out
+GeometricOptimizers `scripts/retraction_accuracy.jl`; it never parses that script's prose output.
+Each row records the algorithm, backend/device and precision, full square lift shape and Stiefel
+column count, lift norm, agreement with host `AugmentedPade`, forward error against a host
+`Float64` matrix exponential, manifold-constraint error, synchronized runtime, and allocated
+bytes. CPU rows report Julia host allocation; CUDA rows report CUDA device allocation.
+
+Every algorithm/shape/scale path emits repetition `0` with `warmup=true` before repetitions `1` and
+later. Treat only successful `warmup=false` rows as steady-state measurements. An exception emits
+an explicit `success=false` row with its type and message, `NaN` error fields, and zero memory bytes;
+the benchmark and orchestration still fail so a partial result cannot pass the gate.
+
+CPU mode runs `ScaledSquaring`, `NativePade`, and `AugmentedPade` on the host. CUDA mode runs the
+first two on the physical GPU, synchronizes around timing, transfers each result to the host for
+comparison, and runs `AugmentedPade` only on the host because it uses dense LAPACK. Each row carries
+the exact GeometricOptimizers commit and dirty flag. `geometricoptimizers-retraction.patch` is the
+corresponding SHA-256-addressed binary patch; unlike plain `git diff`, it also contains untracked
+source files.
+
+For a small CPU exercise and an independent validation:
+
+```bash
+julia --project=/path/to/GeometricOptimizers scripts/revision/retraction_records.jl \
+  --go-repo /path/to/GeometricOptimizers --output /tmp/retraction-runs.csv \
+  --patch-output /tmp/geometricoptimizers-retraction.patch --backend cpu \
+  --rows 6 --columns 2 --scales 0.1 --repetitions 1
+julia --project=scripts scripts/revision/validate_retraction_records.jl \
+  --input /tmp/retraction-runs.csv --go-repo /path/to/GeometricOptimizers \
+  --require ScaledSquaring:CPU --require NativePade:CPU --require AugmentedPade:CPU
+```
+
+The runner uses CUDA/`Float32` unless `--allow-no-cuda` explicitly selects the CPU/`Float64` smoke
+path. Its default full sweep uses the upstream eight scales and 20 measured repetitions; smoke uses
+one scale and one measured repetition. `RETRACTION_PRECISION`, `RETRACTION_ROWS`,
+`RETRACTION_COLUMNS`, `RETRACTION_SCALES`, `RETRACTION_REPETITIONS`, and `RETRACTION_SEED` provide
+explicit overrides. The physical-GPU run remains behind the final release gate.
+
 ## Full RTX 4090 run
 
-Full paper runs remain intentionally blocked while the retraction-record schema, smoke, and release
-gates are completed. Decomposed timing and its schema-version-4 documentation are complete. The
-experiment-local mixed-tree composite is present:
+Full paper runs remain intentionally blocked while the smoke and release gates are completed.
+Decomposed timing and its schema-version-4 documentation and the retraction-record schema are
+complete. The experiment-local mixed-tree composite is present:
 `ScalarMomentAdam` acts on Stiefel leaves and ordinary `Adam` on Euclidean leaves, and `all` includes
 that row. `GML_ALLOW_INCOMPLETE_MATRIX=1` temporarily bypasses only this development gate; output
 produced with it is not paper-ready.

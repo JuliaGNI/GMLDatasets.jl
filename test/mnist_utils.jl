@@ -5,7 +5,9 @@ using GMLDatasets: within_patch_index
 using GMLDatasets: index_conversion
 using GeometricMachineLearning
 # A `Chain`'s parameters are a `NetworkParameters`; the `Tuple` arm is what `applychain` takes once the
-# layers have been split out.
+# layers have been split out. `NamedTuple` stays in the union too: `NeuralNetworkParameters`'
+# `ZygoteRules.pullback` seeds the reverse pass with the wrapped `NamedTuple`, so a function
+# differentiated with respect to a parameter set is called with one.
 using NeuralNetworkParameters: NetworkParameters
 import Zygote, Random
 
@@ -93,7 +95,7 @@ function test_optimizer_for_classification_layer(;
     loss = FeedForwardLoss()
     loss_dl(
         model::GeometricMachineLearning.Chain, ps::Union{
-            Tuple, NetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
+            Tuple, NamedTuple, NetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
     loss₁ = loss_dl(model, ps, dl)
 
     opt = Optimizer(GradientOptimizer(), ps)

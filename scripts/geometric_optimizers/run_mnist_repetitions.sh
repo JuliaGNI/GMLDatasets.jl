@@ -7,7 +7,7 @@
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --smoke            # 3 × 2 epochs, ≈4 min
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh                    # 10 × 500 epochs of Adam on Stiefel
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --repeat 3         # 3 of them, ≈4:45 h
-#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all five configurations, ≈21 h
+#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all five configurations, ≈24 h
 #
 # Detach with `C-a d`, log out, come back with `screen -r mnist`. Or start it detached in one
 # go, which is what an ssh session is for:
@@ -29,7 +29,7 @@
 #   <stamp>_runs.csv          one machine-readable outcome/timing record per repetition
 #   <stamp>_stdout.txt        everything the process wrote, including a backtrace if it died
 #
-# `<stamp>` is the start time, so a second run never overwrites the first. Copy all four off
+# `<stamp>` is the start time, so a second run never overwrites the first. Copy all five off
 # the machine when it is done — they are self-contained.
 #
 # Run this from anywhere; it changes to the repository root itself.

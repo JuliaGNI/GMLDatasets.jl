@@ -4,7 +4,6 @@ set -uo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-original_args=("$@")
 julia_bin="${JULIA:-julia}"
 mode="full"
 stages="mnist,fashion-mnist,pendulum,retraction"
@@ -26,6 +25,8 @@ usage: $0 [--smoke|--full] [--stages LIST] [--seeds LIST]
 MNIST and Fashion-MNIST run records use schema 4 and report exclusive gradient/AD,
 optimizer-state/direction, and retraction/application timing. See scripts/revision/README.md.
 The retraction stage writes validated schema-1 CSV plus an exact GeometricOptimizers patch.
+Full mode defaults to all five optimizer configurations and exactly seeds 1234:1243.
+Smoke mode validates all CSV records, archive members, the checksum, and restart metadata.
 USAGE
 }
 
@@ -61,27 +62,59 @@ done
 
 IFS=',' read -r -a seed_array <<< "$seeds"
 (( ${#seed_array[@]} > 0 )) || { echo "no seeds supplied" >&2; exit 2; }
+seen_seeds_csv=","
+for seed_value in "${seed_array[@]}"; do
+    [[ "$seed_value" =~ ^[0-9]+$ ]] || {
+        echo "seeds must be comma-separated nonnegative integers, got '$seed_value'" >&2
+        exit 2
+    }
+    [[ "$seen_seeds_csv" != *",$seed_value,"* ]] || {
+        echo "seed list contains duplicate value $seed_value" >&2
+        exit 2
+    }
+    seen_seeds_csv+="$seed_value,"
+done
 if [[ "$mode" == full && ${#seed_array[@]} -ne 10 ]]; then
     echo "full mode requires exactly 10 seeds, got ${#seed_array[@]}" >&2
     exit 2
 fi
 
-if [[ "$mode" == full && "${GML_ALLOW_INCOMPLETE_MATRIX:-0}" != 1 ]]; then
-    cat >&2 <<'MESSAGE'
-full revision runs remain blocked until the smoke and release gates are complete. Decomposed timing,
-schema 4 documentation, and the machine-readable retraction records are complete. The
-`scalar-moment-adam` mixed-tree baseline is present and selected by `all`.
-GML_ALLOW_INCOMPLETE_MATRIX=1 temporarily bypasses only this development gate; do not use output
-created with it as the complete reviewer-response experiment.
-MESSAGE
-    exit 1
+IFS=',' read -r -a stage_array <<< "$stages"
+(( ${#stage_array[@]} > 0 )) || { echo "no stages supplied" >&2; exit 2; }
+for stage_value in "${stage_array[@]}"; do
+    case "$stage_value" in
+        mnist|fashion-mnist|pendulum|retraction|none) ;;
+        *) echo "unknown stage: $stage_value" >&2; exit 2 ;;
+    esac
+done
+if [[ ",$stages," == *",none,"* && ${#stage_array[@]} -ne 1 ]]; then
+    echo "the test-only 'none' stage cannot be combined with experiment stages" >&2
+    exit 2
 fi
+repetitions="${#seed_array[@]}"
+epochs=500
+sae_epochs=12000
+experiment_backend="cuda"
+if [[ "$mode" == smoke ]]; then
+    seed_array=("${seed_array[0]}")
+    repetitions=1
+    seeds="${seed_array[0]}"
+    epochs=2
+    sae_epochs=2
+fi
+[[ "$allow_no_cuda" -eq 1 ]] && experiment_backend="cpu"
 
 if [[ -n "$resume_dir" ]]; then
+    [[ -d "$resume_dir" ]] || {
+        echo "resume directory does not exist: $resume_dir" >&2
+        exit 1
+    }
     run_dir="$(cd "$(dirname "$resume_dir")" && pwd)/$(basename "$resume_dir")"
     output_root="$(dirname "$run_dir")"
 else
     stamp="$(date -u +%Y%m%dT%H%M%SZ)_${mode}"
+    mkdir -p "$output_root" || exit 1
+    output_root="$(cd "$output_root" && pwd)"
     run_dir="$output_root/$stamp"
 fi
 mkdir -p "$run_dir" || exit 1
@@ -90,9 +123,149 @@ log="$run_dir/run.log"
 status_file="$run_dir/stages.csv"
 [[ -s "$status_file" ]] || printf 'stage,status,started_utc,finished_utc,command\n' > "$status_file"
 
+contains_stage() { [[ ",$stages," == *",$1,"* ]]; }
+
+is_git_repository() {
+    git -C "$1" rev-parse --git-dir >/dev/null 2>&1
+}
+
+stage_succeeded() {
+    local requested_stage="$1"
+    awk -F, -v requested_stage="$requested_stage" '
+        NR > 1 && $1 == requested_stage { status = $2 }
+        END { exit status == "ok" ? 0 : 1 }
+    ' "$status_file"
+}
+
+capture_repository() {
+    local repository="$1"
+    local prefix="$2"
+    local patch_file="$run_dir/$prefix.patch"
+    git -C "$repository" rev-parse HEAD > "$run_dir/$prefix.sha" || return 1
+    git -C "$repository" status --porcelain=v1 > "$run_dir/$prefix.status" || return 1
+    git -C "$repository" diff --binary HEAD -- > "$patch_file" || return 1
+    while IFS= read -r -d '' untracked_path; do
+        git -C "$repository" diff --binary --no-index -- /dev/null "$untracked_path" \
+            >> "$patch_file"
+        local status=$?
+        [[ "$status" -eq 1 ]] || return "$status"
+    done < <(git -C "$repository" ls-files --others --exclude-standard -z)
+}
+
+write_restart_command() {
+    local variable assignment
+    local -a command=(env)
+    for variable in JULIA JULIA_DEPOT_PATH JULIA_LOAD_PATH MNIST_BATCH_SIZE \
+            MNIST_TRAINING_SAMPLES MNIST_TEST_SAMPLES MNIST_SMOKE_SAMPLES \
+            MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM \
+            RETRACTION_PRECISION RETRACTION_ROWS RETRACTION_COLUMNS RETRACTION_SCALES \
+            RETRACTION_REPETITIONS RETRACTION_SEED; do
+        if [[ -n "${!variable:-}" ]]; then
+            assignment="$variable=${!variable}"
+            command+=("$assignment")
+        fi
+    done
+    command+=("$0" "--$mode" --resume-dir "$run_dir" --stages "$stages"
+        --seeds "$seeds" --configurations "$configurations"
+        --retraction-repo "$retraction_repo")
+    [[ "$allow_dirty" -eq 1 ]] && command+=(--allow-dirty)
+    [[ "$allow_any_gpu" -eq 1 ]] && command+=(--allow-any-gpu)
+    [[ "$allow_no_cuda" -eq 1 ]] && command+=(--allow-no-cuda)
+    printf '%q ' "${command[@]}" > "$run_dir/restart-command.txt"
+    printf '\n' >> "$run_dir/restart-command.txt"
+}
+
+write_run_configuration() {
+    {
+        printf 'mode=%s\n' "$mode"
+        printf 'stages=%s\n' "$stages"
+        printf 'seeds=%s\n' "$seeds"
+        printf 'configurations=%s\n' "$configurations"
+        printf 'allow_dirty=%s\n' "$allow_dirty"
+        printf 'allow_any_gpu=%s\n' "$allow_any_gpu"
+        printf 'allow_no_cuda=%s\n' "$allow_no_cuda"
+        printf 'retraction_repo=%s\n' "$retraction_repo"
+    } > "$run_dir/run-configuration.txt"
+}
+
+write_required_archive_members() {
+    local dataset seed_value
+    local -a members=(
+        artifact-validation.txt archive-required-members.txt environment.txt
+        environments/root/Project.toml environments/scripts/Project.toml
+        environments/scripts/Manifest.toml gmldatasets.patch gmldatasets.sha
+        gmldatasets.status nvidia-smi.txt restart-command.txt run-configuration.txt
+        run.log stages.csv
+    )
+    if is_git_repository "$retraction_repo"; then
+        members+=(geometricoptimizers.patch geometricoptimizers.sha geometricoptimizers.status)
+    fi
+    for dataset in mnist fashion-mnist; do
+        contains_stage "$dataset" || continue
+        members+=("$dataset-report.txt" "$dataset-losses.csv" "$dataset-runs.csv"
+            "$dataset.jld2" "$dataset.stdout.txt" "$dataset.stderr.txt"
+            "$dataset-record-validation.stdout.txt" "$dataset-record-validation.stderr.txt")
+        if [[ "$mode" == full ]]; then
+            members+=("$dataset-warmup-report.txt" "$dataset-warmup-losses.csv"
+                "$dataset-warmup-runs.csv" "$dataset-warmup.jld2"
+                "$dataset-warmup.stdout.txt" "$dataset-warmup.stderr.txt"
+                "$dataset-warmup-record-validation.stdout.txt"
+                "$dataset-warmup-record-validation.stderr.txt")
+        fi
+    done
+    if contains_stage pendulum; then
+        members+=(pendulum-runs.csv pendulum-record-validation.stdout.txt
+            pendulum-record-validation.stderr.txt)
+        [[ "$mode" == full ]] && members+=(pendulum-warmup.h5 pendulum-warmup.stdout.txt
+            pendulum-warmup.stderr.txt)
+        for seed_value in "${seed_array[@]}"; do
+            members+=("pendulum-seed-$seed_value.h5" "pendulum-seed-$seed_value.stdout.txt"
+                "pendulum-seed-$seed_value.stderr.txt")
+        done
+    fi
+    if contains_stage retraction; then
+        members+=(geometricoptimizers-retraction.patch retraction-runs.csv
+            retraction.stdout.txt retraction.stderr.txt
+            retraction-record-validation.stdout.txt retraction-record-validation.stderr.txt)
+    fi
+    printf '%s\n' "${members[@]}" | LC_ALL=C sort > "$run_dir/archive-required-members.txt"
+}
+
+verify_required_files() {
+    local member
+    while IFS= read -r member; do
+        [[ -e "$run_dir/$member" ]] || {
+            echo "missing required archive member: $member" >&2
+            return 1
+        }
+    done < "$run_dir/archive-required-members.txt"
+}
+
+verify_archive_members() {
+    local archive="$1"
+    local listing member expected
+    listing="$(mktemp "${TMPDIR:-/tmp}/gmldatasets-archive-list.XXXXXX")" || return 1
+    if ! tar -tzf "$archive" > "$listing"; then
+        rm -f "$listing"
+        return 1
+    fi
+    while IFS= read -r member; do
+        expected="$(basename "$run_dir")/$member"
+        if ! grep -Fqx "$expected" "$listing"; then
+            echo "archive is missing required member: $expected" >&2
+            rm -f "$listing"
+            return 1
+        fi
+    done < "$run_dir/archive-required-members.txt"
+    rm -f "$listing"
+}
+
 archive_results() {
-    local exit_code=$?
+    local exit_code="$1"
     local archive_failed=0
+    local validation_started validation_finished validation_command_text
+    local archive_path="$run_dir.tar.gz"
+    local checksum_path="$run_dir.tar.gz.sha256"
     set +e
     mkdir -p "$run_dir/environments/root" "$run_dir/environments/scripts"
     if ! cp Project.toml "$run_dir/environments/root/"; then
@@ -105,30 +278,60 @@ archive_results() {
             archive_failed=1
         fi
     done
-    git rev-parse HEAD > "$run_dir/gmldatasets.sha"
-    git status --porcelain=v1 > "$run_dir/gmldatasets.status"
-    git diff --binary > "$run_dir/gmldatasets.patch"
-    if [[ -d "$retraction_repo/.git" ]]; then
-        git -C "$retraction_repo" rev-parse HEAD > "$run_dir/geometricoptimizers.sha"
-        git -C "$retraction_repo" status --porcelain=v1 > "$run_dir/geometricoptimizers.status"
-        git -C "$retraction_repo" diff --binary > "$run_dir/geometricoptimizers.patch"
+    capture_repository "$repo_root" gmldatasets || archive_failed=1
+    if is_git_repository "$retraction_repo"; then
+        capture_repository "$retraction_repo" geometricoptimizers || archive_failed=1
     fi
-    printf '%q ' "$0" --resume-dir "$run_dir" "${original_args[@]}" > "$run_dir/restart-command.txt"
-    printf '\n' >> "$run_dir/restart-command.txt"
-    tar -C "$output_root" -czf "$run_dir.tar.gz" "$(basename "$run_dir")"
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$run_dir.tar.gz" > "$run_dir.tar.gz.sha256"
+    write_restart_command || archive_failed=1
+    write_run_configuration || archive_failed=1
+    write_required_archive_members || archive_failed=1
+
+    if [[ "$exit_code" -eq 0 && "$archive_failed" -eq 0 ]]; then
+        validation_started="$(date -u +%FT%TZ)"
+        validation_command=("$julia_bin" --startup-file=no --project=scripts
+            scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --mode "$mode"
+            --stages "$stages" --seeds "$seeds" --configurations "$configurations"
+            --image-epochs "$epochs" --pendulum-epochs "$sae_epochs"
+            --backend "$experiment_backend" --retraction-repo "$retraction_repo")
+        [[ "$mode" == smoke ]] && validation_command+=(--allow-validation-failures)
+        printf -v validation_command_text '%q ' "${validation_command[@]}"
+        if "${validation_command[@]}" > "$run_dir/artifact-validation.txt" 2>&1; then
+            validation_finished="$(date -u +%FT%TZ)"
+            printf '%s,ok,%s,%s,"%s"\n' artifact-validation "$validation_started" \
+                "$validation_finished" "$validation_command_text" >> "$status_file"
+        else
+            validation_finished="$(date -u +%FT%TZ)"
+            printf '%s,failed:1,%s,%s,"%s"\n' artifact-validation "$validation_started" \
+                "$validation_finished" "$validation_command_text" >> "$status_file"
+            archive_failed=1
+        fi
     else
-        shasum -a 256 "$run_dir.tar.gz" > "$run_dir.tar.gz.sha256"
+        printf '%s\n' "artifact validation skipped because an earlier stage failed" \
+            > "$run_dir/artifact-validation.txt"
     fi
-    echo "artifact: $run_dir.tar.gz"
-    echo "checksum: $run_dir.tar.gz.sha256"
+
+    verify_required_files || archive_failed=1
+    tar -C "$output_root" -czf "$archive_path" "$(basename "$run_dir")" || archive_failed=1
+    verify_archive_members "$archive_path" || archive_failed=1
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$output_root" && sha256sum "$(basename "$archive_path")") > "$checksum_path" ||
+            archive_failed=1
+        (cd "$output_root" && sha256sum -c "$(basename "$checksum_path")") || archive_failed=1
+    else
+        (cd "$output_root" && shasum -a 256 "$(basename "$archive_path")") > "$checksum_path" ||
+            archive_failed=1
+        (cd "$output_root" && shasum -a 256 -c "$(basename "$checksum_path")") ||
+            archive_failed=1
+    fi
+    echo "artifact: $archive_path"
+    echo "checksum: $checksum_path"
     if [[ "$archive_failed" -ne 0 && "$exit_code" -eq 0 ]]; then
         exit_code=1
     fi
+    trap - EXIT
     exit "$exit_code"
 }
-trap archive_results EXIT
+trap 'archive_results $?' EXIT
 
 exec > >(tee -a "$log") 2>&1
 
@@ -167,24 +370,56 @@ run_stage() {
     fi
 }
 
-contains_stage() { [[ ",$stages," == *",$1,"* ]]; }
-repetitions="${#seed_array[@]}"
-epochs=500
-sae_epochs=12000
-if [[ "$mode" == smoke ]]; then
-    repetitions=1
-    seeds="${seed_array[0]}"
-    epochs=2
-    sae_epochs=2
-fi
-
 run_image_dataset() {
     local dataset="$1"
     local prefix="$run_dir/$dataset"
-    if [[ "$mode" == full ]]; then
-        run_stage "${dataset}-warmup" env MNIST_DATASET="$dataset" MNIST_REPETITIONS=1 MNIST_SEEDS="${seed_array[0]}" MNIST_N_EPOCHS=1 MNIST_ACCURACY_EVERY=1 MNIST_CONFIGURATIONS="$configurations" MNIST_REPORT="$prefix-warmup-report.txt" MNIST_LOSSES="$prefix-warmup-losses.csv" MNIST_RECORDS="$prefix-warmup-runs.csv" MNIST_OUTPUT="$prefix-warmup.jld2" "$julia_bin" --project=scripts scripts/geometric_optimizers/mnist_cuda_repetitions.jl || return
+    local validation_stage="${dataset}-record-validation"
+    local -a common_environment=(
+        MNIST_DATASET="$dataset"
+        MNIST_CONFIGURATIONS="$configurations"
+    )
+    if [[ "$mode" == smoke ]]; then
+        local smoke_samples="${MNIST_SMOKE_SAMPLES:-32}"
+        common_environment+=(
+            MNIST_BATCH_SIZE="${MNIST_BATCH_SIZE:-$smoke_samples}"
+            MNIST_TRAINING_SAMPLES="${MNIST_TRAINING_SAMPLES:-$smoke_samples}"
+            MNIST_TEST_SAMPLES="${MNIST_TEST_SAMPLES:-$smoke_samples}"
+        )
     fi
-    run_stage "$dataset" env MNIST_DATASET="$dataset" MNIST_REPETITIONS="$repetitions" MNIST_SEEDS="$seeds" MNIST_N_EPOCHS="$epochs" MNIST_CONFIGURATIONS="$configurations" MNIST_REPORT="$prefix-report.txt" MNIST_LOSSES="$prefix-losses.csv" MNIST_RECORDS="$prefix-runs.csv" MNIST_OUTPUT="$prefix.jld2" "$julia_bin" --project=scripts scripts/geometric_optimizers/mnist_cuda_repetitions.jl
+    local -a validation_command=("$julia_bin" --startup-file=no --project=scripts
+        scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --image "$dataset"
+        --seeds "$seeds" --configurations "$configurations" --image-epochs "$epochs"
+        --backend "$experiment_backend")
+    [[ "$mode" == smoke ]] && validation_command+=(--allow-validation-failures)
+
+    if stage_succeeded "$validation_stage" && [[ -s "$prefix.jld2" ]]; then
+        if "${validation_command[@]}"; then
+            echo "skipping previously validated $dataset outputs"
+            return 0
+        fi
+        echo "existing $dataset outputs failed validation; rerunning the complete dataset stage"
+    fi
+
+    if [[ "$mode" == full ]]; then
+        run_stage "${dataset}-warmup" env "${common_environment[@]}" MNIST_REPETITIONS=1 \
+            MNIST_SEEDS="${seed_array[0]}" MNIST_N_EPOCHS=1 MNIST_ACCURACY_EVERY=1 \
+            MNIST_REPORT="$prefix-warmup-report.txt" MNIST_LOSSES="$prefix-warmup-losses.csv" \
+            MNIST_RECORDS="$prefix-warmup-runs.csv" MNIST_OUTPUT="$prefix-warmup.jld2" \
+            "$julia_bin" --project=scripts scripts/geometric_optimizers/mnist_cuda_repetitions.jl ||
+            return
+        local -a warmup_validation=("$julia_bin" --startup-file=no --project=scripts
+            scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --image "$dataset"
+            --artifact-prefix "$dataset-warmup"
+            --seeds "${seed_array[0]}" --configurations "$configurations" --image-epochs 1
+            --backend "$experiment_backend" --allow-validation-failures)
+        run_stage "${dataset}-warmup-record-validation" "${warmup_validation[@]}" || return
+    fi
+    run_stage "$dataset" env "${common_environment[@]}" MNIST_REPETITIONS="$repetitions" \
+        MNIST_SEEDS="$seeds" MNIST_N_EPOCHS="$epochs" MNIST_REPORT="$prefix-report.txt" \
+        MNIST_LOSSES="$prefix-losses.csv" MNIST_RECORDS="$prefix-runs.csv" \
+        MNIST_OUTPUT="$prefix.jld2" "$julia_bin" --project=scripts \
+        scripts/geometric_optimizers/mnist_cuda_repetitions.jl || return
+    run_stage "$validation_stage" "${validation_command[@]}"
 }
 
 if contains_stage mnist; then
@@ -197,17 +432,39 @@ fi
 if contains_stage pendulum; then
     records="$run_dir/pendulum-runs.csv"
     if [[ "$mode" == full ]]; then
-        run_stage pendulum-warmup env SAE_REQUIRE_CUDA=1 SAE_SEED="${seed_array[0]}" SAE_N_EPOCHS=1 SAE_OUTPUT="$run_dir/pendulum-warmup.h5" "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+        if stage_succeeded pendulum-warmup && [[ -s "$run_dir/pendulum-warmup.h5" ]]; then
+            echo "skipping completed pendulum warm-up"
+        else
+            run_stage pendulum-warmup env SAE_REQUIRE_CUDA=1 SAE_SEED="${seed_array[0]}" \
+                SAE_N_EPOCHS=1 SAE_OUTPUT="$run_dir/pendulum-warmup.h5" \
+                "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+        fi
+    fi
+    if [[ -s "$records" ]]; then
+        "$julia_bin" --startup-file=no --project=scripts \
+            scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --pendulum \
+            --allow-partial --seeds "$seeds" --pendulum-epochs "$sae_epochs" \
+            --backend "$experiment_backend" || exit $?
     fi
     repetition=0
     for seed_value in ${seeds//,/ }; do
         repetition=$((repetition + 1))
         checkpoint="$run_dir/pendulum-seed-${seed_value}.h5"
-        [[ -s "$checkpoint" ]] && { echo "skipping completed checkpoint $checkpoint"; continue; }
+        if [[ -s "$checkpoint" ]] && awk -F, -v repetition="$repetition" -v seed="$seed_value" '
+                NR > 1 && $4 == repetition && $5 == seed && $6 == "ok" { found = 1 }
+                END { exit found ? 0 : 1 }
+            ' "$records"; then
+            echo "skipping validated checkpoint $checkpoint"
+            continue
+        fi
         require_cuda=1
         [[ "$allow_no_cuda" -eq 1 ]] && require_cuda=0
         run_stage "pendulum-seed-${seed_value}" env SAE_REQUIRE_CUDA="$require_cuda" SAE_SEED="$seed_value" SAE_REPETITION="$repetition" SAE_N_EPOCHS="$sae_epochs" SAE_OUTPUT="$checkpoint" SAE_RECORD="$records" "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
     done
+    run_stage pendulum-record-validation "$julia_bin" --startup-file=no --project=scripts \
+        scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --pendulum \
+        --seeds "$seeds" --pendulum-epochs "$sae_epochs" --backend "$experiment_backend" ||
+        exit $?
 fi
 
 if contains_stage retraction; then
@@ -234,13 +491,6 @@ if contains_stage retraction; then
     fi
 
     load_path="$retraction_repo:$repo_root/scripts:@stdlib"
-    run_stage retraction env JULIA_LOAD_PATH="$load_path" "$julia_bin" --startup-file=no \
-        --project="$retraction_repo" "$benchmark" --go-repo "$retraction_repo" \
-        --output "$records" --patch-output "$source_patch" --backend "$retraction_backend" \
-        --precision "$retraction_precision" --rows "${RETRACTION_ROWS:-20}" \
-        --columns "${RETRACTION_COLUMNS:-3}" --scales "$retraction_scales" \
-        --repetitions "$retraction_repetitions" --seed "${RETRACTION_SEED:-1234}" || exit $?
-
     required_paths=("AugmentedPade:CPU")
     if [[ "$retraction_backend" == cuda ]]; then
         required_paths+=("ScaledSquaring:CUDA" "NativePade:CUDA")
@@ -252,7 +502,20 @@ if contains_stage retraction; then
     for required_path in "${required_paths[@]}"; do
         validation_command+=(--require "$required_path")
     done
-    run_stage retraction-record-validation "${validation_command[@]}" || exit $?
+    if stage_succeeded retraction-record-validation && [[ -s "$records" && -e "$source_patch" ]] &&
+            "${validation_command[@]}"; then
+        echo "skipping previously validated retraction outputs"
+    else
+        run_stage retraction env JULIA_LOAD_PATH="$load_path" "$julia_bin" --startup-file=no \
+            --project="$retraction_repo" "$benchmark" --go-repo "$retraction_repo" \
+            --output "$records" --patch-output "$source_patch" --backend "$retraction_backend" \
+            --precision "$retraction_precision" --rows "${RETRACTION_ROWS:-20}" \
+            --columns "${RETRACTION_COLUMNS:-3}" --scales "$retraction_scales" \
+            --repetitions "$retraction_repetitions" --seed "${RETRACTION_SEED:-1234}" || exit $?
+        run_stage retraction-record-validation "${validation_command[@]}" || exit $?
+    fi
 fi
 
 echo "all requested stages completed"
+trap - EXIT
+archive_results 0

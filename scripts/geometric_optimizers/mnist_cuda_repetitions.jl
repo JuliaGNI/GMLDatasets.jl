@@ -83,6 +83,9 @@
 #                         nondeterminism above rather than the spread of the method
 #   MNIST_N_EPOCHS        epochs per repetition        (default 500; use 2 for a smoke test)
 #   MNIST_BATCH_SIZE      images per batch                           (default 2048)
+#   MNIST_TRAINING_SAMPLES
+#                         optional leading training subset; 0 uses the full data set (default 0)
+#   MNIST_TEST_SAMPLES    optional leading test subset; 0 uses the full data set (default 0)
 #   MNIST_ACCURACY_EVERY  epochs between test evaluations (default 25, `0` disables them)
 #   MNIST_REPORT          path of the report            (default mnist_repetitions_report.txt)
 #   MNIST_LOSSES          path of the loss CSV          (default mnist_repetitions_losses.csv)
@@ -276,8 +279,14 @@ const momentum_coefficient = T(0.5)
 const seed = parse(Int, get(ENV, "MNIST_BASE_SEED", "1234"))
 
 const batch_size = parse(Int, get(ENV, "MNIST_BATCH_SIZE", "2048"))
+const training_samples = parse(Int, get(ENV, "MNIST_TRAINING_SAMPLES", "0"))
+const test_samples = parse(Int, get(ENV, "MNIST_TEST_SAMPLES", "0"))
 const n_epochs = parse(Int, get(ENV, "MNIST_N_EPOCHS", "500"))
 const accuracy_every = parse(Int, get(ENV, "MNIST_ACCURACY_EVERY", "25"))
+
+batch_size > 0 || error("MNIST_BATCH_SIZE must be positive")
+training_samples >= 0 || error("MNIST_TRAINING_SAMPLES must be nonnegative")
+test_samples >= 0 || error("MNIST_TEST_SAMPLES must be nonnegative")
 
 # The revision protocol uses ten independently seeded repetitions. `1` remains valid for smoke
 # tests and debugging.
@@ -958,6 +967,17 @@ dataset = dataset_name == "mnist" ? MLDatasets.MNIST : MLDatasets.FashionMNIST
 train_x, train_y = dataset(split=:train)[:]
 test_x, test_y = dataset(split=:test)[:]
 
+if training_samples > 0
+    n = min(training_samples, size(train_x, 3))
+    train_x = train_x[:, :, 1:n]
+    train_y = train_y[1:n]
+end
+if test_samples > 0
+    n = min(test_samples, size(test_x, 3))
+    test_x = test_x[:, :, 1:n]
+    test_y = test_y[1:n]
+end
+
 # the data set stays on the host; the batches are uploaded one at a time
 const train_input = split_and_flatten(T.(train_x), patch_length)
 const train_output = onehotbatch(train_y)
@@ -967,6 +987,8 @@ const test_output = onehotbatch(test_y)
 @assert size(train_input) == (dim, seq_length, size(train_x, 3))
 
 const n_batches = size(train_input, 3) ÷ batch_size
+n_batches > 0 || error(
+    "MNIST_BATCH_SIZE=$batch_size exceeds the selected $(size(train_input, 3)) training samples")
 
 # ------------------------------------------------------------------- what will be run ---
 
@@ -1103,18 +1125,21 @@ function write_run_records(results, failures)
                 step_timing_csv_values(result.step_timing)..., result.peak_device_bytes,
                 use_cuda ? "cuda" : "cpu", csv_field(result_verdict)), ','))
         end
-        for (name, message) in failures
-            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name), "",
-                csv_field(name), "", "", "", "", "", 0, 0, "exception", 0,
+        for failure in failures
+            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name),
+                csv_field(failure.configuration_key), csv_field(failure.configuration),
+                csv_field(failure.optimizer_role), failure.learning_rate,
+                csv_field(failure.retraction), csv_field(failure.second_moment),
+                csv_field(failure.transport), failure.repetition, failure.seed, "exception", 0,
                 NaN, NaN, NaN, NaN, NaN, 0, NaN, NaN, NaN, NaN, NaN, NaN,
                 peak_used[], use_cuda ? "cuda" : "cpu",
-                csv_field(first(split(message, '\n')))), ','))
+                csv_field(first(split(failure.message, '\n')))), ','))
         end
     end
 end
 
 results = []
-failures = Tuple{String, String}[]
+failures = []
 
 for (j, job) in pairs(jobs)
     run = job.configuration
@@ -1163,7 +1188,11 @@ for (j, job) in pairs(jobs)
         # repetition that threw is missing from the statistics, and the verdict says so.
         e isa InterruptException && rethrow()
         message = sprint(showerror, e)
-        push!(failures, (name, message))
+        push!(failures, (name=name, configuration_key=job.key, configuration=run.name,
+            optimizer_role=run.role, learning_rate=run.learning_rate,
+            retraction=run.retraction, second_moment=run.second_moment,
+            transport=run.transport, repetition=job.repetition, seed=job.seed,
+            message=message))
         clear_progress()
         announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
         report(message)
@@ -1244,10 +1273,10 @@ for (result, v) in zip(results, verdicts)
         duration(result.total_time),
         v * (n_done < n_epochs ? " [$n_done of $n_epochs epochs]" : "")))
 end
-for (name, message) in failures
+for failure in failures
     announce(@sprintf("%-29s %6s %8s %8s %10s %10s %10s   THREW: %s",
-        name, "—", "—", "—", "—", "—", "—",
-        first(split(message, '\n'))))
+        failure.name, "—", "—", "—", "—", "—", "—",
+        first(split(failure.message, '\n'))))
 end
 
 # ------------------------------------------------------------------------ statistics ---

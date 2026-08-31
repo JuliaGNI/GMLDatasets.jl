@@ -33,14 +33,21 @@ screen -r gml-smoke
 
 Detach without stopping the run by pressing `Ctrl-A`, then `D`. Reconnect later with
 `screen -r gml-smoke`; use `screen -ls` to list sessions. For local CPU-only testing, invoke
-`run_experiments.sh` directly with `--allow-dirty --allow-any-gpu --allow-no-cuda` rather than
-using the workstation command above.
+the complete smoke directly rather than using the workstation command above:
+
+```bash
+scripts/revision/run_experiments.sh --smoke --allow-dirty --allow-any-gpu --allow-no-cuda
+```
 
 Limit stages with `--stages mnist,pendulum` and configurations with
 `--configurations geometric-adam-cayley`. `--configurations all` selects all five rows, including
 the stable key `scalar-moment-adam`, reported as
 `Scalar Moment Adam (Stiefel, Cayley retraction)`. The legacy keys `adam-stiefel` and
 `adam-regular` remain accepted aliases. Smoke mode uses one seed and two epochs.
+For the CPU control-flow smoke only, each image data set is limited to its first 32 training and
+32 test samples with one 32-sample batch. Override that bound with `MNIST_SMOKE_SAMPLES`, or set
+`MNIST_TRAINING_SAMPLES`, `MNIST_TEST_SAMPLES`, and `MNIST_BATCH_SIZE` explicitly. Full mode never
+applies this subset and retains the complete data sets.
 
 ## Optimizer-step timing records
 
@@ -142,12 +149,13 @@ explicit overrides. The physical-GPU run remains behind the final release gate.
 
 ## Full RTX 4090 run
 
-Full paper runs remain intentionally blocked while the smoke and release gates are completed.
-Decomposed timing and its schema-version-4 documentation and the retraction-record schema are
-complete. The experiment-local mixed-tree composite is present:
-`ScalarMomentAdam` acts on Stiefel leaves and ordinary `Adam` on Euclidean leaves, and `all` includes
-that row. `GML_ALLOW_INCOMPLETE_MATRIX=1` temporarily bypasses only this development gate; output
-produced with it is not paper-ready.
+The orchestration matrix is complete: `--full` needs no development bypass, and its default `all`
+selection contains all five configurations. The experiment-local mixed-tree composite applies an
+independent `ScalarMomentAdam` to each Stiefel leaf and ordinary `Adam` to each Euclidean leaf. It
+computes one shared whole-tree gradient, then updates leaves sequentially in parameter-layout order.
+The proposed `geometric-adam-cayley` row instead uses coordinate-wise moments, while
+`standard-adam` is the unconstrained non-geometric ablation. Do not launch the workstation run until
+the separately documented release gate is satisfied.
 
 ```bash
 scripts/revision/run_in_screen.sh --session gml-revision --full
@@ -163,18 +171,20 @@ and the same validation protocol. Set the baseline's independently selected valu
 `MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE`; every run record stores the stable configuration key and
 the applied learning rate.
 
-Budget several days for the complete two-dataset, five-configuration, ten-seed matrix. The existing
-RTX 4090 measurement is about 95 minutes for one 500-epoch MNIST Adam configuration; use the smoke
-logs to refine the estimate before launch. Keep at least 20 GiB free until checkpoint sizes from the
-smoke run are known.
+At the existing estimate of about 95 minutes for one 500-epoch image-data configuration, the two
+data sets × five configurations × ten seeds require about 158 GPU-hours (6.6 days) before the
+pendulum and retraction stages. Use the RTX 4090 smoke logs to refine that estimate. Reserve at least
+25 GiB until its five-configuration checkpoints establish the actual compressed archive size.
 
 ## Resume and monitor
 
-The runner prints an exact restart command into `restart-command.txt`. It includes `--resume-dir`
-so the existing run directory, logs, stage history, and completed pendulum checkpoints are reused.
-Pendulum checkpoints that already exist and are non-empty are skipped; image runs retain their
-partial JLD2, CSV, report, and stdout files for inspection but are rerun because the legacy trainer
-does not yet resume within an epoch matrix.
+The runner prints a normalized restart command into `restart-command.txt`. It includes
+`--resume-dir`, all resolved command-line choices, and every recognized environment override that
+changes an experiment. A completed image-data stage is skipped only after its run and loss CSVs
+revalidate with exact configuration/seed coverage. Pendulum skips only checkpoint/record pairs from
+a schema-valid partial record file. Retraction output is skipped only after its schema, required
+algorithm/backend paths, source identity, and patch checksum revalidate. An interrupted image-data
+matrix is rerun as a unit because the trainer does not resume within that matrix.
 
 ```bash
 tail -f results/revision/<stamp>/run.log
@@ -186,6 +196,23 @@ To restart inside a new detached session, copy the command from `restart-command
 ```bash
 screen -DmS gml-revision-resume bash -lc 'cd /path/to/GMLDatasets && exec <restart-command>'
 ```
+
+## Validation and archive contract
+
+The runner validates every CSV it emits: the exact schema-version-4 image run header and timing
+invariants, image loss rows and their step counts, schema-version-1 pendulum records and checkpoint
+coverage, schema-version-1 retraction rows and source patch, and the stage table. No JSON files are
+currently emitted. Smoke permits a scientifically inconclusive two-epoch `failed_validation` row,
+but never an exception or missing configuration; full mode requires every row to be `ok`.
+
+Before packaging, `archive-required-members.txt` is generated from the selected mode, stages, seeds,
+and configurations. At minimum every archive contains `run.log`, `stages.csv`, `environment.txt`,
+`nvidia-smi.txt`, `run-configuration.txt`, `restart-command.txt`, the root `Project.toml`, the
+scripts `Project.toml` and resolved `Manifest.toml`, both repository SHAs/statuses/exact dirty-tree
+patches when available, `artifact-validation.txt`, and the member list itself. Selected stages add
+their raw records, reports, stdout/stderr logs, checkpoints, and validation logs. The tar member list
+is checked against that manifest before the SHA-256 file is written, and the checksum is immediately
+verified. Failed runs still produce a partial archive, but do not claim artifact-validation success.
 
 ## Transfer and verify
 

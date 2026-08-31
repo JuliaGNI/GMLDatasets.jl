@@ -51,12 +51,12 @@ dl = DataLoader(data; autoencoder = true, suppress_info = true)
 # `SymplecticAutoencoder` caps the number of blocks at `full_dim - reduced_dim`, which is 2 here, so
 # the depth has to come from the layers inside each block rather than from more blocks.
 architecture = SymplecticAutoencoder(dl.input_dim, reduced_dim;
-                                     n_encoder_blocks = 2,
-                                     n_decoder_blocks = 2,
-                                     n_encoder_layers = 10,
-                                     n_decoder_layers = 20,
-                                     n_decoder_output_layers = 10,
-                                     sympnet_upscale = 20)
+    n_encoder_blocks = 2,
+    n_decoder_blocks = 2,
+    n_encoder_layers = 10,
+    n_decoder_layers = 20,
+    n_decoder_output_layers = 10,
+    sympnet_upscale = 20)
 network = NeuralNetwork(architecture, backend, eltype(dl))
 
 optimizer = Optimizer(Adam(), network; step_size = step_size)

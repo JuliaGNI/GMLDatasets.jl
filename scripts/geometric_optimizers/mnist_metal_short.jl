@@ -93,7 +93,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, flatten!, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
@@ -139,7 +139,9 @@ end
 # unified memory the failure mode of getting this wrong is not an out-of-memory error but a
 # machine that has to be power-cycled, hence the budget as well.
 
-const memory_budget = use_metal ? (Int(Metal.device().recommendedMaxWorkingSetSize) * 2) ÷ 3 : typemax(Int)
+const memory_budget = use_metal ?
+                      (Int(Metal.device().recommendedMaxWorkingSetSize) * 2) ÷ 3 :
+                      typemax(Int)
 
 device_allocated() = use_metal ? Int(Metal.device().currentAllocatedSize) : 0
 
@@ -217,12 +219,13 @@ const orthonormality_tolerance = T(1e-4)
 Rearrange a batch of images into *flattened patches*, i.e. turn an ``(N, N, k)`` array into
 an ``(\mathtt{patch\_length}^2, (N \div \mathtt{patch\_length})^2, k)`` array.
 """
-function split_and_flatten(input::AbstractArray{<:Number,3}, patch_length::Integer)
+function split_and_flatten(input::AbstractArray{<:Number, 3}, patch_length::Integer)
     @assert size(input, 1) == size(input, 2)
     @assert size(input, 1) % patch_length == 0
     n = size(input, 1) ÷ patch_length
     # (i_red, patch_row, j_red, patch_column, k) → (i_red, j_red, patch_row, patch_column, k)
-    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (1, 3, 2, 4, 5))
+    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (
+        1, 3, 2, 4, 5))
     reshape(output, patch_length^2, n^2, size(input, 3))
 end
 
@@ -234,25 +237,28 @@ Turn a vector of labels (`0` to `9`) into a `10`×`length(target)` matrix of uni
 function onehotbatch(target::AbstractVector{<:Integer})
     output = zeros(T, n_classes, length(target))
     for (k, label) in pairs(target)
-        output[label+1, k] = one(T)
+        output[label + 1, k] = one(T)
     end
     output
 end
 
 # ----------------------------------------------------------------------- parameters ---
 
-const parameter_layout = [
-    [Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L for s in ("PQ", "PK", "PV") for h in 1:n_heads]
-    vcat([[Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) => (dim,)] for l in 1:L]...)
-    [:Wclass => (n_classes, dim)]
-]
+const parameter_layout = [[Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L
+                           for s in ("PQ", "PK", "PV") for h in 1:n_heads]
+                          vcat([[
+                                    Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) =>
+                                        (dim,)] for l in 1:L]...)
+                          [:Wclass => (n_classes, dim)]]
 
 const parameter_keys = Tuple(first.(parameter_layout))
 const parameter_sizes = last.(parameter_layout)
 const n_attention_parameters = 3 * n_heads * L
 
 # the position of a parameter within `parameter_layout`
-attention_index(kind::Integer, l::Integer, h::Integer) = (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+function attention_index(kind::Integer, l::Integer, h::Integer)
+    (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+end
 resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the bias follows right after
 const classification_index = lastindex(parameter_layout)
 
@@ -272,17 +278,22 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
             glorot_uniform(rng, size)
         end
     end
-    NamedTuple{parameter_keys}(Tuple(values))
+    # `NetworkParameters` and not a bare `NamedTuple`: `GeometricOptimizers` takes a whole set of
+    # parameters only as a container, because a `NamedTuple` alias is a type nobody owns and a method
+    # on one is a method on `Base.NamedTuple`. The wrap shares the leaf arrays rather than copying
+    # them, and the container forwards `keys`, `values`, `ps[i]` and `ps.field`, so `regroup`, `F` and
+    # `∇F!` below read it exactly as they read the `NamedTuple` underneath.
+    NetworkParameters(NamedTuple{parameter_keys}(Tuple(values)))
 end
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 function regroup(get_parameter::Base.Callable)
-    (Q=[get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
-        K=[get_parameter(attention_index(2, l, h)) for l in 1:L for h in 1:n_heads],
-        V=[get_parameter(attention_index(3, l, h)) for l in 1:L for h in 1:n_heads],
-        Wres=[get_parameter(resnet_index(l)) for l in 1:L],
-        bres=[get_parameter(resnet_index(l) + 1) for l in 1:L],
-        Wclass=get_parameter(classification_index))
+    (Q = [get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
+        K = [get_parameter(attention_index(2, l, h)) for l in 1:L for h in 1:n_heads],
+        V = [get_parameter(attention_index(3, l, h)) for l in 1:L for h in 1:n_heads],
+        Wres = [get_parameter(resnet_index(l)) for l in 1:L],
+        bres = [get_parameter(resnet_index(l) + 1) for l in 1:L],
+        Wclass = get_parameter(classification_index))
 end
 
 """
@@ -291,7 +302,9 @@ end
 Regroup the *flattened* parameters without touching the device, with a general element type so
 that `check_gradient` can push `ForwardDiff.Dual`s through it.
 """
-regroup_host(v::AbstractVector{<:Number}) = regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...))
+function regroup_host(v::AbstractVector{<:Number})
+    regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...))
+end
 
 const host_parameters = zeros(T, n_parameters)
 const device_parameters = to_device(zeros(T, n_parameters))
@@ -320,10 +333,10 @@ const n_parameters = flatlength(parameter_flat_layout)
 """
     flatten_parameters!(v, ps)
 
-Write the parameter `NamedTuple` into the flat vector `v`, in the order of `parameter_ranges`
+Write the parameter container into the flat vector `v`, in the order of `parameter_ranges`
 (which is the order `NeuralNetworkParameters.flatten` uses).
 """
-function flatten_parameters!(v::AbstractVector{T}, ps::NamedTuple)
+function flatten_parameters!(v::AbstractVector{T}, ps::NetworkParameters)
     flatten!(v, ps, parameter_flat_layout)
 end
 
@@ -332,7 +345,9 @@ function regroup_device(v::AbstractVector{T})
     regroup(i -> reshape(device_parameters[parameter_ranges[i]], parameter_sizes[i]...))
 end
 
-regroup_device(ps::NamedTuple) = regroup_device(flatten_parameters!(host_parameters, ps))
+function regroup_device(ps::NetworkParameters)
+    regroup_device(flatten_parameters!(host_parameters, ps))
+end
 
 # ---------------------------------------------------------------------------- model ---
 
@@ -341,7 +356,7 @@ regroup_device(ps::NamedTuple) = regroup_device(flatten_parameters!(host_paramet
 
 Multiply `A` onto every matrix stored in `x`, i.e. parallelize over the third axis.
 """
-function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     reshape(A * reshape(x, size(x, 1), :), size(A, 1), size(x, 2), size(x, 3))
 end
 
@@ -351,9 +366,9 @@ end
 # generic method of `LinearAlgebra` and error on the device. Hence the hand written pullback.
 _dense(Δ::AbstractArray) = Δ
 _dense(Δ::BatchedAdjOrTrans) = permutedims(parent(Δ), (2, 1, 3))    # all arrays here are real
-_dense(Δ::Union{Adjoint,Transpose}) = permutedims(parent(Δ), (2, 1))
+_dense(Δ::Union{Adjoint, Transpose}) = permutedims(parent(Δ), (2, 1))
 
-Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     function mat_tensor_mul_pullback(Δ)
         Δ₂ = reshape(_dense(Δ), size(A, 1), :)
         x₂ = reshape(x, size(x, 1), :)
@@ -369,7 +384,7 @@ Apply the classification transformer to `input`, a `(dim, seq_length, k)` array,
 the `(n_classes, k)` matrix of predictions. `ps` are *regrouped* parameters living on the same
 device as `input`.
 """
-function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
+function predict(ps::NamedTuple, input::AbstractArray{<:Number, 3})
     x = input
     for l in 1:L
         # the multi head attention layer
@@ -378,14 +393,14 @@ function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
             Q = mat_tensor_mul(transpose(ps.Q[i]), x)
             K = mat_tensor_mul(transpose(ps.K[i]), x)
             V = mat_tensor_mul(transpose(ps.V[i]), x)
-            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims=1))
+            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims = 1))
         end
         y = add_connection ? x + reduce(vcat, heads) : reduce(vcat, heads)
         # the ResNet layer
         x = y + tanh.(mat_tensor_mul(ps.Wres[l], y) .+ ps.bres[l])
     end
     # the classification layer picks the last column and applies softmax
-    softmax(ps.Wclass * x[:, end, :]; dims=1)
+    softmax(ps.Wclass * x[:, end, :]; dims = 1)
 end
 
 """
@@ -393,7 +408,9 @@ end
 
 The equivalent of `GeometricMachineLearning.FeedForwardLoss`.
 """
-network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) / norm(output)
+function network_loss(ps::NamedTuple, input, output)
+    norm(predict(ps, input) - output) / norm(output)
+end
 
 """
     accuracy(ps, input, output)
@@ -401,7 +418,7 @@ network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) 
 The ratio of correctly classified images. `ps` are the parameters as stored by the optimizer
 and `input`/`output` live on the host; only one chunk at a time is moved to the device.
 """
-function accuracy(ps::NamedTuple, input, output; chunk_size=batch_size)
+function accuracy(ps::NetworkParameters, input, output; chunk_size = batch_size)
     regrouped = regroup_device(ps)
     correct = 0
     for k in Iterators.partition(axes(input, 3), chunk_size)
@@ -417,9 +434,9 @@ end
 
 # --------------------------------------------------------------- objective & gradient ---
 
-const current_batch = Ref{Tuple{AbstractArray{T,3},AbstractMatrix{T}}}()
+const current_batch = Ref{Tuple{AbstractArray{T, 3}, AbstractMatrix{T}}}()
 
-function F(ps::NamedTuple)
+function F(ps::NetworkParameters)
     input, output = current_batch[]     # the function barrier keeps `network_loss` inferred
     network_loss(regroup_device(ps), input, output)
 end
@@ -434,6 +451,7 @@ function ∇F!(g::AbstractVector{T}, v::AbstractVector{T})
     ∂ps = Zygote.gradient(ps -> network_loss(ps, input, output), regroup_device(v))[1]
     # the gradient is assembled on the device and downloaded in a single transfer
     for l in 1:L, h in 1:n_heads
+
         i = (l - 1) * n_heads + h
         _write_gradient!(device_gradient, attention_index(1, l, h), ∂ps.Q[i])
         _write_gradient!(device_gradient, attention_index(2, l, h), ∂ps.K[i])
@@ -466,7 +484,7 @@ the difference quotient is of the same order as the quantity itself. `ForwardDif
 needs a single dual number instead — and `ForwardDiff.Dual`s cannot be multiplied on the GPU,
 so the reference has to be computed on the host.
 """
-function check_gradient(ps::NamedTuple)
+function check_gradient(ps::NetworkParameters)
     v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
@@ -488,7 +506,7 @@ end
 The worst ``\\|Y^TY - I\\|`` over the attention projections, i.e. how far the parameters have
 drifted off the Stiefel manifold. `NaN` if they are not on a manifold to begin with.
 """
-function orthonormality_error(ps::NamedTuple)
+function orthonormality_error(ps::NetworkParameters)
     ps[1] isa StiefelManifold || return T(NaN)
     worst = zero(T)
     for i in 1:n_attention_parameters
@@ -504,7 +522,7 @@ end
 Every parameter is finite and still stored in `T`. A retraction that produced a `NaN`, or a
 step that silently promoted the parameters to `Float64`, shows up here.
 """
-function parameters_are_sound(ps::NamedTuple)
+function parameters_are_sound(ps::NetworkParameters)
     all(values(ps)) do p
         A = freeparameters(p)
         eltype(A) === T && all(isfinite, A)
@@ -521,8 +539,9 @@ supplied through the line search — the *methods* only determine the direction 
 `Static(learning_rate)` is what `Optimizer` defaults to for these three anyway; it is written
 out so that the rate is visible.
 """
-function build_optimizer(ps::NamedTuple, algorithm::GeometricOptimizers.OptimizerMethod)
-    optimizer = Optimizer(ps, F; (∇F!)=∇F!, algorithm=algorithm, linesearch=Static(learning_rate))
+function build_optimizer(ps::NetworkParameters, algorithm::GeometricOptimizers.OptimizerMethod)
+    optimizer = Optimizer(
+        ps, F; (∇F!) = ∇F!, algorithm = algorithm, linesearch = Static(learning_rate))
     state = OptimizerState(algorithm, ps)
     initialize_state!(state)
     optimizer, state
@@ -551,14 +570,14 @@ The wall clock of one optimizer step, measured on the most expensive configurati
 (Stiefel weights with `Adam`) so that the derived schedule errs on the short side. The first
 steps are discarded: they compile the optimizer path.
 """
-function calibrate_step_time(input, output; n_warmup=2, n_timed=4)
+function calibrate_step_time(input, output; n_warmup = 2, n_timed = 4)
     rng = Random.Xoshiro(seed)
     ps = initial_parameters(rng, true)
     optimizer, state = build_optimizer(ps, Adam(T))
 
     times = Float64[]
-    for i in 1:(n_warmup+n_timed)
-        batch = ((i-1)*batch_size+1):(i*batch_size)
+    for i in 1:(n_warmup + n_timed)
+        batch = ((i - 1) * batch_size + 1):(i * batch_size)
         current_batch[] = (to_device(input[:, :, batch]), to_device(output[:, batch]))
         synchronize_device()
         step_start = time()
@@ -578,13 +597,15 @@ losses, the wall clock, and whether `deadline` cut the run short.
 `solve!` cannot be used here: it optimizes a *fixed* objective until it converges, whereas the
 objective changes with every batch.
 """
-function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output;
-    n_epochs::Integer, deadline::Float64, verbose=true)
+function train(
+        stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output;
+        n_epochs::Integer, deadline::Float64, verbose = true)
     rng = Random.Xoshiro(seed)
     ps = initial_parameters(rng, stiefel)
 
     n_batches = size(input, 3) ÷ batch_size
-    current_batch[] = (to_device(input[:, :, 1:batch_size]), to_device(output[:, 1:batch_size]))
+    current_batch[] = (
+        to_device(input[:, :, 1:batch_size]), to_device(output[:, 1:batch_size]))
     optimizer, state = build_optimizer(ps, algorithm)
 
     losses = T[]
@@ -593,7 +614,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
     synchronize_device()
     initial_time = time()
     for epoch in 1:n_epochs
-        batches = Iterators.take(Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
+        batches = Iterators.take(
+            Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
         epoch_loss = zero(T)
         for (i, batch) in pairs(collect(batches))
             # the batch is gathered on the host and uploaded; at 6.4 MB per batch this is
@@ -602,13 +624,17 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
             loss = optimizer_step!(ps, state, optimizer, "epoch $epoch, batch $i")
             push!(losses, loss)
             epoch_loss += loss / n_batches
-            verbose && @printf("\r  epoch %3i/%i, batch %3i/%i, loss %.5f", epoch, n_epochs, i, n_batches, loss)
+            verbose && @printf("\r  epoch %3i/%i, batch %3i/%i, loss %.5f",
+                epoch, n_epochs, i, n_batches, loss)
         end
         push!(epoch_losses, epoch_loss)
-        verbose && @printf("\r  epoch %3i/%i, average loss %.5f%20s\n", epoch, n_epochs, epoch_loss, "")
+        verbose && @printf("\r  epoch %3i/%i, average loss %.5f%20s\n",
+            epoch, n_epochs, epoch_loss, "")
         if time() > deadline && epoch < n_epochs
             truncated = true
-            verbose && @printf("  out of time after %i of %i epochs — stopping this run here\n", epoch, n_epochs)
+            verbose &&
+                @printf("  out of time after %i of %i epochs — stopping this run here\n",
+                    epoch, n_epochs)
             break
         end
     end
@@ -621,8 +647,8 @@ end
 # ------------------------------------------------------------------------------- run ---
 
 println("loading MNIST ...")
-train_x, train_y = MLDatasets.MNIST(split=:train)[:]
-test_x, test_y = MLDatasets.MNIST(split=:test)[:]
+train_x, train_y = MLDatasets.MNIST(split = :train)[:]
+test_x, test_y = MLDatasets.MNIST(split = :test)[:]
 
 # the data set stays on the host; the batches are uploaded one at a time
 const train_input = split_and_flatten(T.(train_x), patch_length)
@@ -642,7 +668,8 @@ const n_batches = size(train_input, 3) ÷ batch_size
 # configuration is expected to stall (see the header), and the check separates the stall the
 # experiment is about — a vanishing gradient in the network — from a wrong `∇F!` on plain
 # arrays, which would look the same from the outside.
-current_batch[] = (to_device(train_input[:, :, 1:batch_size]), to_device(train_output[:, 1:batch_size]))
+current_batch[] = (
+    to_device(train_input[:, :, 1:batch_size]), to_device(train_output[:, 1:batch_size]))
 
 const gradient_errors = map((true, false)) do stiefel
     error = device_scope("the gradient check") do
@@ -657,7 +684,8 @@ end
 # beyond this is a wrong derivative rather than round-off.
 const gradient_tolerance = 1e-4
 const gradient_ok = all(e -> isfinite(e) && e < gradient_tolerance, gradient_errors)
-gradient_ok || @warn "∇F! disagrees with the host directional derivative — the trainings below are not meaningful"
+gradient_ok ||
+    @warn "∇F! disagrees with the host directional derivative — the trainings below are not meaningful"
 
 # --- the schedule ---------------------------------------------------------------------
 
@@ -668,10 +696,12 @@ gradient_ok || @warn "∇F! disagrees with the host directional derivative — t
 # `Adam` takes the *element type* of the parameters, not a learning rate, and it is not
 # converted the way `MomentumMethod` is, so `Adam(T)` is what dispatches to the `Float32` cache.
 const runs = [
-    (name="Stiefel weights, Adam", stiefel=true, learns=true, algorithm=Adam(T)),
-    (name="regular weights, Adam", stiefel=false, learns=false, algorithm=Adam(T)),
-    (name="Stiefel weights, gradient", stiefel=true, learns=true, algorithm=GradientMethod()),
-    (name="Stiefel weights, momentum", stiefel=true, learns=true, algorithm=MomentumMethod(momentum_coefficient)),
+    (name = "Stiefel weights, Adam", stiefel = true, learns = true, algorithm = Adam(T)),
+    (name = "regular weights, Adam", stiefel = false, learns = false, algorithm = Adam(T)),
+    (name = "Stiefel weights, gradient", stiefel = true,
+        learns = true, algorithm = GradientMethod()),
+    (name = "Stiefel weights, momentum", stiefel = true,
+        learns = true, algorithm = MomentumMethod(momentum_coefficient))
 ]
 
 println("\ncalibrating ...")
@@ -683,7 +713,8 @@ const n_epochs = max(1, floor(Int, seconds_per_run / (seconds_per_step * n_batch
 
 @printf("%.2f s per step → %i epochs (%i steps) per configuration, %.0f s each\n",
     seconds_per_step, n_epochs, n_epochs * n_batches, seconds_per_run)
-n_epochs * n_batches < 50 && @warn "fewer than 50 steps per configuration — the accuracies below will say very little; raise MNIST_TIME_BUDGET"
+n_epochs * n_batches < 50 &&
+    @warn "fewer than 50 steps per configuration — the accuracies below will say very little; raise MNIST_TIME_BUDGET"
 println()
 
 # --- the trainings --------------------------------------------------------------------
@@ -694,13 +725,16 @@ for (j, run) in pairs(runs)
     # the deadline is recomputed per run, so that a run that overshoots its share is paid for
     # by the runs after it rather than by the budget as a whole
     deadline = time() + (remaining() - time_reserve) / (length(runs) - j + 1)
-    ps, losses, epoch_losses, total_time, truncated =
-        train(run.stiefel, run.algorithm, train_input, train_output; n_epochs=n_epochs, deadline=deadline)
+    ps, losses, epoch_losses, total_time, truncated = train(
+        run.stiefel, run.algorithm, train_input, train_output;
+        n_epochs = n_epochs, deadline = deadline)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, stiefel=run.stiefel, learns=run.learns, parameters=map(freeparameters, ps),
-        losses=losses, epoch_losses=epoch_losses, total_time=total_time, accuracy=score,
-        truncated=truncated, orthonormality=orthonormality_error(ps), sound=parameters_are_sound(ps)))
+    push!(results,
+        (name = run.name, stiefel = run.stiefel,
+            learns = run.learns, parameters = map(freeparameters, ps),
+            losses = losses, epoch_losses = epoch_losses, total_time = total_time, accuracy = score,
+            truncated = truncated, orthonormality = orthonormality_error(ps), sound = parameters_are_sound(ps)))
 end
 
 # --- the verdict ----------------------------------------------------------------------
@@ -729,12 +763,15 @@ function verdict(result)
             push!(reasons, @sprintf("loss flat (%.3f → %.3f)", first_loss, last_loss))
         end
         if result.accuracy < accuracy_floor
-            push!(reasons, @sprintf("accuracy %.4f below the floor of %.2f%s", result.accuracy,
-                accuracy_floor, result.accuracy < 2 * chance_accuracy ? ", i.e. at chance" : ""))
+            push!(reasons,
+                @sprintf("accuracy %.4f below the floor of %.2f%s", result.accuracy,
+                    accuracy_floor,
+                    result.accuracy < 2 * chance_accuracy ? ", i.e. at chance" : ""))
         end
     elseif !(abs(last_loss - trivial_loss) ≤ trivial_loss_tolerance)
-        push!(reasons, @sprintf("expected the trivial-prediction plateau of %.3f, got %.3f",
-            trivial_loss, last_loss))
+        push!(reasons,
+            @sprintf("expected the trivial-prediction plateau of %.3f, got %.3f",
+                trivial_loss, last_loss))
     end
     isempty(reasons) ? "ok" : "FAILED: " * join(reasons, "; ")
 end
@@ -744,7 +781,8 @@ const verdicts = map(verdict, results)
 println("=" ^ 100)
 @printf("%i epochs (%i steps) per configuration, batch size %i, %.0f s total\n\n",
     n_epochs, n_epochs * n_batches, batch_size, elapsed())
-@printf("%-26s %8s %8s %10s %10s   %s\n", "run", "loss 1", "loss N", "accuracy", "‖YᵀY-I‖", "verdict")
+@printf("%-26s %8s %8s %10s %10s   %s\n", "run", "loss 1", "loss N", "accuracy", "‖YᵀY-I‖",
+    "verdict")
 for (result, v) in zip(results, verdicts)
     @printf("%-26s %8.3f %8.3f %10.4f %10s   %s\n", result.name,
         first(result.epoch_losses), last(result.epoch_losses), result.accuracy,
@@ -757,21 +795,24 @@ const n_passed = count(==("ok"), verdicts)
     n_passed, length(runs), gradient_ok ? "ok" : "FAILED",
     peak_allocated[] ÷ 1024^2, memory_budget ÷ 1024^2)
 
-println("\n`regular weights, Adam` is the baseline of the paper and is expected to stall at ",
-    @sprintf("the trivial-prediction plateau of %.3f at an accuracy of %.2f", trivial_loss, chance_accuracy),
+println(
+    "\n`regular weights, Adam` is the baseline of the paper and is expected to stall at ",
+    @sprintf("the trivial-prediction plateau of %.3f at an accuracy of %.2f", trivial_loss,
+        chance_accuracy),
     "; without the Stiefel constraint the gradient vanishes through the 16 unnormalized ",
     "transformer blocks. It is a failure above only if it did something else.")
 
 if !gradient_ok || n_passed < length(runs)
     println("\nDo not start the 500 epoch run yet.")
 else
-    @printf("\nEverything checks out. The full run is %i× this schedule.\n", 500 ÷ max(n_epochs, 1))
+    @printf("\nEverything checks out. The full run is %i× this schedule.\n",
+        500 ÷ max(n_epochs, 1))
 end
 
 # --- saving -----------------------------------------------------------------------------
 
 # a separate file, so that the `mnist_parameters.jld2` of the full runs is never overwritten
-output = Dict{String,Any}("n_epochs" => n_epochs, "batch_size" => batch_size,
+output = Dict{String, Any}("n_epochs" => n_epochs, "batch_size" => batch_size,
     "seconds_per_step" => seconds_per_step, "gradient_errors" => collect(gradient_errors))
 for (i, result) in pairs(results)
     output["name$i"] = result.name

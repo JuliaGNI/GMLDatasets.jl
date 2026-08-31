@@ -22,17 +22,17 @@ using Printf: @printf, @sprintf
 using Statistics: mean
 
 const CONFIGURATIONS = ["Stiefel weights, Adam", "regular weights, Adam",
-                        "Stiefel weights, gradient", "Stiefel weights, momentum"]
+    "Stiefel weights, gradient", "Stiefel weights, momentum"]
 
 # The column names the plotting code in `docs/src/manifold_optimizers.md` looks for. They are
 # the configuration names of `mnist_cuda.jl` written so that they survive a CSV header.
 const COLUMNS = Dict(CONFIGURATIONS .=>
-                     ["adam_stiefel", "adam_regular", "gradient_stiefel", "momentum_stiefel"])
+    ["adam_stiefel", "adam_regular", "gradient_stiefel", "momentum_stiefel"])
 
 # The constrained runs, in the order the columns are written. `regular weights, Adam` has no
 # manifold to drift off, so it is absent from the drift file rather than empty in it.
 const CONSTRAINED = ["Stiefel weights, Adam", "Stiefel weights, gradient",
-                     "Stiefel weights, momentum"]
+    "Stiefel weights, momentum"]
 
 """
     epoch_losses(path)
@@ -44,7 +44,7 @@ contains a comma, which is why this is a regular expression and not a `split` on
 that does not match is a corrupted tail of an interrupted run and is skipped rather than fatal.
 """
 function epoch_losses(path::AbstractString)
-    losses = Dict{String,Dict{Int,Vector{Float64}}}()
+    losses = Dict{String, Dict{Int, Vector{Float64}}}()
     line_pattern = r"^\d+,\"([^\"]*)\",(\d+),\d+,\d+,([-\d.eE+]+)$"
     open(path) do io
         readline(io)  # header
@@ -52,12 +52,12 @@ function epoch_losses(path::AbstractString)
             m = match(line_pattern, line)
             m === nothing && continue
             configuration, epoch, loss = m[1], parse(Int, m[2]), parse(Float64, m[3])
-            per_epoch = get!(() -> Dict{Int,Vector{Float64}}(), losses, configuration)
+            per_epoch = get!(() -> Dict{Int, Vector{Float64}}(), losses, configuration)
             push!(get!(() -> Float64[], per_epoch, epoch), loss)
         end
     end
     Dict(configuration => Dict(epoch => mean(values) for (epoch, values) in per_epoch)
-         for (configuration, per_epoch) in losses)
+    for (configuration, per_epoch) in losses)
 end
 
 """
@@ -75,14 +75,14 @@ would overwrite the accuracies.
 function report_series(text::AbstractString, heading::AbstractString)
     block = match(Regex("^$(heading)[^\\n]*\\n((?:[^\\n]+\\n)+)", "m"), text)
     block === nothing && error("no `$(heading)` block in the report")
-    series = Dict{String,Vector{Pair{Int,Float64}}}()
+    series = Dict{String, Vector{Pair{Int, Float64}}}()
     for line in eachline(IOBuffer(block[1]))
         index = findfirst(c -> startswith(line, c), CONFIGURATIONS)
         index === nothing && continue
         configuration = CONFIGURATIONS[index]
         pairs = [parse(Int, first(p)) => parse(Float64, last(p))
                  for p in split.(split(line[(ncodeunits(configuration) + 1):end]), ':')]
-        series[configuration] = sort(pairs, by=first)
+        series[configuration] = sort(pairs, by = first)
     end
     series
 end
@@ -110,7 +110,8 @@ function main(prefix::AbstractString)
 
     for configuration in CONFIGURATIONS
         haskey(losses, configuration) || error("no `$(configuration)` in the loss CSV")
-        haskey(accuracy, configuration) || error("no `$(configuration)` accuracy in the report")
+        haskey(accuracy, configuration) ||
+            error("no `$(configuration)` accuracy in the report")
     end
 
     directory = joinpath(dirname(dirname(@__DIR__)), "docs", "src", "data")
@@ -118,17 +119,17 @@ function main(prefix::AbstractString)
 
     epochs = sort(collect(keys(losses[first(CONFIGURATIONS)])))
     write_series(joinpath(directory, "mnist_training_loss.csv"), epochs,
-                 [COLUMNS[c] for c in CONFIGURATIONS],
-                 [losses[c] for c in CONFIGURATIONS], v -> @sprintf("%.6f", v))
+        [COLUMNS[c] for c in CONFIGURATIONS],
+        [losses[c] for c in CONFIGURATIONS], v -> @sprintf("%.6f", v))
 
     evaluated = first.(accuracy[first(CONFIGURATIONS)])
     write_series(joinpath(directory, "mnist_test_accuracy.csv"), evaluated,
-                 [COLUMNS[c] for c in CONFIGURATIONS],
-                 [Dict(accuracy[c]) for c in CONFIGURATIONS], v -> @sprintf("%.4f", v))
+        [COLUMNS[c] for c in CONFIGURATIONS],
+        [Dict(accuracy[c]) for c in CONFIGURATIONS], v -> @sprintf("%.4f", v))
 
     write_series(joinpath(directory, "mnist_manifold_drift.csv"), evaluated,
-                 [COLUMNS[c] for c in CONSTRAINED],
-                 [Dict(drift[c]) for c in CONSTRAINED], v -> @sprintf("%.2e", v))
+        [COLUMNS[c] for c in CONSTRAINED],
+        [Dict(drift[c]) for c in CONSTRAINED], v -> @sprintf("%.2e", v))
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

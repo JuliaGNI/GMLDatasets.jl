@@ -10,7 +10,7 @@ Use [`mnist_data_loader`](@ref) to get them in the form a transformer consumes.
 The data set is downloaded on first use. Set `ENV["DATADEPS_ALWAYS_ACCEPT"] = true` to skip the
 download prompt in a non-interactive session.
 """
-mnist(split::Symbol=:train) = MLDatasets.MNIST(split=split)[:]
+mnist(split::Symbol = :train) = MLDatasets.MNIST(split = split)[:]
 
 @doc raw"""
     fashion_mnist(split = :train)
@@ -20,7 +20,7 @@ Return the Fashion-MNIST images and labels for `split`, which is either `:train`
 Fashion-MNIST is drop-in compatible with MNIST — ``28\times28`` grayscale images in ten classes — so
 everything that works on one works on the other. See [`mnist`](@ref).
 """
-fashion_mnist(split::Symbol=:train) = MLDatasets.FashionMNIST(split=split)[:]
+fashion_mnist(split::Symbol = :train) = MLDatasets.FashionMNIST(split = split)[:]
 
 @doc raw"""
     mnist_data_loader(split = :train; patch_length = 7, transform = identity, suppress_info = false)
@@ -43,7 +43,7 @@ dl = mnist_data_loader(:train; transform = cu)
 The transform is applied before rather than after the `DataLoader` is constructed so that
 [`split_and_flatten`](@ref) and [`onehotbatch`](@ref) run their kernels on the device.
 """
-function mnist_data_loader(split::Symbol=:train; transform=identity, kwargs...)
+function mnist_data_loader(split::Symbol = :train; transform = identity, kwargs...)
     images, labels = mnist(split)
     DataLoader(transform(images), transform(labels); kwargs...)
 end
@@ -55,7 +55,7 @@ Load Fashion-MNIST and wrap it in a `GeometricMachineLearning.DataLoader`.
 
 Like [`mnist_data_loader`](@ref), but for [`fashion_mnist`](@ref).
 """
-function fashion_mnist_data_loader(split::Symbol=:train; transform=identity, kwargs...)
+function fashion_mnist_data_loader(split::Symbol = :train; transform = identity, kwargs...)
     images, labels = fashion_mnist(split)
     DataLoader(transform(images), transform(labels); kwargs...)
 end

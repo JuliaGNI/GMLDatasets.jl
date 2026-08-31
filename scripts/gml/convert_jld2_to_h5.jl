@@ -18,7 +18,7 @@ import AbstractNeuralNetworks: h5save
 # reconstruct them.
 function jld2_to_h5(src_file::String, src_key::String, dst_file::String)
     ps = JLD2.load(src_file)[src_key]   # Tuple{NamedTuple, ...}
-    n  = length(ps)
+    n = length(ps)
     nt = NamedTuple{Tuple(Symbol("L$i") for i in 1:n)}(ps)
     HDF5.h5open(dst_file, "w") do h5
         h5save(h5, nt, "/")
@@ -37,9 +37,9 @@ end
 # separate flat HDF5 file so the tutorial need not import JLD2 at all.
 let src = JLD2.load("$T/mnist_parameters.jld2")
     HDF5.h5open("$T/mnist_metadata.h5", "w") do h5
-        for k in ["loss_array1","loss_array2","loss_array3","loss_array4",
-                  "accuracy_score1","accuracy_score2","accuracy_score3","accuracy_score4",
-                  "total_time1","total_time2","total_time3","total_time4"]
+        for k in ["loss_array1", "loss_array2", "loss_array3", "loss_array4",
+            "accuracy_score1", "accuracy_score2", "accuracy_score3", "accuracy_score4",
+            "total_time1", "total_time2", "total_time3", "total_time4"]
             haskey(src, k) && (h5[k] = src[k])
         end
     end

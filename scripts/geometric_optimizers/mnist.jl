@@ -25,7 +25,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, Adjoint, Transpose
@@ -65,12 +65,13 @@ This is the equivalent of `GeometricMachineLearning.split_and_flatten` and produ
 ordering: the patches are numbered column-major over the image and the entries within a
 patch are numbered column-major as well.
 """
-function split_and_flatten(input::AbstractArray{<:Number,3}, patch_length::Integer)
+function split_and_flatten(input::AbstractArray{<:Number, 3}, patch_length::Integer)
     @assert size(input, 1) == size(input, 2)
     @assert size(input, 1) % patch_length == 0
     n = size(input, 1) ÷ patch_length
     # (i_red, patch_row, j_red, patch_column, k) → (i_red, j_red, patch_row, patch_column, k)
-    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (1, 3, 2, 4, 5))
+    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (
+        1, 3, 2, 4, 5))
     reshape(output, patch_length^2, n^2, size(input, 3))
 end
 
@@ -82,7 +83,7 @@ Turn a vector of labels (`0` to `9`) into a `10`×`length(target)` matrix of uni
 function onehotbatch(target::AbstractVector{<:Integer})
     output = zeros(T, n_classes, length(target))
     for (k, label) in pairs(target)
-        output[label+1, k] = one(T)
+        output[label + 1, k] = one(T)
     end
     output
 end
@@ -92,18 +93,21 @@ end
 # The parameters are stored in a flat `NamedTuple`. Note that only the projections of the
 # attention layers are put on the `StiefelManifold`; the parameters of the `ResNetLayer`s and
 # of the classification layer are ordinary arrays.
-const parameter_layout = [
-    [Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L for s in ("PQ", "PK", "PV") for h in 1:n_heads]
-    vcat([[Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) => (dim,)] for l in 1:L]...)
-    [:Wclass => (n_classes, dim)]
-]
+const parameter_layout = [[Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L
+                           for s in ("PQ", "PK", "PV") for h in 1:n_heads]
+                          vcat([[
+                                    Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) =>
+                                        (dim,)] for l in 1:L]...)
+                          [:Wclass => (n_classes, dim)]]
 
 const parameter_keys = Tuple(first.(parameter_layout))
 const parameter_sizes = last.(parameter_layout)
 const n_attention_parameters = 3 * n_heads * L
 
 # the position of a parameter within `parameter_layout`
-attention_index(kind::Integer, l::Integer, h::Integer) = (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+function attention_index(kind::Integer, l::Integer, h::Integer)
+    (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+end
 resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the bias follows right after
 const classification_index = lastindex(parameter_layout)
 
@@ -124,7 +128,12 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
             glorot_uniform(rng, size)
         end
     end
-    NamedTuple{parameter_keys}(Tuple(values))
+    # `NetworkParameters` and not a bare `NamedTuple`: `GeometricOptimizers` takes a whole set of
+    # parameters only as a container, because a `NamedTuple` alias is a type nobody owns and a method
+    # on one is a method on `Base.NamedTuple`. The wrap shares the leaf arrays rather than copying
+    # them, and the container forwards `keys`, `values`, `ps[i]` and `ps.field`, so `regroup`, `F` and
+    # `∇F!` below read it exactly as they read the `NamedTuple` underneath.
+    NetworkParameters(NamedTuple{parameter_keys}(Tuple(values)))
 end
 
 # The layout of the parameter set, and the ranges this script indexes the flat vector by.
@@ -151,21 +160,27 @@ const n_parameters = flatlength(parameter_flat_layout)
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
 # type stable. `freeparameters` is what takes a `StiefelManifold` down to its dense `A`.
 
-function regroup(get_parameter::Base.Callable, ::Type{R}=T) where {R<:Number}
-    (Q=Matrix{R}[get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
-        K=Matrix{R}[get_parameter(attention_index(2, l, h)) for l in 1:L for h in 1:n_heads],
-        V=Matrix{R}[get_parameter(attention_index(3, l, h)) for l in 1:L for h in 1:n_heads],
-        Wres=Matrix{R}[get_parameter(resnet_index(l)) for l in 1:L],
-        bres=Vector{R}[get_parameter(resnet_index(l) + 1) for l in 1:L],
-        Wclass=get_parameter(classification_index))
+function regroup(get_parameter::Base.Callable, ::Type{R} = T) where {R <: Number}
+    (
+        Q = Matrix{R}[get_parameter(attention_index(1, l, h)) for l in 1:L
+                      for h in 1:n_heads],
+        K = Matrix{R}[get_parameter(attention_index(2, l, h)) for l in 1:L
+                      for h in 1:n_heads],
+        V = Matrix{R}[get_parameter(attention_index(3, l, h)) for l in 1:L
+                      for h in 1:n_heads],
+        Wres = Matrix{R}[get_parameter(resnet_index(l)) for l in 1:L],
+        bres = Vector{R}[get_parameter(resnet_index(l) + 1) for l in 1:L],
+        Wclass = get_parameter(classification_index))
 end
 
-regroup(ps::NamedTuple) = regroup(let p = values(ps)
+regroup(ps::NetworkParameters) = regroup(let p = values(ps)
     i -> freeparameters(p[i])
 end)
 
 # the element type is kept general here so that `check_gradient` can differentiate through it
-regroup(v::AbstractVector{R}) where {R<:Number} = regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...), R)
+function regroup(v::AbstractVector{R}) where {R <: Number}
+    regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...), R)
+end
 
 # ---------------------------------------------------------------------------- model ---
 
@@ -174,7 +189,7 @@ regroup(v::AbstractVector{R}) where {R<:Number} = regroup(i -> reshape(v[paramet
 
 Multiply `A` onto every matrix stored in `x`, i.e. parallelize over the third axis.
 """
-function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     reshape(A * reshape(x, size(x, 1), :), size(A, 1), size(x, 2), size(x, 3))
 end
 
@@ -186,9 +201,9 @@ end
 # materializes such cotangents first.
 _dense(Δ::AbstractArray) = Δ
 _dense(Δ::BatchedAdjOrTrans) = permutedims(parent(Δ), (2, 1, 3))    # all arrays here are real
-_dense(Δ::Union{Adjoint,Transpose}) = permutedims(parent(Δ), (2, 1))
+_dense(Δ::Union{Adjoint, Transpose}) = permutedims(parent(Δ), (2, 1))
 
-Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     function mat_tensor_mul_pullback(Δ)
         Δ₂ = reshape(_dense(Δ), size(A, 1), :)
         x₂ = reshape(x, size(x, 1), :)
@@ -203,7 +218,7 @@ end
 Apply the classification transformer to `input`, a `(dim, seq_length, k)` array, and return
 the `(n_classes, k)` matrix of predictions. Here `ps` are *regrouped* parameters.
 """
-function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
+function predict(ps::NamedTuple, input::AbstractArray{<:Number, 3})
     x = input
     for l in 1:L
         # the multi head attention layer
@@ -212,14 +227,14 @@ function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
             Q = mat_tensor_mul(transpose(ps.Q[i]), x)
             K = mat_tensor_mul(transpose(ps.K[i]), x)
             V = mat_tensor_mul(transpose(ps.V[i]), x)
-            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims=1))
+            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims = 1))
         end
         y = add_connection ? x + reduce(vcat, heads) : reduce(vcat, heads)
         # the ResNet layer
         x = y + tanh.(mat_tensor_mul(ps.Wres[l], y) .+ ps.bres[l])
     end
     # the classification layer picks the last column and applies softmax
-    softmax(ps.Wclass * x[:, end, :]; dims=1)
+    softmax(ps.Wclass * x[:, end, :]; dims = 1)
 end
 
 """
@@ -227,7 +242,9 @@ end
 
 The equivalent of `GeometricMachineLearning.FeedForwardLoss`.
 """
-network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) / norm(output)
+function network_loss(ps::NamedTuple, input, output)
+    norm(predict(ps, input) - output) / norm(output)
+end
 
 """
     accuracy(ps, input, output)
@@ -235,7 +252,7 @@ network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) 
 The ratio of correctly classified images, i.e. the equivalent of
 `GeometricMachineLearning.accuracy`. Here `ps` are the parameters as stored by the optimizer.
 """
-function accuracy(ps::NamedTuple, input, output; chunk_size=batch_size)
+function accuracy(ps::NamedTuple, input, output; chunk_size = batch_size)
     regrouped = regroup(ps)
     correct = 0
     for k in Iterators.partition(axes(input, 3), chunk_size)
@@ -249,11 +266,11 @@ end
 
 # --------------------------------------------------------------- objective & gradient ---
 
-# The `Optimizer` calls the objective on the parameter `NamedTuple` and `∇F!` on the
+# The `Optimizer` calls the objective on the parameter container and `∇F!` on the
 # *flattened* parameters. Both read the current batch from `current_batch`.
-const current_batch = Ref{Tuple{Array{T,3},Matrix{T}}}()
+const current_batch = Ref{Tuple{Array{T, 3}, Matrix{T}}}()
 
-F(ps::NamedTuple) = network_loss(regroup(ps), current_batch[]...)
+F(ps::NetworkParameters) = network_loss(regroup(ps), current_batch[]...)
 
 # the cotangent of a `transpose(ps.Q[i])` is a lazy `Transpose`, which `vec` turns into a
 # wrapped array that the device cannot copy from — hence `_dense` here as well
@@ -263,6 +280,7 @@ _write_gradient!(g, i::Integer, ::Nothing) = fill!(view(g, parameter_ranges[i]),
 function ∇F!(g::AbstractVector{T}, v::AbstractVector{T})
     ∂ps = Zygote.gradient(ps -> network_loss(ps, current_batch[]...), regroup(v))[1]
     for l in 1:L, h in 1:n_heads
+
         i = (l - 1) * n_heads + h
         _write_gradient!(g, attention_index(1, l, h), ∂ps.Q[i])
         _write_gradient!(g, attention_index(2, l, h), ∂ps.K[i])
@@ -289,7 +307,7 @@ Note that a central difference is not a useful comparison here: the objective is
 `Float32` and the directional derivative is of the order of ``\\|g\\|/\\sqrt{n}``, so the
 cancellation error of the difference quotient is of the same order as the quantity itself.
 """
-function check_gradient(ps::NamedTuple)
+function check_gradient(ps::NetworkParameters)
     v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
@@ -303,8 +321,9 @@ end
 
 # -------------------------------------------------------------------------- training ---
 
-function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output;
-    n_epochs=n_epochs, learning_rate=learning_rate, verbose=true)
+function train(
+        stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output;
+        n_epochs = n_epochs, learning_rate = learning_rate, verbose = true)
     rng = Random.Xoshiro(seed)
     ps = initial_parameters(rng, stiefel)
 
@@ -314,7 +333,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
     # Note that the learning rate is supplied through the line search: the *methods* only
     # determine the direction. `Static(learning_rate)` is what `Optimizer` defaults to for
     # these three methods anyway; it is written out so that the rate is visible right here.
-    optimizer = Optimizer(ps, F; (∇F!)=∇F!, algorithm=algorithm, linesearch=Static(learning_rate))
+    optimizer = Optimizer(
+        ps, F; (∇F!) = ∇F!, algorithm = algorithm, linesearch = Static(learning_rate))
     state = OptimizerState(algorithm, ps)
     initialize_state!(state)
 
@@ -323,7 +343,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
     for epoch in 1:n_epochs
         # `solve!` cannot be used here: it optimizes a *fixed* objective until it converges,
         # whereas the objective changes with every batch.
-        batches = Iterators.take(Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
+        batches = Iterators.take(
+            Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
         epoch_loss = zero(T)
         for (i, batch) in pairs(collect(batches))
             current_batch[] = (input[:, :, batch], output[:, batch])
@@ -333,9 +354,11 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
             loss = F(ps)
             push!(losses, loss)
             epoch_loss += loss / n_batches
-            verbose && @printf("\r  epoch %3i/%i, batch %3i/%i, loss %.5f", epoch, n_epochs, i, n_batches, loss)
+            verbose && @printf("\r  epoch %3i/%i, batch %3i/%i, loss %.5f",
+                epoch, n_epochs, i, n_batches, loss)
         end
-        verbose && @printf("\r  epoch %3i/%i, average loss %.5f%20s\n", epoch, n_epochs, epoch_loss, "")
+        verbose && @printf("\r  epoch %3i/%i, average loss %.5f%20s\n",
+            epoch, n_epochs, epoch_loss, "")
     end
     total_time = time() - initial_time
 
@@ -345,8 +368,8 @@ end
 # ------------------------------------------------------------------------------- run ---
 
 println("loading MNIST ...")
-train_x, train_y = MLDatasets.MNIST(split=:train)[:]
-test_x, test_y = MLDatasets.MNIST(split=:test)[:]
+train_x, train_y = MLDatasets.MNIST(split = :train)[:]
+test_x, test_y = MLDatasets.MNIST(split = :test)[:]
 
 const train_input = split_and_flatten(T.(train_x), patch_length)
 const train_output = onehotbatch(train_y)
@@ -378,10 +401,11 @@ current_batch[] = (train_input[:, :, 1:batch_size], train_output[:, 1:batch_size
 # it — and that is why the other three configurations learn. A flat loss here is the
 # experiment working, not a defect.
 const runs = [
-    (name="Stiefel weights, Adam    ", stiefel=true, algorithm=Adam(T)),
-    (name="regular weights, Adam    ", stiefel=false, algorithm=Adam(T)),
-    (name="Stiefel weights, gradient", stiefel=true, algorithm=GradientMethod()),
-    (name="Stiefel weights, momentum", stiefel=true, algorithm=MomentumMethod(momentum_coefficient)),
+    (name = "Stiefel weights, Adam    ", stiefel = true, algorithm = Adam(T)),
+    (name = "regular weights, Adam    ", stiefel = false, algorithm = Adam(T)),
+    (name = "Stiefel weights, gradient", stiefel = true, algorithm = GradientMethod()),
+    (name = "Stiefel weights, momentum", stiefel = true,
+        algorithm = MomentumMethod(momentum_coefficient))
 ]
 
 results = []
@@ -390,10 +414,12 @@ for run in runs
     ps, losses, total_time = train(run.stiefel, run.algorithm, train_input, train_output)
     score = accuracy(ps, test_input, test_output)
     @printf("  time %.1f s, test accuracy %.4f\n\n", total_time, score)
-    push!(results, (name=run.name, parameters=map(freeparameters, ps), losses=losses, total_time=total_time, accuracy=score))
+    push!(results,
+        (name = run.name, parameters = map(freeparameters, ps),
+            losses = losses, total_time = total_time, accuracy = score))
 end
 
-output = Dict{String,Any}("n_epochs" => n_epochs)
+output = Dict{String, Any}("n_epochs" => n_epochs)
 for (i, result) in pairs(results)
     output["parameters$i"] = result.parameters
     output["losses$i"] = result.losses
@@ -404,5 +430,6 @@ JLD2.save("mnist_parameters.jld2", output)
 
 println("n_epochs: ", n_epochs)
 for result in results
-    @printf("%s: time: %8.1f s   classification accuracy: %.4f\n", result.name, result.total_time, result.accuracy)
+    @printf("%s: time: %8.1f s   classification accuracy: %.4f\n",
+        result.name, result.total_time, result.accuracy)
 end

@@ -26,9 +26,9 @@ is `Float32` and whose output is `Int`: the generic tensor–tensor constructor 
 `GeometricMachineLearning` requires a single shared element type, whereas a one-hot target is
 integer-valued whatever the images are.
 """
-function DataLoader(images::AbstractArray{T,3}, labels::AbstractVector{T1};
-    patch_length=7,
-    suppress_info=false) where {T,T1}
+function DataLoader(images::AbstractArray{T, 3}, labels::AbstractVector{T1};
+        patch_length = 7,
+        suppress_info = false) where {T, T1}
     if !suppress_info
         @info "You provided a tensor and a vector as input. This will be treated as a classification problem (MNIST). Tensor axes: (i) & (ii) image axes and (iii) parameter dimension."
     end
@@ -36,8 +36,9 @@ function DataLoader(images::AbstractArray{T,3}, labels::AbstractVector{T1};
     @assert length(labels) == n_params
     number_of_patches = (im_dim₁ ÷ patch_length) * (im_dim₂ ÷ patch_length)
     target = onehotbatch(labels)
-    data_preprocessed = split_and_flatten(images, patch_length=patch_length, number_of_patches=number_of_patches)
-    DataLoader{T,typeof(data_preprocessed),typeof(target),:TimeSeries}(
+    data_preprocessed = split_and_flatten(
+        images, patch_length = patch_length, number_of_patches = number_of_patches)
+    DataLoader{T, typeof(data_preprocessed), typeof(target), :TimeSeries}(
         data_preprocessed, target, patch_length^2, number_of_patches, n_params, 10, 1
     )
 end

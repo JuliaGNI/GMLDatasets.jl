@@ -48,18 +48,18 @@ dl = DataLoader(angular_to_euclidean(pendulum()); autoencoder = true)
 See also [`pendulum_energy`](@ref).
 """
 function pendulum(;
-    qmin=[0.0],
-    qmax=[2π],
-    pmin=[-2.0],
-    pmax=[2.0],
-    qsamples=[10],
-    psamples=[10],
-    parameters=Pendulum.default_parameters(),
-    timespan=(0.0, 10.0),
-    timestep=0.1,
-    integrator=Gauss(2))
+        qmin = [0.0],
+        qmax = [2π],
+        pmin = [-2.0],
+        pmax = [2.0],
+        qsamples = [10],
+        psamples = [10],
+        parameters = Pendulum.default_parameters(),
+        timespan = (0.0, 10.0),
+        timestep = 0.1,
+        integrator = Gauss(2))
     problem = Pendulum.hodeensemble(qmin, qmax, pmin, pmax, qsamples, psamples;
-        parameters=parameters, timespan=timespan, timestep=timestep)
+        parameters = parameters, timespan = timespan, timestep = timestep)
     integrate(problem, integrator)
 end
 
@@ -97,7 +97,7 @@ dl = DataLoader(angular_to_euclidean(pendulum()); autoencoder = true)
 
 [`euclidean_to_angular`](@ref) is the inverse, up to the ``2\pi``-periodicity of ``\theta``.
 """
-function angular_to_euclidean(θ::AbstractVector, pθ::AbstractVector; l=1)
+function angular_to_euclidean(θ::AbstractVector, pθ::AbstractVector; l = 1)
     l > 0 || throw(ArgumentError("the pendulum length must be positive, got l = $l"))
     axes(θ) == axes(pθ) ||
         throw(DimensionMismatch("θ has axes $(axes(θ)) but pθ has axes $(axes(pθ))"))
@@ -110,10 +110,14 @@ end
 # and `solution.p[:, 1]` its conjugate momentum. Both come back as `OffsetVector`s indexed from zero,
 # because a `GeometricSolution` counts the initial condition as step 0; they are collected so that
 # nothing downstream ever sees a zero-based axis.
-_canonical(solution::GeometricSolution) = collect(solution.q[:, 1]), collect(solution.p[:, 1])
+function _canonical(solution::GeometricSolution)
+    collect(solution.q[:, 1]), collect(solution.p[:, 1])
+end
 
-_lift(solution::GeometricSolution) = angular_to_euclidean(_canonical(solution)...;
-    l=problem_parameters(solution.problem).l)
+function _lift(solution::GeometricSolution)
+    angular_to_euclidean(_canonical(solution)...;
+        l = problem_parameters(solution.problem).l)
+end
 
 function angular_to_euclidean(solution::GeometricSolution)
     q, p = _lift(solution)
@@ -134,7 +138,7 @@ Project the Euclidean coordinates of the bob back onto the canonical ``(\theta, 
 inverts. The angle comes back wrapped into ``(-\pi, \pi]``, so the round trip is the identity only
 for angles that were in that interval to begin with.
 """
-function euclidean_to_angular(q::AbstractMatrix, p::AbstractMatrix; l=1)
+function euclidean_to_angular(q::AbstractMatrix, p::AbstractMatrix; l = 1)
     l > 0 || throw(ArgumentError("the pendulum length must be positive, got l = $l"))
     size(q, 1) == size(p, 1) == 2 ||
         throw(DimensionMismatch("q and p must have two rows, got $(size(q, 1)) and $(size(p, 1))"))
@@ -171,27 +175,29 @@ The result keeps every axis but the first, so a ``2\times{}n_t\times{}n`` tensor
 integrator is checked for drift.
 """
 pendulum_energy(θ::AbstractVector, pθ::AbstractVector,
-    parameters::NamedTuple=Pendulum.default_parameters()) =
-    Pendulum.hamiltonian.(zero(eltype(θ)), θ, pθ, Ref(parameters))
+    parameters::NamedTuple = Pendulum.default_parameters()) = Pendulum.hamiltonian.(
+    zero(eltype(θ)), θ, pθ, Ref(parameters))
 
 function pendulum_energy(q::AbstractArray, p::AbstractArray,
-    parameters::NamedTuple=Pendulum.default_parameters())
+        parameters::NamedTuple = Pendulum.default_parameters())
     size(q, 1) == size(p, 1) == 2 ||
         throw(DimensionMismatch("q and p must have two rows, got $(size(q, 1)) and $(size(p, 1))"))
     axes(q) == axes(p) ||
         throw(DimensionMismatch("q has axes $(axes(q)) but p has axes $(axes(p))"))
-    dropdims(sum(abs2, p; dims=1); dims=1) ./ (2 * parameters.m) .+
+    dropdims(sum(abs2, p; dims = 1); dims = 1) ./ (2 * parameters.m) .+
     (parameters.m * parameters.g) .* selectdim(q, 1, 2)
 end
 
-function pendulum_energy(data::AbstractArray, parameters::NamedTuple=Pendulum.default_parameters())
+function pendulum_energy(data::AbstractArray, parameters::NamedTuple = Pendulum.default_parameters())
     size(data, 1) == 4 ||
         throw(DimensionMismatch("the lifted data must have four rows, got $(size(data, 1))"))
     pendulum_energy(selectdim(data, 1, 1:2), selectdim(data, 1, 3:4), parameters)
 end
 
-pendulum_energy(solution::GeometricSolution) =
+function pendulum_energy(solution::GeometricSolution)
     pendulum_energy(_canonical(solution)..., problem_parameters(solution.problem))
+end
 
-pendulum_energy(solution::EnsembleSolution) =
+function pendulum_energy(solution::EnsembleSolution)
     reduce(hcat, [pendulum_energy(s) for s in solution])
+end

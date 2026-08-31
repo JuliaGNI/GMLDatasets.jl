@@ -4,11 +4,9 @@ using GMLDatasets: patch_index
 using GMLDatasets: within_patch_index
 using GMLDatasets: index_conversion
 using GeometricMachineLearning
-# `ParameterSet` is `Union{NamedTuple, NetworkParameters}` -- the union this annotation used to
-# spell as `Union{NamedTuple, NeuralNetworkParameters}`, back when the container was a type of
-# that name in `AbstractNeuralNetworks`. It is a package now, and the type in it is
-# `NetworkParameters`, so the old spelling names nothing.
-using NeuralNetworkParameters: ParameterSet
+# A `Chain`'s parameters are a `NetworkParameters`; the `Tuple` arm is what `applychain` takes once the
+# layers have been split out.
+using NeuralNetworkParameters: NetworkParameters
 import Zygote, Random
 
 Random.seed!(1234)
@@ -16,25 +14,28 @@ Random.seed!(1234)
 """
 This function tests is used to test if all the patch nubmers are assigned correctly with `index_conversion`, i.e. tests `patch_index` by inverting it.
 """
-function reverse_index(i::Integer, j::Integer, patch_length=7)
+function reverse_index(i::Integer, j::Integer, patch_length = 7)
     opt_i = i%patch_length==0 ? 1 : 0
     within_patch_index = i%patch_length + opt_i*patch_length, (i÷patch_length - opt_i + 1)
 
     sqrt_number_patches = 28÷patch_length
     opt_j = j%sqrt_number_patches==0 ? 1 : 0
-    patch_index = j%sqrt_number_patches + opt_j*sqrt_number_patches, (j÷sqrt_number_patches - opt_j + 1)
-    (patch_index[1]-1)*patch_length + within_patch_index[1], (patch_index[2]-1)*patch_length + within_patch_index[2]
+    patch_index = j%sqrt_number_patches + opt_j*sqrt_number_patches,
+    (j÷sqrt_number_patches - opt_j + 1)
+    (patch_index[1]-1)*patch_length + within_patch_index[1],
+    (patch_index[2]-1)*patch_length + within_patch_index[2]
 end
 
 """
 This function uses `reverse_index` to test `index_conversion`, i.e. checks if the functions are invertible.
 """
-function test_index_conversion(patch_lengths=(2, 4, 7, 14))
+function test_index_conversion(patch_lengths = (2, 4, 7, 14))
     for patch_length in patch_lengths
         number_of_patches = (28÷patch_length)^2
         for i in 1:28
             for j in 1:28
-                @test reverse_index(index_conversion(i, j, patch_length, number_of_patches)..., patch_length) == (i, j)
+                @test reverse_index(index_conversion(i, j, patch_length, number_of_patches)..., patch_length) ==
+                      (i, j)
             end
         end
     end
@@ -43,10 +44,10 @@ end
 """
 This function tests if `onehotbatch` does what it should; i.e. convert a vector of integers to a one-hot-tensor.
 """
-function test_onehotbatch(V::AbstractVector{T}) where {T<:Integer}
+function test_onehotbatch(V::AbstractVector{T}) where {T <: Integer}
     V_encoded = onehotbatch(V)
     for (i, v) in zip(length(V), V)
-        @test sum(V_encoded[:,1,i]) == 1
+        @test sum(V_encoded[:, 1, i]) == 1
         @test V_encoded[v, 1, i] == 1
     end
 end
@@ -60,15 +61,16 @@ Generates an MNIST-like dummy data set.
 The tests must not download anything, so everything that would otherwise come from `MLDatasets` is
 faked here: a tensor of random images and a vector of random labels in ``0, \ldots, 9``.
 """
-function generate_dummy_mnist(dim₁=28, dim₂=28, number_images=100, T=Float32)
-
+function generate_dummy_mnist(dim₁ = 28, dim₂ = 28, number_images = 100, T = Float32)
     train_x = rand(T, dim₁, dim₂, number_images)
     train_y = Int.(ceil.(10 * rand(T, number_images))) .- 1
     train_x, train_y
 end
 
-function test_data_loader(; dim₁=28, dim₂=28, number_images=100, patch_length=7, T=Float32)
-    dl = DataLoader(generate_dummy_mnist(dim₁, dim₂, number_images, T)...; patch_length=patch_length, suppress_info=true)
+function test_data_loader(;
+        dim₁ = 28, dim₂ = 28, number_images = 100, patch_length = 7, T = Float32)
+    dl = DataLoader(generate_dummy_mnist(dim₁, dim₂, number_images, T)...;
+        patch_length = patch_length, suppress_info = true)
 
     @test eltype(dl) == T
     @test dl.input_dim == patch_length ^ 2
@@ -79,15 +81,19 @@ function test_data_loader(; dim₁=28, dim₂=28, number_images=100, patch_lengt
     @test size(dl.output) == (10, 1, number_images)
 end
 
-function test_optimizer_for_classification_layer(; dim₁=28, dim₂=28, number_images=100, patch_length=7, T=Float32)
-    dl = DataLoader(generate_dummy_mnist(dim₁, dim₂, number_images, T)...; patch_length=patch_length, suppress_info=true)
+function test_optimizer_for_classification_layer(;
+        dim₁ = 28, dim₂ = 28, number_images = 100, patch_length = 7, T = Float32)
+    dl = DataLoader(generate_dummy_mnist(dim₁, dim₂, number_images, T)...;
+        patch_length = patch_length, suppress_info = true)
 
     activation_function(x) = tanh.(x)
     model = Chain(ClassificationLayer(patch_length * patch_length, 10, activation_function))
 
     ps = NeuralNetwork(model, CPU(), T).params
     loss = FeedForwardLoss()
-    loss_dl(model::GeometricMachineLearning.Chain, ps::Union{Tuple, ParameterSet}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
+    loss_dl(
+        model::GeometricMachineLearning.Chain, ps::Union{
+            Tuple, NetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
     loss₁ = loss_dl(model, ps, dl)
 
     opt = Optimizer(GradientOptimizer(), ps)

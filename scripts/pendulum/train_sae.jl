@@ -31,7 +31,7 @@ import HDF5
 const reduced_dim = 2
 const n_epochs = 12000
 const batch_size = 256
-const step_size = 1f-4
+const step_size = 1.0f-4
 const seed = 123
 const output = "pendulum_sae.h5"
 
@@ -47,12 +47,12 @@ dl = DataLoader(data; autoencoder = true, suppress_info = true)
 # `SymplecticAutoencoder` caps the number of blocks at `full_dim - reduced_dim`, which is 2 here, so
 # the depth has to come from the layers inside each block rather than from more blocks.
 architecture = SymplecticAutoencoder(dl.input_dim, reduced_dim;
-                                     n_encoder_blocks = 2,
-                                     n_decoder_blocks = 2,
-                                     n_encoder_layers = 10,
-                                     n_decoder_layers = 20,
-                                     n_decoder_output_layers = 10,
-                                     sympnet_upscale = 20)
+    n_encoder_blocks = 2,
+    n_decoder_blocks = 2,
+    n_encoder_layers = 10,
+    n_decoder_layers = 20,
+    n_decoder_output_layers = 10,
+    sympnet_upscale = 20)
 network = NeuralNetwork(architecture, backend, eltype(dl))
 
 optimizer = Optimizer(Adam(), network; step_size = step_size)
@@ -68,4 +68,4 @@ HDF5.h5open(output, "w") do file
 end
 
 println("wrote $output after $n_epochs epochs: ",
-        "reconstruction error $(first(losses)) → $(last(losses))")
+    "reconstruction error $(first(losses)) → $(last(losses))")

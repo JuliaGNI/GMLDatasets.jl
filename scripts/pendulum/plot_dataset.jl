@@ -44,13 +44,15 @@ const SEPARATRIX = parameters.m * parameters.g * parameters.l
 # lift carries that curve into the Euclidean panel as (q₁, p₁) = (l·sin θ, pθ·cos θ / l).
 const SEPARATRIX_θ = range(0, 2π; length = 401)
 const SEPARATRIX_pθ = parameters.m * parameters.l .*
-                      sqrt.(max.(2 * parameters.g * parameters.l .* (1 .- cos.(SEPARATRIX_θ)), 0))
+                      sqrt.(max.(
+    2 * parameters.g * parameters.l .*
+    (1 .- cos.(SEPARATRIX_θ)), 0))
 
 "Draw both branches of the separatrix, in whichever coordinates `f` maps it to."
 function separatrix!(axis, f)
     for (sign, label) in ((+1, "separatrix, H = mgl"), (-1, nothing))
         line = lines!(axis, f(SEPARATRIX_θ, sign .* SEPARATRIX_pθ)...;
-                      color = INK, linewidth = 1.5, linestyle = :dash)
+            color = INK, linewidth = 1.5, linestyle = :dash)
         label === nothing || (line.label = label)
     end
 end
@@ -58,11 +60,11 @@ end
 "An axis with recessive chrome, matching the MNIST figures."
 function plain_axis(position; kwargs...)
     Axis(position; backgroundcolor = :transparent,
-         xgridvisible = false, ygridcolor = GRID, ygridwidth = 1,
-         topspinevisible = false, rightspinevisible = false,
-         leftspinecolor = INK, bottomspinecolor = INK, xtickcolor = INK, ytickcolor = INK,
-         xticklabelcolor = INK, yticklabelcolor = INK, xlabelcolor = INK, ylabelcolor = INK,
-         titlecolor = INK, kwargs...)
+        xgridvisible = false, ygridcolor = GRID, ygridwidth = 1,
+        topspinevisible = false, rightspinevisible = false,
+        leftspinecolor = INK, bottomspinecolor = INK, xtickcolor = INK, ytickcolor = INK,
+        xticklabelcolor = INK, yticklabelcolor = INK, xlabelcolor = INK, ylabelcolor = INK,
+        titlecolor = INK, kwargs...)
 end
 
 figure = Figure(size = (960, 420), backgroundcolor = :transparent, fontsize = 14)
@@ -70,24 +72,26 @@ figure = Figure(size = (960, 420), backgroundcolor = :transparent, fontsize = 14
 # Left: the canonical phase portrait. Scattered rather than drawn as lines because the angle is
 # wrapped into one period and a line would jump across the plot at every wrap.
 canonical = plain_axis(figure[1, 1]; xlabel = "θ", ylabel = "pθ",
-                       title = "canonical coordinates")
-scatter!(canonical, mod2pi.(θ), pθ; color = vec(energy), colormap = COLORMAP, markersize = 1.5)
+    title = "canonical coordinates")
+scatter!(
+    canonical, mod2pi.(θ), pθ; color = vec(energy), colormap = COLORMAP, markersize = 1.5)
 separatrix!(canonical, (a, m) -> (a, m))
-axislegend(canonical; position = :lt, framevisible = false, labelcolor = INK, labelsize = 11)
+axislegend(
+    canonical; position = :lt, framevisible = false, labelcolor = INK, labelsize = 11)
 
 # Right: the same data in two of the four Euclidean rows. This is the projection the autoencoder is
 # given — the full picture is the tangent bundle of a circle, a two-dimensional surface in ℝ⁴.
 euclidean = plain_axis(figure[1, 2]; xlabel = "q₁", ylabel = "p₁",
-                       title = "Euclidean coordinates")
+    title = "Euclidean coordinates")
 for i in 1:n_trajectories
     lines!(euclidean, data[1, :, i], data[3, :, i];
-           color = energy[:, i], colormap = COLORMAP, colorrange = extrema(energy), linewidth = 1)
+        color = energy[:, i], colormap = COLORMAP, colorrange = extrema(energy), linewidth = 1)
 end
 separatrix!(euclidean, (a, m) -> (parameters.l .* sin.(a), m .* cos.(a) ./ parameters.l))
 
 Colorbar(figure[1, 3]; colormap = COLORMAP, limits = extrema(energy), label = "H",
-         labelcolor = INK, ticklabelcolor = INK, tickcolor = INK,
-         topspinecolor = INK, bottomspinecolor = INK, leftspinecolor = INK, rightspinecolor = INK)
+    labelcolor = INK, ticklabelcolor = INK, tickcolor = INK,
+    topspinecolor = INK, bottomspinecolor = INK, leftspinecolor = INK, rightspinecolor = INK)
 
 CairoMakie.save("pendulum_dataset.png", figure)
 
@@ -96,15 +100,15 @@ CairoMakie.save("pendulum_dataset.png", figure)
 # worth handing to a *symplectic* autoencoder in the first place.
 drift = Figure(size = (760, 420), backgroundcolor = :transparent, fontsize = 14)
 axis = plain_axis(drift[1, 1]; xlabel = "t", ylabel = "|H(t) − H(0)|", yscale = log10,
-                  title = "energy error, Gauss(2)")
+    title = "energy error, Gauss(2)")
 for i in 1:n_trajectories
     lines!(axis, collect(solution.t), abs.(energy[:, i] .- energy[1, i]) .+ eps();
-           color = (INK, 0.4), linewidth = 1)
+        color = (INK, 0.4), linewidth = 1)
 end
 
 CairoMakie.save("pendulum_energy_drift.png", drift)
 
 println("wrote pendulum_dataset.png and pendulum_energy_drift.png: ",
-        "$(n_trajectories) trajectories × $(n_steps) time steps, ",
-        "H ∈ $(round.(extrema(energy); digits = 3)), separatrix at $(SEPARATRIX), ",
-        "maximum energy error $(maximum(abs, energy .- energy[1:1, :]))")
+    "$(n_trajectories) trajectories × $(n_steps) time steps, ",
+    "H ∈ $(round.(extrema(energy); digits = 3)), separatrix at $(SEPARATRIX), ",
+    "maximum energy error $(maximum(abs, energy .- energy[1:1, :]))")

@@ -87,7 +87,7 @@ using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: flatten, flatten!, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
@@ -124,7 +124,7 @@ flush(losses_io)
 
 Append `line` to the report file and flush it.
 """
-function report(line::AbstractString="")
+function report(line::AbstractString = "")
     println(report_io, line)
     flush(report_io)
     nothing
@@ -136,7 +136,7 @@ end
 Write `line` to both the terminal and the report. `stdout` is flushed as well, so that the
 redirected output of a `nohup`ed run is worth following.
 """
-function announce(line::AbstractString="")
+function announce(line::AbstractString = "")
     println(line)
     flush(stdout)
     report(line)
@@ -168,11 +168,12 @@ clear_progress() = to_terminal && print("\r", " "^78, "\r")
 `f()`, or `fallback` if it throws. Used for the environment section only: a `CUDA` accessor
 that was renamed upstream should not be what stops a run of this length.
 """
-attempt(f::Base.Callable, fallback="unknown") = try
-    string(f())
-catch
-    fallback
-end
+attempt(f::Base.Callable, fallback = "unknown") =
+    try
+        string(f())
+    catch
+        fallback
+    end
 
 function report_environment()
     report("mnist_cuda_repetitions.jl — " * (use_cuda ? "CUDA" : "host") * " run")
@@ -180,12 +181,17 @@ function report_environment()
     report()
     report("started     " * timestamp())
     report("host        " * gethostname())
-    report("julia       " * string(VERSION) * ", " * string(Threads.nthreads()) * " thread(s)")
+    report("julia       " * string(VERSION) * ", " * string(Threads.nthreads()) *
+           " thread(s)")
     report("project     " * string(Base.active_project()))
     report("script      " * @__FILE__)
-    report("revision    " * attempt(() -> readchomp(`git -C $(@__DIR__) rev-parse --short HEAD`)) *
-           attempt(() -> isempty(readchomp(`git -C $(@__DIR__) status --porcelain`)) ? "" : " (dirty)", ""))
-    report("package     GeometricOptimizers " * attempt(() -> pkgversion(GeometricOptimizers)) *
+    report("revision    " *
+           attempt(() -> readchomp(`git -C $(@__DIR__) rev-parse --short HEAD`)) *
+           attempt(
+               () -> isempty(readchomp(`git -C $(@__DIR__) status --porcelain`)) ? "" :
+                     " (dirty)", ""))
+    report("package     GeometricOptimizers " *
+           attempt(() -> pkgversion(GeometricOptimizers)) *
            ", CUDA.jl " * attempt(() -> pkgversion(CUDA)))
     if use_cuda
         report("device      " * attempt(() -> CUDA.name(CUDA.device())) *
@@ -206,11 +212,10 @@ const peak_used = Ref(0)
 # `CUDACore`/`CUDATools` forwards the new name only. Resolve it once, and let the number be the
 # thing that is lost if it is missing again — this one is called from inside the epoch loop, so
 # a `MethodError` here would take the whole run with it.
-const free_device_memory =
-    !use_cuda                          ? () -> nothing :
-    isdefined(CUDA, :free_memory)      ? CUDA.free_memory :
-    isdefined(CUDA, :available_memory) ? CUDA.available_memory :
-                                         () -> nothing
+const free_device_memory = !use_cuda ? () -> nothing :
+                           isdefined(CUDA, :free_memory) ? CUDA.free_memory :
+                           isdefined(CUDA, :available_memory) ? CUDA.available_memory :
+                           () -> nothing
 
 function note_device_memory()
     free = free_device_memory()
@@ -220,7 +225,8 @@ function note_device_memory()
 end
 
 if use_cuda
-    println("running on ", CUDA.name(CUDA.device()), " (", CUDA.totalmem(CUDA.device()) ÷ 1024^2, " MB)")
+    println("running on ", CUDA.name(CUDA.device()), " (",
+        CUDA.totalmem(CUDA.device()) ÷ 1024^2, " MB)")
 else
     @warn "no CUDA device available — the network is evaluated on the host instead"
 end
@@ -289,12 +295,13 @@ This is the equivalent of `GeometricMachineLearning.split_and_flatten` and produ
 ordering: the patches are numbered column-major over the image and the entries within a
 patch are numbered column-major as well.
 """
-function split_and_flatten(input::AbstractArray{<:Number,3}, patch_length::Integer)
+function split_and_flatten(input::AbstractArray{<:Number, 3}, patch_length::Integer)
     @assert size(input, 1) == size(input, 2)
     @assert size(input, 1) % patch_length == 0
     n = size(input, 1) ÷ patch_length
     # (i_red, patch_row, j_red, patch_column, k) → (i_red, j_red, patch_row, patch_column, k)
-    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (1, 3, 2, 4, 5))
+    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (
+        1, 3, 2, 4, 5))
     reshape(output, patch_length^2, n^2, size(input, 3))
 end
 
@@ -306,7 +313,7 @@ Turn a vector of labels (`0` to `9`) into a `10`×`length(target)` matrix of uni
 function onehotbatch(target::AbstractVector{<:Integer})
     output = zeros(T, n_classes, length(target))
     for (k, label) in pairs(target)
-        output[label+1, k] = one(T)
+        output[label + 1, k] = one(T)
     end
     output
 end
@@ -316,18 +323,21 @@ end
 # The parameters are stored in a flat `NamedTuple` *on the host*. Note that only the
 # projections of the attention layers are put on the `StiefelManifold`; the parameters of the
 # `ResNetLayer`s and of the classification layer are ordinary arrays.
-const parameter_layout = [
-    [Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L for s in ("PQ", "PK", "PV") for h in 1:n_heads]
-    vcat([[Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) => (dim,)] for l in 1:L]...)
-    [:Wclass => (n_classes, dim)]
-]
+const parameter_layout = [[Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L
+                           for s in ("PQ", "PK", "PV") for h in 1:n_heads]
+                          vcat([[
+                                    Symbol("Wres_", l) => (dim, dim), Symbol("bres_", l) =>
+                                        (dim,)] for l in 1:L]...)
+                          [:Wclass => (n_classes, dim)]]
 
 const parameter_keys = Tuple(first.(parameter_layout))
 const parameter_sizes = last.(parameter_layout)
 const n_attention_parameters = 3 * n_heads * L
 
 # the position of a parameter within `parameter_layout`
-attention_index(kind::Integer, l::Integer, h::Integer) = (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+function attention_index(kind::Integer, l::Integer, h::Integer)
+    (l - 1) * 3 * n_heads + (kind - 1) * n_heads + h
+end
 resnet_index(l::Integer) = n_attention_parameters + 2 * (l - 1) + 1      # the bias follows right after
 const classification_index = lastindex(parameter_layout)
 
@@ -348,19 +358,24 @@ function initial_parameters(rng::Random.AbstractRNG, stiefel::Bool)
             glorot_uniform(rng, size)
         end
     end
-    NamedTuple{parameter_keys}(Tuple(values))
+    # `NetworkParameters` and not a bare `NamedTuple`: `GeometricOptimizers` takes a whole set of
+    # parameters only as a container, because a `NamedTuple` alias is a type nobody owns and a method
+    # on one is a method on `Base.NamedTuple`. The wrap shares the leaf arrays rather than copying
+    # them, and the container forwards `keys`, `values`, `ps[i]` and `ps.field`, so `regroup`, `F` and
+    # `∇F!` below read it exactly as they read the `NamedTuple` underneath.
+    NetworkParameters(NamedTuple{parameter_keys}(Tuple(values)))
 end
 
 # For the forward pass the parameters are regrouped into vectors of concrete element type.
 # Doing this outside of the differentiated function keeps both the forward pass and `Zygote`
 # type stable.
 function regroup(get_parameter::Base.Callable)
-    (Q=[get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
-        K=[get_parameter(attention_index(2, l, h)) for l in 1:L for h in 1:n_heads],
-        V=[get_parameter(attention_index(3, l, h)) for l in 1:L for h in 1:n_heads],
-        Wres=[get_parameter(resnet_index(l)) for l in 1:L],
-        bres=[get_parameter(resnet_index(l) + 1) for l in 1:L],
-        Wclass=get_parameter(classification_index))
+    (Q = [get_parameter(attention_index(1, l, h)) for l in 1:L for h in 1:n_heads],
+        K = [get_parameter(attention_index(2, l, h)) for l in 1:L for h in 1:n_heads],
+        V = [get_parameter(attention_index(3, l, h)) for l in 1:L for h in 1:n_heads],
+        Wres = [get_parameter(resnet_index(l)) for l in 1:L],
+        bres = [get_parameter(resnet_index(l) + 1) for l in 1:L],
+        Wclass = get_parameter(classification_index))
 end
 
 """
@@ -370,7 +385,9 @@ Regroup the *flattened* parameters without touching the device. The element type
 general so that `check_gradient` can differentiate through it — `ForwardDiff.Dual`s cannot be
 handed to `cuBLAS`, so the reference derivative has to be computed on the host.
 """
-regroup_host(v::AbstractVector{<:Number}) = regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...))
+function regroup_host(v::AbstractVector{<:Number})
+    regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...))
+end
 
 # The parameters are moved to the device in a single transfer and split up there; the 353
 # individual parameters are far too small for a transfer each.
@@ -404,7 +421,7 @@ const n_parameters = flatlength(parameter_flat_layout)
 Write the parameter `NamedTuple` into the flat vector `v`, in the same order in which
 `NeuralNetworkParameters.flatten` writes it (which is the order of `parameter_ranges`).
 """
-function flatten_parameters!(v::AbstractVector{T}, ps::NamedTuple)
+function flatten_parameters!(v::AbstractVector{T}, ps::NetworkParameters)
     flatten!(v, ps, parameter_flat_layout)
 end
 
@@ -413,7 +430,9 @@ function regroup_device(v::AbstractVector{T})
     regroup(i -> reshape(device_parameters[parameter_ranges[i]], parameter_sizes[i]...))
 end
 
-regroup_device(ps::NamedTuple) = regroup_device(flatten_parameters!(host_parameters, ps))
+function regroup_device(ps::NetworkParameters)
+    regroup_device(flatten_parameters!(host_parameters, ps))
+end
 
 # ---------------------------------------------------------------------------- model ---
 
@@ -422,7 +441,7 @@ regroup_device(ps::NamedTuple) = regroup_device(flatten_parameters!(host_paramet
 
 Multiply `A` onto every matrix stored in `x`, i.e. parallelize over the third axis.
 """
-function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     reshape(A * reshape(x, size(x, 1), :), size(A, 1), size(x, 2), size(x, 3))
 end
 
@@ -435,9 +454,9 @@ end
 # first; on the host it avoids the same (there merely slow) fallback.
 _dense(Δ::AbstractArray) = Δ
 _dense(Δ::BatchedAdjOrTrans) = permutedims(parent(Δ), (2, 1, 3))    # all arrays here are real
-_dense(Δ::Union{Adjoint,Transpose}) = permutedims(parent(Δ), (2, 1))
+_dense(Δ::Union{Adjoint, Transpose}) = permutedims(parent(Δ), (2, 1))
 
-Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number,3})
+Zygote.@adjoint function mat_tensor_mul(A::AbstractMatrix, x::AbstractArray{<:Number, 3})
     function mat_tensor_mul_pullback(Δ)
         Δ₂ = reshape(_dense(Δ), size(A, 1), :)
         x₂ = reshape(x, size(x, 1), :)
@@ -453,7 +472,7 @@ Apply the classification transformer to `input`, a `(dim, seq_length, k)` array,
 the `(n_classes, k)` matrix of predictions. Here `ps` are *regrouped* parameters that live on
 the same device as `input`.
 """
-function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
+function predict(ps::NamedTuple, input::AbstractArray{<:Number, 3})
     x = input
     for l in 1:L
         # the multi head attention layer
@@ -462,14 +481,14 @@ function predict(ps::NamedTuple, input::AbstractArray{<:Number,3})
             Q = mat_tensor_mul(transpose(ps.Q[i]), x)
             K = mat_tensor_mul(transpose(ps.K[i]), x)
             V = mat_tensor_mul(transpose(ps.V[i]), x)
-            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims=1))
+            batched_mul(V, softmax(batched_mul(batched_transpose(Q), K) ./ sqrt(T(dim)); dims = 1))
         end
         y = add_connection ? x + reduce(vcat, heads) : reduce(vcat, heads)
         # the ResNet layer
         x = y + tanh.(mat_tensor_mul(ps.Wres[l], y) .+ ps.bres[l])
     end
     # the classification layer picks the last column and applies softmax
-    softmax(ps.Wclass * x[:, end, :]; dims=1)
+    softmax(ps.Wclass * x[:, end, :]; dims = 1)
 end
 
 """
@@ -477,7 +496,9 @@ end
 
 The equivalent of `GeometricMachineLearning.FeedForwardLoss`.
 """
-network_loss(ps::NamedTuple, input, output) = norm(predict(ps, input) - output) / norm(output)
+function network_loss(ps::NamedTuple, input, output)
+    norm(predict(ps, input) - output) / norm(output)
+end
 
 """
     accuracy(ps, input, output)
@@ -488,7 +509,7 @@ and `input`/`output` live on the host; only one chunk at a time is moved to the 
 `argmax`es are taken on the host, as an `argmax` per column would be a scalar index on the
 device.
 """
-function accuracy(ps::NamedTuple, input, output; chunk_size=batch_size)
+function accuracy(ps::NetworkParameters, input, output; chunk_size = batch_size)
     regrouped = regroup_device(ps)
     correct = 0
     for k in Iterators.partition(axes(input, 3), chunk_size)
@@ -504,9 +525,9 @@ end
 
 # The `Optimizer` calls the objective on the parameter `NamedTuple` and `∇F!` on the
 # *flattened* parameters, both of which live on the host. The current batch is on the device.
-const current_batch = Ref{Tuple{AbstractArray{T,3},AbstractMatrix{T}}}()
+const current_batch = Ref{Tuple{AbstractArray{T, 3}, AbstractMatrix{T}}}()
 
-function F(ps::NamedTuple)
+function F(ps::NetworkParameters)
     input, output = current_batch[]     # the function barrier keeps `network_loss` inferred
     network_loss(regroup_device(ps), input, output)
 end
@@ -521,6 +542,7 @@ function ∇F!(g::AbstractVector{T}, v::AbstractVector{T})
     ∂ps = Zygote.gradient(ps -> network_loss(ps, input, output), regroup_device(v))[1]
     # the gradient is assembled on the device and downloaded in a single transfer
     for l in 1:L, h in 1:n_heads
+
         i = (l - 1) * n_heads + h
         _write_gradient!(device_gradient, attention_index(1, l, h), ∂ps.Q[i])
         _write_gradient!(device_gradient, attention_index(2, l, h), ∂ps.K[i])
@@ -549,7 +571,7 @@ cancellation error of the difference quotient is of the same order as the quanti
 `ForwardDiff.derivative` needs a single dual number instead — and `ForwardDiff.Dual`s cannot
 be multiplied by `cuBLAS`, so this part has to run on the host anyway.
 """
-function check_gradient(ps::NamedTuple)
+function check_gradient(ps::NetworkParameters)
     v, _ = flatten(ps)
     g = zeros(T, length(v))
     ∇F!(g, v)
@@ -571,7 +593,7 @@ end
 The worst ``\|Y^TY - I\|`` over the attention projections, i.e. how far the parameters have
 drifted off the Stiefel manifold. `NaN` if they are not on a manifold to begin with.
 """
-function orthonormality_error(ps::NamedTuple)
+function orthonormality_error(ps::NetworkParameters)
     ps[1] isa StiefelManifold || return T(NaN)
     worst = zero(T)
     for i in 1:n_attention_parameters
@@ -587,7 +609,7 @@ end
 Every parameter is finite and still stored in `T`. A retraction that produced a `NaN`, or a
 step that silently promoted the parameters to `Float64`, shows up here.
 """
-function parameters_are_sound(ps::NamedTuple)
+function parameters_are_sound(ps::NetworkParameters)
     all(values(ps)) do p
         A = freeparameters(p)
         eltype(A) === T && all(isfinite, A)
@@ -620,11 +642,11 @@ machine that is about to be occupied for eight hours.
 function statistics(samples::AbstractVector{<:Real})
     finite = filter(isfinite, samples)
     n = length(finite)
-    n == 0 && return (n=0, mean=NaN, deviation=NaN, minimum=NaN, maximum=NaN)
+    n == 0 && return (n = 0, mean = NaN, deviation = NaN, minimum = NaN, maximum = NaN)
     μ = sum(finite) / n
     deviation = n < 2 ? oftype(float(μ), NaN) : sqrt(sum(abs2, finite .- μ) / (n - 1))
-    (n=n, mean=float(μ), deviation=deviation,
-        minimum=float(Base.minimum(finite)), maximum=float(Base.maximum(finite)))
+    (n = n, mean = float(μ), deviation = deviation,
+        minimum = float(Base.minimum(finite)), maximum = float(Base.maximum(finite)))
 end
 
 """
@@ -634,7 +656,7 @@ end
 number written by `format`. Empty and single-sample sets are printed rather than skipped: what
 a run produced is what the report says, including when that is one number.
 """
-function summarize(samples::AbstractVector{<:Real}; format=v -> @sprintf("%.4f", v))
+function summarize(samples::AbstractVector{<:Real}; format = v -> @sprintf("%.4f", v))
     s = statistics(samples)
     s.n == 0 && return "no samples"
     @sprintf("n = %i   mean %s   deviation %s   min %s   max %s   [%s]",
@@ -662,14 +684,16 @@ prefixed with.
 A non-finite epoch loss ends the run: the parameters cannot come back from it, and the point
 of noticing here is not to spend the remaining epochs proving that.
 """
-function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output,
-    test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
-    repetition::Integer, seed::Integer=seed, n_epochs=n_epochs, learning_rate=learning_rate)
+function train(
+        stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output,
+        test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
+        repetition::Integer, seed::Integer = seed, n_epochs = n_epochs, learning_rate = learning_rate)
     rng = Random.Xoshiro(seed)
     ps = initial_parameters(rng, stiefel)
 
     n_batches = size(input, 3) ÷ batch_size
-    current_batch[] = (to_device(input[:, :, 1:batch_size]), to_device(output[:, 1:batch_size]))
+    current_batch[] = (
+        to_device(input[:, :, 1:batch_size]), to_device(output[:, 1:batch_size]))
 
     # Note that the learning rate is supplied through the line search: the *methods* only
     # determine the direction. `Static(learning_rate)` is what `Optimizer` defaults to for
@@ -678,7 +702,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
     # Both are constructed per repetition, so no cache and no iteration counter survives from
     # the previous one — a repetition has to start where the corresponding run of
     # `mnist_cuda.jl` starts, or the statistics below are of something else.
-    optimizer = Optimizer(ps, F; (∇F!)=∇F!, algorithm=algorithm, linesearch=Static(learning_rate))
+    optimizer = Optimizer(
+        ps, F; (∇F!) = ∇F!, algorithm = algorithm, linesearch = Static(learning_rate))
     state = OptimizerState(algorithm, ps)
     initialize_state!(state)
 
@@ -696,7 +721,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
         epoch_start = time()
         # `solve!` cannot be used here: it optimizes a *fixed* objective until it converges,
         # whereas the objective changes with every batch.
-        batches = Iterators.take(Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
+        batches = Iterators.take(
+            Iterators.partition(Random.shuffle(rng, axes(input, 3)), batch_size), n_batches)
         epoch_loss = zero(T)
         for (i, batch) in pairs(collect(batches))
             # the batch is gathered on the host and uploaded; at 6.4 MB per batch this is
@@ -708,9 +734,11 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
             loss = F(ps)
             push!(losses, loss)
             epoch_loss += loss / n_batches
-            println(losses_io, run_index, ",\"", run_name, "\",", repetition, ",", epoch, ",", i,
+            println(losses_io, run_index, ",\"", run_name,
+                "\",", repetition, ",", epoch, ",", i,
                 ",", length(losses), ",", loss)
-            to_terminal && @printf("\r  epoch %4i/%i, batch %3i/%i, loss %.5f", epoch, n_epochs, i, n_batches, loss)
+            to_terminal && @printf("\r  epoch %4i/%i, batch %3i/%i, loss %.5f",
+                epoch, n_epochs, i, n_batches, loss)
         end
         synchronize_device()
         flush(losses_io)        # the CSV is complete to the last finished epoch, as the report is
@@ -719,7 +747,8 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
         note_device_memory()
 
         line = @sprintf("%s  epoch %4i/%-4i  avg loss %8.5f  last %8.5f  %6.1f s  elapsed %s",
-            label, epoch, n_epochs, epoch_loss, last(losses), last(epoch_times),
+            label, epoch, n_epochs, epoch_loss, last(losses),
+            last(epoch_times),
             duration(time() - initial_time))
         # the last epoch is always evaluated, so that every repetition ends on a measured accuracy
         if accuracy_every > 0 && (epoch % accuracy_every == 0 || epoch == n_epochs)
@@ -746,9 +775,10 @@ function train(stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, in
     synchronize_device()
     total_time = time() - initial_time
 
-    (parameters=ps, losses=losses, epoch_losses=epoch_losses, epoch_times=epoch_times,
-        accuracy_epochs=accuracy_epochs, accuracies=accuracies, orthonormalities=orthonormalities,
-        total_time=total_time, stopped=stopped)
+    (parameters = ps, losses = losses,
+        epoch_losses = epoch_losses, epoch_times = epoch_times,
+        accuracy_epochs = accuracy_epochs, accuracies = accuracies, orthonormalities = orthonormalities,
+        total_time = total_time, stopped = stopped)
 end
 
 # ------------------------------------------------------------------ configurations ---
@@ -762,10 +792,14 @@ end
 # converted the way `MomentumMethod` is, so `Adam(T)` is what dispatches to the `Float32`
 # cache.
 const configurations = Dict(
-    "adam-stiefel" => (name="Stiefel weights, Adam", stiefel=true, learns=true, algorithm=Adam(T)),
-    "adam-regular" => (name="regular weights, Adam", stiefel=false, learns=false, algorithm=Adam(T)),
-    "gradient" => (name="Stiefel weights, gradient", stiefel=true, learns=true, algorithm=GradientMethod()),
-    "momentum" => (name="Stiefel weights, momentum", stiefel=true, learns=true, algorithm=MomentumMethod(momentum_coefficient)),
+    "adam-stiefel" => (name = "Stiefel weights, Adam", stiefel = true,
+        learns = true, algorithm = Adam(T)),
+    "adam-regular" => (name = "regular weights, Adam", stiefel = false,
+        learns = false, algorithm = Adam(T)),
+    "gradient" => (name = "Stiefel weights, gradient", stiefel = true,
+        learns = true, algorithm = GradientMethod()),
+    "momentum" => (name = "Stiefel weights, momentum", stiefel = true,
+        learns = true, algorithm = MomentumMethod(momentum_coefficient))
 )
 
 # in the order of `mnist_cuda.jl`, so that a report of all four is read next to that one
@@ -780,7 +814,7 @@ run eight hours from now.
 """
 function selected_configurations()
     requested = get(ENV, "MNIST_CONFIGURATIONS", "adam-stiefel")
-    keys_requested = String.(strip.(split(lowercase(requested), ','; keepempty=false)))
+    keys_requested = String.(strip.(split(lowercase(requested), ','; keepempty = false)))
     "all" in keys_requested && return configuration_order
     unknown = filter(k -> !haskey(configurations, k), keys_requested)
     isempty(unknown) ||
@@ -795,7 +829,8 @@ const selected = selected_configurations()
 # One entry per training, in the order they are run: all repetitions of a configuration before
 # the next one, so that a run which is cut short has complete statistics for the configurations
 # it did reach rather than one repetition of each.
-const jobs = [(key=key, configuration=configurations[key], repetition=r, seed=repetition_seed(r))
+const jobs = [(key = key, configuration = configurations[key],
+                  repetition = r, seed = repetition_seed(r))
               for key in selected for r in 1:n_repetitions]
 
 # ------------------------------------------------------------------------------ data ---
@@ -803,8 +838,8 @@ const jobs = [(key=key, configuration=configurations[key], repetition=r, seed=re
 const script_start = time()
 
 println("loading MNIST ...")
-train_x, train_y = MLDatasets.MNIST(split=:train)[:]
-test_x, test_y = MLDatasets.MNIST(split=:test)[:]
+train_x, train_y = MLDatasets.MNIST(split = :train)[:]
+test_x, test_y = MLDatasets.MNIST(split = :test)[:]
 
 # the data set stays on the host; the batches are uploaded one at a time
 const train_input = split_and_flatten(T.(train_x), patch_length)
@@ -822,11 +857,15 @@ announce(@sprintf("%i parameters, batch size %i, %i batches per epoch, %i epochs
     n_parameters, batch_size, n_batches, n_epochs, n_epochs * n_batches))
 announce(@sprintf("%i repetition(s) of %i configuration(s) — %i trainings, %i steps in total",
     n_repetitions, length(selected), length(jobs), length(jobs) * n_epochs * n_batches))
-announce(@sprintf("configurations: %s", join((configurations[k].name for k in selected), "; ")))
+announce(@sprintf("configurations: %s",
+    join((configurations[k].name for k in selected), "; ")))
 announce(vary_seed ?
-         @sprintf("seeds: %s (one per repetition)", join((repetition_seed(r) for r in 1:n_repetitions), ", ")) :
-         @sprintf("seed: %i for every repetition — this measures the nondeterminism, not the spread of the method", seed))
-accuracy_every > 0 && announce(@sprintf("the test accuracy is evaluated every %i epoch(s)", accuracy_every))
+         @sprintf("seeds: %s (one per repetition)",
+    join((repetition_seed(r) for r in 1:n_repetitions), ", ")) :
+         @sprintf("seed: %i for every repetition — this measures the nondeterminism, not the spread of the method",
+    seed))
+accuracy_every > 0 &&
+    announce(@sprintf("the test accuracy is evaluated every %i epoch(s)", accuracy_every))
 announce()
 
 # -------------------------------------------------------------------- gradient check ---
@@ -834,7 +873,8 @@ announce()
 # As in `mnist_cuda.jl`, both cases are checked: the unconstrained configuration is expected to
 # stall, and the check separates the stall the experiment is about — a vanishing gradient in
 # the network — from a wrong `∇F!` on plain arrays, which would look the same from the outside.
-current_batch[] = (to_device(train_input[:, :, 1:batch_size]), to_device(train_output[:, 1:batch_size]))
+current_batch[] = (
+    to_device(train_input[:, :, 1:batch_size]), to_device(train_output[:, 1:batch_size]))
 
 const gradient_errors = map((true, false)) do stiefel
     # not `error`, which would shadow `Base.error` for the rest of the closure
@@ -869,7 +909,7 @@ the output of `mnist_cuda.jl` therefore reads this file as well, and gets the re
 they were separate configurations.
 """
 function save_results(results)
-    output = Dict{String,Any}("n_epochs" => n_epochs, "batch_size" => batch_size,
+    output = Dict{String, Any}("n_epochs" => n_epochs, "batch_size" => batch_size,
         "n_batches" => n_batches, "gradient_errors" => collect(gradient_errors),
         "n_results" => length(results), "n_repetitions" => n_repetitions,
         "vary_seed" => vary_seed, "seed" => seed,
@@ -892,16 +932,20 @@ function save_results(results)
     end
     for (key, of) in ("accuracy_samples" => (r -> r.accuracy),
         "drift_samples" => (r -> r.orthonormality),
-        "final_loss_samples" => (r -> isempty(r.epoch_losses) ? T(NaN) : last(r.epoch_losses)),
+        "final_loss_samples" =>
+        (r -> isempty(r.epoch_losses) ? T(NaN) : last(r.epoch_losses)),
         "time_samples" => (r -> r.total_time))
         output[key] = Dict(configurations[k].name =>
-            [of(r) for r in results if r.configuration == configurations[k].name] for k in selected)
+                               [of(r)
+                                for r in results
+                                if r.configuration == configurations[k].name]
+        for k in selected)
     end
     JLD2.save(output_path, output)
 end
 
 results = []
-failures = Tuple{String,String}[]
+failures = Tuple{String, String}[]
 
 for (j, job) in pairs(jobs)
     run = job.configuration
@@ -912,19 +956,23 @@ for (j, job) in pairs(jobs)
     label = @sprintf("[%i/%i %-28s]", j, length(jobs), name)
     announce(@sprintf("%s starting at %s, seed %i", label, timestamp(), job.seed))
     try
-        trained = train(run.stiefel, run.algorithm, train_input, train_output, test_input, test_output;
-            label=label, run_index=j, run_name=run.name, repetition=job.repetition, seed=job.seed,
-            n_epochs=n_epochs)
+        trained = train(
+            run.stiefel, run.algorithm, train_input, train_output, test_input, test_output;
+            label = label, run_index = j, run_name = run.name,
+            repetition = job.repetition, seed = job.seed,
+            n_epochs = n_epochs)
         score = T(accuracy(trained.parameters, test_input, test_output))
-        push!(results, (name=name, configuration=run.name, repetition=job.repetition, seed=job.seed,
-            stiefel=run.stiefel, learns=run.learns,
-            parameters=map(freeparameters, trained.parameters), losses=trained.losses,
-            epoch_losses=trained.epoch_losses, epoch_times=trained.epoch_times,
-            accuracy_epochs=trained.accuracy_epochs, accuracies=trained.accuracies,
-            orthonormalities=trained.orthonormalities,
-            total_time=trained.total_time, accuracy=score, stopped=trained.stopped,
-            orthonormality=orthonormality_error(trained.parameters),
-            sound=parameters_are_sound(trained.parameters)))
+        push!(results,
+            (name = name, configuration = run.name,
+                repetition = job.repetition, seed = job.seed,
+                stiefel = run.stiefel, learns = run.learns,
+                parameters = map(freeparameters, trained.parameters), losses = trained.losses,
+                epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
+                accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
+                orthonormalities = trained.orthonormalities,
+                total_time = trained.total_time, accuracy = score, stopped = trained.stopped,
+                orthonormality = orthonormality_error(trained.parameters),
+                sound = parameters_are_sound(trained.parameters)))
         announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
             duration(trained.total_time),
             trained.total_time / max(1, length(trained.losses)), score))
@@ -974,19 +1022,24 @@ function verdict(result)
     end
     # With a single epoch `first(epoch_losses)` *is* `last(epoch_losses)`, so the decrease has
     # to be read off the batches instead — otherwise every short run is "flat" by construction.
-    first_loss = length(result.epoch_losses) ≥ 2 ? first(result.epoch_losses) : first(result.losses)
+    first_loss = length(result.epoch_losses) ≥ 2 ? first(result.epoch_losses) :
+                 first(result.losses)
     last_loss = last(result.epoch_losses)
     if result.learns
         if !(last_loss < (1 - loss_decrease_floor) * first_loss)
             push!(reasons, @sprintf("loss flat (%.3f → %.3f)", first_loss, last_loss))
         end
-        if length(result.epoch_losses) ≥ accuracy_floor_min_epochs && result.accuracy < accuracy_floor
-            push!(reasons, @sprintf("accuracy %.4f below the floor of %.2f%s", result.accuracy,
-                accuracy_floor, result.accuracy < 2 * chance_accuracy ? ", i.e. at chance" : ""))
+        if length(result.epoch_losses) ≥ accuracy_floor_min_epochs &&
+           result.accuracy < accuracy_floor
+            push!(reasons,
+                @sprintf("accuracy %.4f below the floor of %.2f%s", result.accuracy,
+                    accuracy_floor,
+                    result.accuracy < 2 * chance_accuracy ? ", i.e. at chance" : ""))
         end
     elseif !(abs(last_loss - trivial_loss) ≤ trivial_loss_tolerance)
-        push!(reasons, @sprintf("expected the trivial-prediction plateau of %.3f, got %.3f",
-            trivial_loss, last_loss))
+        push!(reasons,
+            @sprintf("expected the trivial-prediction plateau of %.3f, got %.3f",
+                trivial_loss, last_loss))
     end
     isempty(reasons) ? "ok" : "FAILED: " * join(reasons, "; ")
 end
@@ -1013,7 +1066,8 @@ for (result, v) in zip(results, verdicts)
         v * (n_done < n_epochs ? " [$n_done of $n_epochs epochs]" : "")))
 end
 for (name, message) in failures
-    announce(@sprintf("%-29s %6s %8s %8s %10s %10s %10s   THREW: %s", name, "—", "—", "—", "—", "—", "—",
+    announce(@sprintf("%-29s %6s %8s %8s %10s %10s %10s   THREW: %s",
+        name, "—", "—", "—", "—", "—", "—",
         first(split(message, '\n'))))
 end
 
@@ -1028,11 +1082,13 @@ end
 
 `of` applied to every finished repetition of `configuration`, in the order they ran.
 """
-samples_of(configuration::AbstractString, of::Base.Callable) =
+function samples_of(configuration::AbstractString, of::Base.Callable)
     [of(r) for r in results if r.configuration == configuration]
+end
 
 announce()
-announce(@sprintf("over the repetitions%s —", vary_seed ? "" : " (same seed, so this is the nondeterminism alone)"))
+announce(@sprintf("over the repetitions%s —",
+    vary_seed ? "" : " (same seed, so this is the nondeterminism alone)"))
 for key in selected
     configuration = configurations[key].name
     accuracies = samples_of(configuration, r -> r.accuracy)
@@ -1041,13 +1097,16 @@ for key in selected
     announce(configuration)
     announce("  test accuracy     " * summarize(accuracies))
     announce("  final epoch loss  " *
-             summarize(samples_of(configuration, r -> isempty(r.epoch_losses) ? T(NaN) : last(r.epoch_losses));
-                 format=v -> @sprintf("%.4f", v)))
+             summarize(
+        samples_of(configuration, r -> isempty(r.epoch_losses) ? T(NaN) :
+                                       last(r.epoch_losses));
+        format = v -> @sprintf("%.4f", v)))
     drifts = samples_of(configuration, r -> r.orthonormality)
     any(isfinite, drifts) &&
-        announce("  ‖YᵀY-I‖          " * summarize(drifts; format=v -> @sprintf("%.2e", v)))
+        announce("  ‖YᵀY-I‖          " *
+                 summarize(drifts; format = v -> @sprintf("%.2e", v)))
     announce("  time              " *
-             summarize(samples_of(configuration, r -> r.total_time); format=duration))
+             summarize(samples_of(configuration, r -> r.total_time); format = duration))
 end
 
 # The learning curves of every repetition, so that the shape of each is in the report and not
@@ -1059,7 +1118,10 @@ if accuracy_every > 0
     for result in results
         isempty(result.accuracies) && continue
         announce(@sprintf("%-29s %s", result.name,
-            join((@sprintf("%i:%.4f", e, a) for (e, a) in zip(result.accuracy_epochs, result.accuracies)), "  ")))
+            join(
+                (@sprintf("%i:%.4f", e, a)
+                for (e, a) in zip(result.accuracy_epochs, result.accuracies)),
+                "  ")))
     end
 
     # The same series for the drift off the manifold. Whether this grows with the step count or
@@ -1068,15 +1130,20 @@ if accuracy_every > 0
     announce()
     announce("‖YᵀY-I‖ over the run, as epoch:drift —")
     for result in results
-        (isempty(result.orthonormalities) || all(isnan, result.orthonormalities)) && continue
+        (isempty(result.orthonormalities) || all(isnan, result.orthonormalities)) &&
+            continue
         announce(@sprintf("%-29s %s", result.name,
-            join((@sprintf("%i:%.1e", e, d) for (e, d) in zip(result.accuracy_epochs, result.orthonormalities)), "  ")))
+            join(
+                (@sprintf("%i:%.1e", e, d)
+                for (e, d) in zip(result.accuracy_epochs, result.orthonormalities)),
+                "  ")))
     end
 end
 
 const n_passed = count(==("ok"), verdicts)
 const threw = isempty(failures) ? "" : @sprintf(", %i threw", length(failures))
-const memory_note = use_cuda ? @sprintf(" Peak device memory %i MB of %i MB.",
+const memory_note = use_cuda ?
+                    @sprintf(" Peak device memory %i MB of %i MB.",
     peak_used[] ÷ 1024^2, Int(CUDA.totalmem(CUDA.device())) ÷ 1024^2) : ""
 
 announce()

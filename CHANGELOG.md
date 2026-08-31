@@ -65,6 +65,25 @@ breaking release).
   12,000-epoch architecture that demonstrated this behavior experimentally, prefers CUDA when
   available, falls back to the host, and saves the trained parameters and loss curve with HDF5.
 
+### Changed
+
+- **The MNIST scripts keep the parameters in a `NetworkParameters` rather than a bare `NamedTuple`.**
+  `GeometricOptimizers` 0.7.0 takes a whole set of parameters only as a container: the alias it used to
+  accept, `ArrayNamedTuple{T,S} = NamedTuple{S,<:Tuple{Vararg{AbstractArray{T}}}}`, was an alias for
+  `Base.NamedTuple`, so every method on it was a method on a `Base` type — which is what made it
+  unfixable in place and what caused four reachable `_copyto!` ambiguities upstream.
+
+  The change is the wrap in `initial_parameters` and the type annotations that follow it. The wrap
+  **shares the leaf arrays**, and the container forwards `keys`, `values`, `ps[i]`, `ps.field` and
+  `length`, so `regroup`, `F`, `∇F!`, `flatten_parameters!` and the by-hand flat-vector indexing are
+  unchanged — the flat layout is still read off `parameterlayout`, which is what makes the script's
+  ranges and the optimizer's flattening agree by construction.
+
+  All **five** scripts, not the two the ecosystem plan listed: `mnist.jl`, `mnist_cuda.jl`,
+  `mnist_cuda_repetitions.jl`, `mnist_metal.jl` and `mnist_metal_short.jl`. `predict` and
+  `network_loss` keep their `::NamedTuple` annotations — those take the *regrouped* parameters, which
+  are a `NamedTuple` of vectors of matrices and not a parameter set at all.
+
 ## [0.1.0]
 
 Initial release. Nothing here is new code — it is the MLDatasets-dependent material extracted from

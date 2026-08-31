@@ -22,6 +22,9 @@ usage() {
 usage: $0 [--smoke|--full] [--stages LIST] [--seeds LIST]
           [--configurations LIST] [--output-dir DIR] [--resume-dir DIR] [--allow-dirty]
           [--allow-any-gpu] [--allow-no-cuda] [--retraction-repo DIR]
+
+MNIST and Fashion-MNIST run records use schema 4 and report exclusive gradient/AD,
+optimizer-state/direction, and retraction/application timing. See scripts/revision/README.md.
 USAGE
 }
 
@@ -64,8 +67,9 @@ fi
 
 if [[ "$mode" == full && "${GML_ALLOW_INCOMPLETE_MATRIX:-0}" != 1 ]]; then
     cat >&2 <<'MESSAGE'
-full revision runs remain blocked until the remaining timing and retraction-record schema, smoke,
-and release gates are complete. The `scalar-moment-adam` mixed-tree baseline is present and selected by `all`.
+full revision runs remain blocked until the retraction-record schema, smoke, and release gates are
+complete. Decomposed timing and schema 4 documentation are complete. The `scalar-moment-adam`
+mixed-tree baseline is present and selected by `all`.
 GML_ALLOW_INCOMPLETE_MATRIX=1 temporarily bypasses only this development gate; do not use output
 created with it as the complete reviewer-response experiment.
 MESSAGE

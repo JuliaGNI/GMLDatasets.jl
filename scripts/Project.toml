@@ -31,12 +31,12 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 # `GMLDatasets` is not registered, so it is reached by path. `GeometricMachineLearning` used to be
 # here too, pinned to `main`, because the container work these scripts are written against was
-# unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
+# unreleased; 0.7.0 carries it, so the environment resolves it from the registry like everything else.
 [sources]
 GMLDatasets = {path = ".."}
 
 [compat]
-GeometricMachineLearning = "= 0.6.1"
-GeometricOptimizers = "= 0.6.0"
-NeuralNetworkParameters = "= 0.2.5"
+GeometricMachineLearning = "= 0.7.0"
+GeometricOptimizers = "= 0.7.0"
+NeuralNetworkParameters = "= 0.3.0"
 julia = "1.11"

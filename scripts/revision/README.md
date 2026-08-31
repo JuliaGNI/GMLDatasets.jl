@@ -13,8 +13,8 @@ julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 ```
 
 The checked-in manifest records the reviewed revision-experiment stack:
-`GeometricMachineLearning` v0.6.1, `GeometricOptimizers` v0.6.0, and
-`NeuralNetworkParameters` v0.2.5. The scripts project pins those exact releases and the environment
+`GeometricMachineLearning` v0.7.0, `GeometricOptimizers` v0.7.0, and
+`NeuralNetworkParameters` v0.3.0. The scripts project pins those exact releases and the environment
 preflight rejects substitutions. Instantiate the committed manifest from a clean checkout before
 producing paper results.
 

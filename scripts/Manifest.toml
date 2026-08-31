@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.6"
+julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "a684f72c90191bb9d9cf4cee66cefa996dda80b9"
+project_hash = "845a8382161f1a7e36ffa52bfccce5b617a5b362"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -38,9 +38,9 @@ weakdeps = ["ChainRulesCore", "Test"]
 
 [[deps.AbstractNeuralNetworks]]
 deps = ["GPUArraysCore", "KernelAbstractions", "LinearAlgebra", "NeuralNetworkParameters", "Random", "StaticArrays", "ZygoteRules"]
-git-tree-sha1 = "568b13f67e87612dc1db6a8c9f1e59ac2e21fdc7"
+git-tree-sha1 = "5b510d8296a12c953ad2066afffae7c2adcdf3c3"
 uuid = "60874f82-5ada-4c70-bd1c-fa6be7711c8a"
-version = "0.7.2"
+version = "0.8.0"
 
 [[deps.AbstractPlutoDingetjes]]
 git-tree-sha1 = "6c3913f4e9bdf6ba3c08041a446fb1332716cbc2"
@@ -116,9 +116,9 @@ version = "0.4.0"
 
 [[deps.ArrayInterface]]
 deps = ["Adapt", "LinearAlgebra"]
-git-tree-sha1 = "13f3b228c230ef0b4ecafd73c8ca9e99987ca692"
+git-tree-sha1 = "daf5b2aab5b1c1fdcb65b05883cdb4b18abac1b9"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "7.30.0"
+version = "7.30.1"
 
     [deps.ArrayInterface.extensions]
     ArrayInterfaceAMDGPUExt = "AMDGPU"
@@ -130,6 +130,7 @@ version = "7.30.0"
     ArrayInterfaceChainRulesExt = "ChainRules"
     ArrayInterfaceFillArraysExt = "FillArrays"
     ArrayInterfaceGPUArraysCoreExt = "GPUArraysCore"
+    ArrayInterfaceGPUArraysCoreTrackerExt = ["GPUArraysCore", "Tracker"]
     ArrayInterfaceMetalExt = "Metal"
     ArrayInterfaceReverseDiffExt = "ReverseDiff"
     ArrayInterfaceSparseArraysExt = "SparseArrays"
@@ -505,7 +506,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.3.0+1"
+version = "1.3.1+2"
 
 [[deps.CompositeTypes]]
 git-tree-sha1 = "bce26c3dab336582805503bed209faab1c279768"
@@ -675,9 +676,9 @@ version = "0.9.5"
 
 [[deps.Documenter]]
 deps = ["ANSIColoredPrinters", "AbstractTrees", "Base64", "CodecZlib", "Dates", "DocStringExtensions", "Downloads", "Git", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "MarkdownAST", "Pkg", "PrecompileTools", "REPL", "RegistryInstances", "SHA", "TOML", "Test", "Unicode"]
-git-tree-sha1 = "56e9c37b5e7c3b4f080ab1da18d72d5c290e184a"
+git-tree-sha1 = "17d7a103a75db0d3f8c5764d51e478341a905c36"
 uuid = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-version = "1.17.0"
+version = "1.18.0"
 
 [[deps.DomainSets]]
 deps = ["CompositeTypes", "FunctionMaps", "IntervalSets", "LinearAlgebra", "StaticArrays"]
@@ -697,9 +698,9 @@ version = "1.7.0"
 
 [[deps.DynamicPolynomials]]
 deps = ["LinearAlgebra", "MultivariatePolynomials", "MutableArithmetics", "Reexport", "StarAlgebras"]
-git-tree-sha1 = "52d08670b4630523d027b84c2b888fe958ac82e7"
+git-tree-sha1 = "b95c4325301d86a6a1b59790b71f7269a8702dd5"
 uuid = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
-version = "0.6.7"
+version = "0.6.8"
 
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -955,9 +956,9 @@ version = "0.6.4"
 
 [[deps.GeometricMachineLearning]]
 deps = ["AbstractNeuralNetworks", "ChainRulesCore", "Distances", "ForwardDiff", "GeometricBase", "GeometricEquations", "GeometricOptimizers", "GeometricSolutions", "InteractiveUtils", "KernelAbstractions", "LinearAlgebra", "NNlib", "NeuralNetworkParameters", "ProgressMeter", "Random", "SymbolicNeuralNetworks", "Symbolics", "TimerOutputs", "Zygote"]
-git-tree-sha1 = "40934a3cd051ffc7701d7e30ae5cd24fcb5d3493"
+git-tree-sha1 = "f6edbad345e6670d4a007c6a2fb86e155f0ac214"
 uuid = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
-version = "0.6.1"
+version = "0.7.0"
 weakdeps = ["HDF5"]
 
     [deps.GeometricMachineLearning.extensions]
@@ -965,9 +966,9 @@ weakdeps = ["HDF5"]
 
 [[deps.GeometricOptimizers]]
 deps = ["ChainRulesCore", "GeometricBase", "KernelAbstractions", "LazyArrays", "LinearAlgebra", "NeuralNetworkParameters", "Printf", "Random", "SimpleSolvers"]
-git-tree-sha1 = "17744feae1e171c1aa8349ce5a8b55b500d8e585"
+git-tree-sha1 = "30935ae5a06f6cb4eed8d0970bf965d7e497d063"
 uuid = "fc236c15-5557-4942-aa65-b650f329279e"
-version = "0.6.0"
+version = "0.7.0"
 weakdeps = ["AbstractNeuralNetworks"]
 
     [deps.GeometricOptimizers.extensions]
@@ -1003,9 +1004,9 @@ version = "0.6.5"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "LinearAlgebra", "PrecompileTools", "Random", "StaticArrays"]
-git-tree-sha1 = "364685f5ffde25deb1bbcfd5bb278a5c6b7a9b37"
+git-tree-sha1 = "592cfb5ed8b02804f6a9c04091571c393081f73a"
 uuid = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-version = "0.5.11"
+version = "0.5.12"
 
     [deps.GeometryBasics.extensions]
     ExtentsExt = "Extents"
@@ -1850,10 +1851,10 @@ uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.3.0"
 
 [[deps.NeuralNetworkParameters]]
-deps = ["ChainRulesCore"]
-git-tree-sha1 = "2ef340a27021641867edcf0a4cab4d8ba9577899"
+deps = ["ChainRulesCore", "GeometricBase"]
+git-tree-sha1 = "5ebe0b8228d8d7fc04f65b3538e45b6d4a2ddd37"
 uuid = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
-version = "0.2.5"
+version = "0.3.0"
 weakdeps = ["HDF5", "ZygoteRules"]
 
     [deps.NeuralNetworkParameters.extensions]
@@ -1929,7 +1930,7 @@ version = "1.6.1"
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
-version = "3.5.4+0"
+version = "3.5.6+0"
 
 [[deps.OpenSpecFun_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
@@ -2362,15 +2363,17 @@ version = "1.2.0"
 
 [[deps.SimpleSolvers]]
 deps = ["Distances", "ForwardDiff", "GeometricBase", "LinearAlgebra", "NaNMath", "Printf", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "b3200b46ecc8347942fe784182fef18914a9f1f9"
+git-tree-sha1 = "d3c550f645d3664d04c361571447060c7e67dc55"
 uuid = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
-version = "0.13.1"
+version = "0.13.2"
 
     [deps.SimpleSolvers.extensions]
+    SimpleSolversNeuralNetworkParametersExt = "NeuralNetworkParameters"
     SimpleSolversRecursiveFactorizationExt = "RecursiveFactorization"
     SimpleSolversSparspakExt = "Sparspak"
 
     [deps.SimpleSolvers.weakdeps]
+    NeuralNetworkParameters = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
     RecursiveFactorization = "f2c3362d-daeb-58d1-803e-2bc74f2840b4"
     Sparspak = "e56a9233-b9d6-4f03-8d0f-1825330902ac"
 
@@ -2575,15 +2578,15 @@ weakdeps = ["PrettyTables"]
 
 [[deps.SymbolicLimits]]
 deps = ["PrecompileTools", "SymbolicUtils", "TermInterface"]
-git-tree-sha1 = "b91d6510d807c553ea3da356a9bcc40393e10b3c"
+git-tree-sha1 = "3780b4d8aaa1db8996a67146ac7d4ac20606f56e"
 uuid = "19f23fe9-fdab-4a78-91af-e7b7767979c3"
-version = "1.2.0"
+version = "1.2.1"
 
 [[deps.SymbolicNeuralNetworks]]
 deps = ["AbstractNeuralNetworks", "Latexify", "LinearAlgebra", "NeuralNetworkParameters", "RuntimeGeneratedFunctions", "SymbolicUtils", "Symbolics"]
-git-tree-sha1 = "501df3e8d863f4c8a883ee83a5de2a45ae620352"
+git-tree-sha1 = "fb2974635c84ce1a5b537b8248c5918ceb6b2693"
 uuid = "aed23131-dcd0-47ca-8090-d21e605652e3"
-version = "0.7.1"
+version = "0.8.1"
 
 [[deps.SymbolicUtils]]
 deps = ["AbstractTrees", "ArrayInterface", "Combinatorics", "ConstructionBase", "DataStructures", "DocStringExtensions", "DynamicPolynomials", "EnumX", "ExproniconLite", "Graphs", "LinearAlgebra", "MacroTools", "Moshi", "MultivariatePolynomials", "MutableArithmetics", "NaNMath", "OrderedCollections", "PrecompileTools", "ReadOnlyArrays", "SciMLPublic", "Setfield", "SparseArrays", "SpecialFunctions", "StaticArraysCore", "SymbolicIndexingInterface", "TaskLocalValues", "TermInterface", "WeakCacheSets"]
@@ -2885,9 +2888,9 @@ version = "1.5.7+1"
 
 [[deps.Zygote]]
 deps = ["AbstractFFTs", "ChainRules", "ChainRulesCore", "DiffRules", "Distributed", "FillArrays", "ForwardDiff", "GPUArraysCore", "IRTools", "InteractiveUtils", "LinearAlgebra", "LogExpFunctions", "MacroTools", "NaNMath", "PrecompileTools", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "ZygoteRules"]
-git-tree-sha1 = "b6a713b80d2b8fd515bf46e9c499dd9cb96bae3d"
+git-tree-sha1 = "a1ec45a8a0adee4d581a37f7e1a0fb401c1cb113"
 uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
-version = "0.7.12"
+version = "0.7.13"
 
     [deps.Zygote.extensions]
     ZygoteAtomExt = "Atom"

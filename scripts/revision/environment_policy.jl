@@ -1,7 +1,7 @@
 const MINIMUM_JULIA_VERSION = v"1.11.0"
-const REQUIRED_GML_VERSION = v"0.6.1"
-const REQUIRED_GO_VERSION = v"0.6.0"
-const REQUIRED_NNP_VERSION = v"0.2.5"
+const REQUIRED_GML_VERSION = v"0.7.0"
+const REQUIRED_GO_VERSION = v"0.7.0"
+const REQUIRED_NNP_VERSION = v"0.3.0"
 
 """Validate the reviewed dependency stack used by the revision experiments."""
 function validate_environment_versions(

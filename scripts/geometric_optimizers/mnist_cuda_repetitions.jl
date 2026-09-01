@@ -99,6 +99,7 @@
 using GeometricOptimizers
 using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!,
                            observe_optimizer_phase
+using GMLDatasets: split_and_flatten, onehotbatch
 # `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
 # package that owns a parameter set and does its flattening. This script used to reach the old one
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
@@ -325,41 +326,6 @@ const trivial_loss_tolerance = T(0.05)
 const orthonormality_tolerance = T(1e-2)
 const accuracy_floor_min_epochs = 50
 const gradient_tolerance = 1e-4
-
-# ----------------------------------------------------------------------------- data ---
-
-@doc raw"""
-    split_and_flatten(input, patch_length)
-
-Rearrange a batch of images into *flattened patches*, i.e. turn an ``(N, N, k)`` array into
-an ``(\mathtt{patch\_length}^2, (N \div \mathtt{patch\_length})^2, k)`` array.
-
-This is the equivalent of `GeometricMachineLearning.split_and_flatten` and produces the same
-ordering: the patches are numbered column-major over the image and the entries within a
-patch are numbered column-major as well.
-"""
-function split_and_flatten(input::AbstractArray{<:Number, 3}, patch_length::Integer)
-    @assert size(input, 1) == size(input, 2)
-    @assert size(input, 1) % patch_length == 0
-    n = size(input, 1) ÷ patch_length
-    # (i_red, patch_row, j_red, patch_column, k) → (i_red, j_red, patch_row, patch_column, k)
-    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (
-        1, 3, 2, 4, 5))
-    reshape(output, patch_length^2, n^2, size(input, 3))
-end
-
-"""
-    onehotbatch(target)
-
-Turn a vector of labels (`0` to `9`) into a `10`×`length(target)` matrix of unit vectors.
-"""
-function onehotbatch(target::AbstractVector{<:Integer})
-    output = zeros(T, n_classes, length(target))
-    for (k, label) in pairs(target)
-        output[label + 1, k] = one(T)
-    end
-    output
-end
 
 # ----------------------------------------------------------------------- parameters ---
 
@@ -979,10 +945,12 @@ if test_samples > 0
 end
 
 # the data set stays on the host; the batches are uploaded one at a time
-const train_input = split_and_flatten(T.(train_x), patch_length)
-const train_output = onehotbatch(train_y)
-const test_input = split_and_flatten(T.(test_x), patch_length)
-const test_output = onehotbatch(test_y)
+const train_input = split_and_flatten(
+    T.(train_x); patch_length=patch_length, number_of_patches=seq_length)
+const train_output = reshape(onehotbatch(T, train_y), n_classes, length(train_y))
+const test_input = split_and_flatten(
+    T.(test_x); patch_length=patch_length, number_of_patches=seq_length)
+const test_output = reshape(onehotbatch(T, test_y), n_classes, length(test_y))
 
 @assert size(train_input) == (dim, seq_length, size(train_x, 3))
 

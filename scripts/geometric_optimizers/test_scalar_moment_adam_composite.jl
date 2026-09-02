@@ -117,8 +117,9 @@ include(joinpath(@__DIR__, "scalar_moment_adam_composite.jl"))
     # solver step merely copy slices and remain inside optimizer-state time. With three leaves,
     # every step performs two sentinel objectives and three retraction/application operations per
     # leaf (NaN guard, accepted application, and state-section update).
-    @test timer.optimizer_calls == 2
-    @test timer.gradient_calls == 2
-    @test timer.objective_calls == 2 * length(composite.leaves) * 2
-    @test timer.retraction_calls == 3 * length(composite.leaves) * 2
+    @test timer.calls[:optimizer_state_direction] == 2
+    @test timer.calls[:gradient] == 2
+    @test timer.calls[:objective] == 2 * length(composite.leaves) * 2
+    @test timer.calls[:retraction_application] == 3 * length(composite.leaves) * 2
+    @test step_timing(timer, 2).timed_steps == 2
 end

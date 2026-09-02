@@ -29,5 +29,8 @@ println("geometric_optimizers_version=", go_version)
 println("neural_network_parameters_version=", nnp_version)
 
 validate_environment_versions(VERSION, gml_version, go_version, nnp_version)
+isdefined(GeometricOptimizers, :PhaseTimer) || error(
+    "GeometricOptimizers must provide PhaseTimer from JuliaGNI/GeometricOptimizers.jl#78")
+println("geometric_optimizers_phase_timer=true")
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
 functional && CUDA.versioninfo()

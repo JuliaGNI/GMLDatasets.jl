@@ -831,7 +831,7 @@ function train(
     end
     synchronize_device()
     total_time = time() - initial_time
-    timing = step_timing(timer)
+    timing = step_timing(timer, length(losses))
     timing.timed_steps == length(losses) || error(
         "timing recorded $(timing.timed_steps) steps for $(length(losses)) completed steps")
     all(value -> isfinite(value) && value >= 0, step_timing_csv_values(timing)) ||

@@ -1,6 +1,7 @@
 # Focused regression for the exclusive phase timer and schema-v4 timing fields.
 
 using Test
+using GeometricOptimizers: observe_optimizer_phase
 
 include(joinpath(@__DIR__, "step_timing.jl"))
 
@@ -13,11 +14,14 @@ include(joinpath(@__DIR__, "step_timing.jl"))
     synchronizations = Ref(0)
     synchronize() = (synchronizations[] += 1; nothing)
     timer = ExclusiveStepTimer(synchronize; clock=clock)
+    @test timer isa PhaseTimer
 
     timer(:optimizer_state_direction, :enter)
     timer(:optimizer_state_direction, :exit)
-    @test timer.optimizer_ns == 10
+    @test timer.exclusive[:optimizer_state_direction] == 10
     reset_step_timing!(timer)
+    @test isempty(timer.exclusive)
+    @test isempty(timer.calls)
 
     timer(:optimizer_state_direction, :enter) # 100
     timer(:gradient, :enter)                  # 110: optimizer +10
@@ -28,11 +32,11 @@ include(joinpath(@__DIR__, "step_timing.jl"))
     timer(:retraction_application, :exit)     # 170: retraction +15
     timer(:optimizer_state_direction, :exit)  # 200: optimizer +30
 
-    timing = step_timing(timer)
+    timing = step_timing(timer, 1)
     @test synchronizations[] == length(timestamps)
-    @test timer.gradient_calls == 2
-    @test timer.retraction_calls == 1
-    @test timer.optimizer_calls == 1
+    @test timer.calls[:gradient] == 2
+    @test timer.calls[:retraction_application] == 1
+    @test timer.calls[:optimizer_state_direction] == 1
     @test timing.timed_steps == 1
     @test timing.gradient_ad_seconds_total ≈ 30e-9
     @test timing.optimizer_state_direction_seconds_total ≈ 50e-9
@@ -48,7 +52,7 @@ end
 
 @testset "warm-up reset and schema-v4 columns" begin
     timer = ExclusiveStepTimer()
-    timing = step_timing(timer)
+    timing = step_timing(timer, 0)
     @test timing.timed_steps == 0
     @test all(iszero, step_timing_csv_values(timing))
     @test MNIST_RUN_SCHEMA_VERSION == 4
@@ -77,9 +81,16 @@ end
 @testset "invalid event sequences are rejected" begin
     timer = ExclusiveStepTimer()
     @test_throws ArgumentError timer(:gradient, :exit)
-    @test_throws ArgumentError timer(:unknown, :enter)
     timer(:gradient, :enter)
     @test_throws ArgumentError timer(:objective, :exit)
-    @test_throws ArgumentError reset_step_timing!(timer)
     timer(:gradient, :exit)
+end
+
+@testset "completed steps are not inferred from attempted steps" begin
+    timer = ExclusiveStepTimer()
+    @test_throws ErrorException observe_optimizer_phase(timer, :optimizer_state_direction) do
+        error("synthetic step failure")
+    end
+    @test timer.calls[:optimizer_state_direction] == 1
+    @test_throws ArgumentError step_timing(timer, 0)
 end

@@ -13,10 +13,12 @@ julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 ```
 
 The checked-in manifest records the reviewed revision-experiment stack:
-`GeometricMachineLearning` v0.7.0, `GeometricOptimizers` v0.7.0, and
-`NeuralNetworkParameters` v0.3.0. The scripts project pins those exact releases and the environment
-preflight rejects substitutions. Instantiate the committed manifest from a clean checkout before
-producing paper results.
+`GeometricMachineLearning` v0.7.0, `NeuralNetworkParameters` v0.3.0, and temporarily the exact
+`c3c3c67` head of
+[`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78).
+The Git revision supplies the observer and `PhaseTimer` used by the timing adapter below. Replace
+it with the exact registry release containing PR #78 before freezing or running the experiment
+head. The environment preflight checks both the reviewed versions and the presence of `PhaseTimer`.
 
 The full run rejects a dirty tree and any CUDA device whose name does not contain `RTX 4090`.
 Use `--allow-dirty` only deliberately; the patch and status are included in the bundle. Use

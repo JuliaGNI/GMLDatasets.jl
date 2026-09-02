@@ -1,12 +1,14 @@
-# Exclusive timing for one optimizer step.
+# Schema-v4 adapter for GeometricOptimizers' exclusive phase timer.
 #
-# `GeometricOptimizers` emits properly nested phase events. This observer synchronizes the active
-# device before taking every boundary timestamp and pauses an outer phase while a nested phase is
-# running. The three reported categories are therefore disjoint; objective/merit evaluations are
-# observed only so that they are not mislabeled as optimizer-state work.
+# `GeometricOptimizers.PhaseTimer` synchronizes the active device before taking every boundary
+# timestamp and pauses an outer phase while a nested phase is running. The three reported
+# categories are therefore disjoint; objective/merit evaluations are observed only so that they
+# are not mislabeled as optimizer-state work.
 #
 # This file contains definitions only so the focused regression can exercise the same timer and
 # schema helpers as the trainer without loading data or starting an experiment.
+
+using GeometricOptimizers: PhaseTimer
 
 const MNIST_RUN_SCHEMA_VERSION = 4
 const STEP_TIMING_CSV_COLUMNS = (
@@ -28,81 +30,12 @@ the timer makes the CPU path independent of CUDA while preserving the same bound
 step_timing_synchronizer(device_active::Bool, synchronize) =
     device_active ? synchronize : (() -> nothing)
 
-mutable struct ExclusiveStepTimer{S,C}
-    synchronize::S
-    clock::C
-    stack::Vector{Symbol}
-    started_ns::UInt64
-    gradient_ns::UInt64
-    objective_ns::UInt64
-    optimizer_ns::UInt64
-    retraction_ns::UInt64
-    gradient_calls::Int
-    objective_calls::Int
-    optimizer_calls::Int
-    retraction_calls::Int
-end
+const STEP_TIMING_PHASES =
+    (:gradient, :objective, :optimizer_state_direction, :retraction_application)
 
-function ExclusiveStepTimer(synchronize=(() -> nothing); clock=time_ns)
-    ExclusiveStepTimer(synchronize, clock, Symbol[], UInt64(0), UInt64(0), UInt64(0),
-        UInt64(0), UInt64(0), 0, 0, 0, 0)
-end
-
-function _add_phase_time!(timer::ExclusiveStepTimer, phase::Symbol, elapsed_ns::UInt64)
-    if phase === :gradient
-        timer.gradient_ns += elapsed_ns
-    elseif phase === :objective
-        timer.objective_ns += elapsed_ns
-    elseif phase === :optimizer_state_direction
-        timer.optimizer_ns += elapsed_ns
-    elseif phase === :retraction_application
-        timer.retraction_ns += elapsed_ns
-    else
-        throw(ArgumentError("unknown optimizer phase: $phase"))
-    end
-    nothing
-end
-
-function _complete_phase!(timer::ExclusiveStepTimer, phase::Symbol)
-    if phase === :gradient
-        timer.gradient_calls += 1
-    elseif phase === :objective
-        timer.objective_calls += 1
-    elseif phase === :optimizer_state_direction
-        timer.optimizer_calls += 1
-    elseif phase === :retraction_application
-        timer.retraction_calls += 1
-    else
-        throw(ArgumentError("unknown optimizer phase: $phase"))
-    end
-    nothing
-end
-
-function (timer::ExclusiveStepTimer)(phase::Symbol, event::Symbol)
-    if event === :enter
-        phase in (:gradient, :objective, :optimizer_state_direction,
-            :retraction_application) || throw(ArgumentError("unknown optimizer phase: $phase"))
-        timer.synchronize()
-        now = UInt64(timer.clock())
-        isempty(timer.stack) ||
-            _add_phase_time!(timer, last(timer.stack), now - timer.started_ns)
-        push!(timer.stack, phase)
-        timer.started_ns = now
-    elseif event === :exit
-        isempty(timer.stack) && throw(ArgumentError("cannot exit $phase: no timing phase is active"))
-        last(timer.stack) === phase || throw(ArgumentError(
-            "cannot exit $phase while $(last(timer.stack)) is active"))
-        timer.synchronize()
-        now = UInt64(timer.clock())
-        _add_phase_time!(timer, phase, now - timer.started_ns)
-        pop!(timer.stack)
-        _complete_phase!(timer, phase)
-        timer.started_ns = now
-    else
-        throw(ArgumentError("unknown optimizer phase event: $event"))
-    end
-    nothing
-end
+"""Construct the upstream exclusive timer with the phases used by schema v4."""
+ExclusiveStepTimer(synchronize=(() -> nothing); clock=time_ns) =
+    PhaseTimer(; phases=STEP_TIMING_PHASES, synchronize, clock)
 
 """
     reset_step_timing!(timer)
@@ -111,34 +44,29 @@ Clear every accumulated duration and call count. The orchestrator performs compi
 an unrecorded step and reconstructs the seeded training state; this reset is the boundary between
 that discarded sample and the measured run.
 """
-function reset_step_timing!(timer::ExclusiveStepTimer)
-    isempty(timer.stack) || throw(ArgumentError("cannot reset timing while a phase is active"))
-    timer.started_ns = UInt64(0)
-    timer.gradient_ns = UInt64(0)
-    timer.objective_ns = UInt64(0)
-    timer.optimizer_ns = UInt64(0)
-    timer.retraction_ns = UInt64(0)
-    timer.gradient_calls = 0
-    timer.objective_calls = 0
-    timer.optimizer_calls = 0
-    timer.retraction_calls = 0
-    timer
-end
+reset_step_timing!(timer::PhaseTimer) = empty!(timer)
 
 """
-    step_timing(timer)
+    step_timing(timer, completed_steps)
 
 Return schema-v4 totals and per-completed-step values in seconds. Objective evaluations are
 intentionally absent: observing them makes the three requested categories exclusive, but does not
-turn forward/merit evaluation into optimizer-state work.
+turn forward/merit evaluation into optimizer-state work. `completed_steps` comes from the loss
+series rather than `PhaseTimer.calls`, whose entry count also includes a step that later throws.
 """
-function step_timing(timer::ExclusiveStepTimer)
-    isempty(timer.stack) || throw(ArgumentError("cannot snapshot timing while a phase is active"))
-    steps = timer.optimizer_calls
+function step_timing(timer::PhaseTimer, completed_steps::Integer)
+    completed_steps >= 0 || throw(ArgumentError("completed_steps must be nonnegative"))
+    attempted_steps = get(timer.calls, :optimizer_state_direction, 0)
+    attempted_steps == completed_steps || throw(ArgumentError(
+        "timing recorded $attempted_steps optimizer-step attempts for " *
+        "$completed_steps completed steps"))
+    steps = Int(completed_steps)
     divisor = max(steps, 1)
-    gradient_seconds = Float64(timer.gradient_ns) * 1.0e-9
-    optimizer_seconds = Float64(timer.optimizer_ns) * 1.0e-9
-    retraction_seconds = Float64(timer.retraction_ns) * 1.0e-9
+    gradient_seconds = Float64(get(timer.exclusive, :gradient, UInt64(0))) * 1.0e-9
+    optimizer_seconds =
+        Float64(get(timer.exclusive, :optimizer_state_direction, UInt64(0))) * 1.0e-9
+    retraction_seconds =
+        Float64(get(timer.exclusive, :retraction_application, UInt64(0))) * 1.0e-9
     (
         timed_steps=steps,
         gradient_ad_seconds_total=gradient_seconds,

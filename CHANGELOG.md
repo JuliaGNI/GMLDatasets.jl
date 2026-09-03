@@ -84,21 +84,40 @@ breaking release).
   `network_loss` keep their `::NamedTuple` annotations — those take the *regrouped* parameters, which
   are a `NamedTuple` of vectors of matrices and not a parameter set at all.
 
-- **The revision harness pins `GeometricOptimizers` at `7bd403f`**, the head of
+- **The revision harness pins `GeometricOptimizers` at `ae50ece`**, the head of
   [PR #79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79), which is the observer of
-  PR #78 plus a fix the first GPU run needed. `similar` of a horizontal lift allocated on the host
-  regardless of where its argument lived, and because the four-argument optimizer-cache constructors
-  bind their three gradient blocks to a single type, that was a `MethodError` at
-  `Optimizer(Adam(), network)` for any device-resident network. It stopped the `pendulum-seed-1234`
-  stage of run `20260903T125418Z_smoke` on the RTX 4090; the four image stages of the same run
-  passed, because `mnist_cuda_repetitions.jl` keeps its parameters in a **host** container and
-  copies to the device inside `∇F!`, so nothing before the pendulum stage ever built a
-  device-resident cache.
+  PR #78 plus the two fixes the GPU runs needed.
+
+  First, `similar` of a horizontal lift allocated on the host regardless of where its argument lived,
+  and because the four-argument optimizer-cache constructors bind their three gradient blocks to a
+  single type, that was a `MethodError` at `Optimizer(Adam(), network)` for any device-resident
+  network. It stopped the `pendulum-seed-1234` stage of run `20260903T125418Z_smoke` on the RTX 4090;
+  the four image stages of the same run passed, because `mnist_cuda_repetitions.jl` keeps its
+  parameters in a **host** container and copies to the device inside `∇F!`, so nothing before the
+  pendulum stage ever built a device-resident cache.
+
+  Second, once that was out of the way the same stage failed one layer deeper, at the first
+  `optimization_step!` of runs `20260903T185459Z_smoke` and `20260903T191704Z_smoke`: the pullback
+  returns a gradient leaf on the host for a device-resident `StiefelManifold` weight, so `rgrad`'s
+  `∇L' * Y.A` was a CPU `gemm!` handed a device pointer
+  (`ArgumentError: Illegal conversion of a CUDA.DeviceMemory to a Ptr{Float32}`).
+
+  That second fix is a **temporary shim** in `GeometricOptimizers` for a defect in the packages that
+  produce the gradient, filed as
+  [`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258)
+  and [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39).
+  While it is in place it moves the gradient across per manifold leaf per step, inside the region the
+  phase timer attributes to the step, so **the pendulum stage's decomposed timings are an upper bound
+  rather than a measurement** and its `optimizer_state_direction_seconds` in particular carry that
+  transfer. Any pendulum timing published from a run on this pin has to say so, or wait for the
+  upstream fix. The image stages never take this path and are unaffected.
 
   `scripts/revision/check_environment.jl` now builds an optimizer cache and state for a 4 × 2
-  device-resident `StiefelManifold` parameter set, next to the `PhaseTimer` check and for the same
-  reason: a version number cannot express either property. That failure is now a preflight error at
-  second zero rather than one that lands after the image stages have already spent their hours.
+  device-resident `StiefelManifold` parameter set and calls `rgrad` on it with a host gradient, next
+  to the `PhaseTimer` check and for the same reason: a version number cannot express any of these
+  properties. Both failures are now preflight errors at second zero rather than ones that land after
+  the image stages have already spent their hours. The `rgrad` check asserts the presence of the
+  temporary shim, so it retires with the shim rather than outliving it.
 
 ## [0.1.0]
 

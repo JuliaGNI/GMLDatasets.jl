@@ -14,16 +14,28 @@ julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 
 The checked-in manifest records the reviewed revision-experiment stack:
 `GeometricMachineLearning` v0.7.0, `NeuralNetworkParameters` v0.3.0, and temporarily the exact
-`7bd403f` head of
+`ae50ece` head of
 [`GeometricOptimizers.jl` PR #79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79).
 The Git revision supplies the observer and `PhaseTimer` used by the timing adapter below, from
 [PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78) which #79 is branched off, and
-the fix the first GPU run required: `similar` of a horizontal lift allocated on the host, which made
-the optimizer of a device-resident network a `MethodError` and stopped the pendulum stage of run
-`20260903T125418Z_smoke`. Replace it with the exact registry release containing both before freezing
-or running the experiment head. The environment preflight checks the reviewed versions, the presence
-of `PhaseTimer`, and that an optimizer cache and state can be built for a parameter set that lives
-on the GPU.
+the two fixes the GPU runs required. `similar` of a horizontal lift allocated on the host, which
+made the optimizer of a device-resident network a `MethodError` and stopped the pendulum stage of run
+`20260903T125418Z_smoke`; and then, with that out of the way, `rgrad` receiving an ambient gradient
+the pullback had left on the host beside a device-resident point, which is a CPU `gemm!` on a device
+pointer and stopped the pendulum stage of runs `20260903T185459Z_smoke` and `20260903T191704Z_smoke`
+at the first optimizer step.
+
+That second one is a **temporary** shim in `GeometricOptimizers` for a defect in the packages that
+produce the gradient: [`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258)
+and [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39).
+While it is in place, the pendulum stage pays a host-to-device transfer per manifold leaf per step
+inside the region the phase timer attributes to the step, so **the pendulum stage's decomposed
+timings are an upper bound rather than a measurement** and its `optimizer_state_direction_seconds`
+in particular carry that transfer. The image stages are unaffected: they never take this path.
+Replace the pin with the exact registry release before freezing or running the experiment head, and
+expect the shim to be gone by then. The environment preflight checks the reviewed versions, the
+presence of `PhaseTimer`, and that an optimizer cache and state can be built for a parameter set that
+lives on the GPU.
 
 The full run rejects a dirty tree and any CUDA device whose name does not contain `RTX 4090`.
 Use `--allow-dirty` only deliberately; the patch and status are included in the bundle. Use

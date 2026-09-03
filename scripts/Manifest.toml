@@ -966,8 +966,8 @@ weakdeps = ["HDF5"]
 
 [[deps.GeometricOptimizers]]
 deps = ["ChainRulesCore", "GeometricBase", "KernelAbstractions", "LazyArrays", "LinearAlgebra", "NeuralNetworkParameters", "Printf", "Random", "SimpleSolvers"]
-git-tree-sha1 = "3295a6e0aaa43b141d01cdb0335bd1698fee5841"
-repo-rev = "7bd403f11eac2bf34599308bedddf7dd25955231"
+git-tree-sha1 = "1e88384eec58dd27e19fa26f359b977b43b5bbed"
+repo-rev = "ae50ecea519b108326c756ae8d0fe94e3ccdd828"
 repo-url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git"
 uuid = "fc236c15-5557-4942-aa65-b650f329279e"
 version = "0.7.0"

@@ -44,12 +44,32 @@ println("geometric_optimizers_phase_timer=true")
 # device-resident cache. Two constructor calls on a 4 × 2 point cost nothing and fail here instead.
 if functional
     let Q = Matrix(qr!(randn(Float32, 4, 2)).Q)[:, 1:2],
-        ps = NetworkParameters((weight = StiefelManifold(CUDA.cu(Q)),))
+        Y = StiefelManifold(CUDA.cu(Q)),
+        ps = NetworkParameters((weight = Y,))
 
         GeometricOptimizers.OptimizerCache(Adam(Float32), ps)
         GeometricOptimizers.OptimizerState(Adam(Float32), ps)
+        println("geometric_optimizers_device_cache=true")
+
+        # The other half of the same lesson, and why the pin moved from `7bd403f` to `ae50ece`. The
+        # pullback hands `rgrad` an ambient gradient that stayed on the *host* beside a
+        # device-resident point (JuliaGNI/GeometricMachineLearning.jl#258,
+        # JuliaGNI/AbstractNeuralNetworks.jl#39), and `∇L' * Y.A` is then a CPU `gemm!` handed a
+        # device pointer. That is the whole failure in two lines, and it cost runs
+        # 20260903T185459Z_smoke and 20260903T191704Z_smoke their pendulum stage at the first
+        # optimizer step, again after the image stages had already succeeded.
+        #
+        # The temporary shim in GeometricOptimizers#79 is what makes this pass. When the two issues
+        # above are fixed and the shim comes out, this check goes from "the shim is present" to "the
+        # gradient never arrives on the host in the first place", which is not what it tests: retire
+        # it together with the shim rather than pinning a GeometricOptimizers that still carries one.
+        Δ = rgrad(Y, randn(Float32, 4, 2))
+        Δ isa CUDA.CuArray || error(
+            "rgrad returned a $(typeof(Δ)) for a device-resident point and a host gradient; " *
+            "the pinned GeometricOptimizers is missing the temporary shim from " *
+            "JuliaGNI/GeometricOptimizers.jl#79")
+        println("geometric_optimizers_host_gradient=true")
     end
-    println("geometric_optimizers_device_cache=true")
 end
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
 functional && CUDA.versioninfo()

@@ -84,6 +84,22 @@ breaking release).
   `network_loss` keep their `::NamedTuple` annotations — those take the *regrouped* parameters, which
   are a `NamedTuple` of vectors of matrices and not a parameter set at all.
 
+- **The revision harness pins `GeometricOptimizers` at `7bd403f`**, the head of
+  [PR #79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79), which is the observer of
+  PR #78 plus a fix the first GPU run needed. `similar` of a horizontal lift allocated on the host
+  regardless of where its argument lived, and because the four-argument optimizer-cache constructors
+  bind their three gradient blocks to a single type, that was a `MethodError` at
+  `Optimizer(Adam(), network)` for any device-resident network. It stopped the `pendulum-seed-1234`
+  stage of run `20260903T125418Z_smoke` on the RTX 4090; the four image stages of the same run
+  passed, because `mnist_cuda_repetitions.jl` keeps its parameters in a **host** container and
+  copies to the device inside `∇F!`, so nothing before the pendulum stage ever built a
+  device-resident cache.
+
+  `scripts/revision/check_environment.jl` now builds an optimizer cache and state for a 4 × 2
+  device-resident `StiefelManifold` parameter set, next to the `PhaseTimer` check and for the same
+  reason: a version number cannot express either property. That failure is now a preflight error at
+  second zero rather than one that lands after the image stages have already spent their hours.
+
 ## [0.1.0]
 
 Initial release. Nothing here is new code — it is the MLDatasets-dependent material extracted from

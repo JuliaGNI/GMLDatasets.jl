@@ -30,11 +30,14 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 # `GMLDatasets` is not registered, so it is reached by path. Until the observer is released,
-# `GeometricOptimizers` is pinned to the exact reviewed head of JuliaGNI/GeometricOptimizers.jl#78.
-# Replace that source with the exact registry release before the experiment head is frozen.
+# `GeometricOptimizers` is pinned to the exact reviewed head of JuliaGNI/GeometricOptimizers.jl#79,
+# which is #78 (the observer) plus the one fix the first GPU smoke run required: `similar` of a
+# horizontal lift allocated on the host, so `Optimizer(Adam(), network)` on a device-resident
+# network was a `MethodError` and the pendulum stage could not start. Replace that source with the
+# exact registry release before the experiment head is frozen.
 [sources]
 GMLDatasets = {path = ".."}
-GeometricOptimizers = {url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git", rev = "c3c3c67bfd7f9a66465b1f730bb219662720b8e5"}
+GeometricOptimizers = {url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git", rev = "7bd403f11eac2bf34599308bedddf7dd25955231"}
 
 [compat]
 GeometricMachineLearning = "= 0.7.0"

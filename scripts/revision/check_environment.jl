@@ -1,6 +1,7 @@
 using CUDA
 using GeometricMachineLearning
 using GeometricOptimizers
+using LinearAlgebra: qr!
 using NeuralNetworkParameters
 using Pkg
 
@@ -32,5 +33,23 @@ validate_environment_versions(VERSION, gml_version, go_version, nnp_version)
 isdefined(GeometricOptimizers, :PhaseTimer) || error(
     "GeometricOptimizers must provide PhaseTimer from JuliaGNI/GeometricOptimizers.jl#78")
 println("geometric_optimizers_phase_timer=true")
+
+# The optimizer cache and state of a *device-resident* manifold parameter set, which is the one
+# thing the preflight cannot infer from a version number. `similar` of a horizontal lift allocated
+# on the host before JuliaGNI/GeometricOptimizers.jl#79, and because the four-argument cache
+# constructors bind their three gradient blocks to a single type, that was a `MethodError` at
+# optimizer construction rather than a wrong number. It cost run 20260903T125418Z_smoke its pendulum
+# stage after the image stages had already succeeded: they keep their parameters in a host container
+# and copy to the device inside the objective, so nothing before the pendulum stage builds a
+# device-resident cache. Two constructor calls on a 4 × 2 point cost nothing and fail here instead.
+if functional
+    let Q = Matrix(qr!(randn(Float32, 4, 2)).Q)[:, 1:2],
+        ps = NetworkParameters((weight = StiefelManifold(CUDA.cu(Q)),))
+
+        GeometricOptimizers.OptimizerCache(Adam(Float32), ps)
+        GeometricOptimizers.OptimizerState(Adam(Float32), ps)
+    end
+    println("geometric_optimizers_device_cache=true")
+end
 Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)
 functional && CUDA.versioninfo()

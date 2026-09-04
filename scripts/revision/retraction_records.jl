@@ -111,11 +111,19 @@ function verify_loaded_source(go_root::AbstractString)
         "loaded GeometricOptimizers from $loaded_root, not requested repository $go_root"))
 end
 
-function load_cuda()
+# Julia 1.12 forbids calling methods that were added after the running frame started, so the
+# import has to finish in `main` before the benchmark frame is entered through `invokelatest`.
+# Loading CUDA also brings in package extensions, whose methods are subject to the same rule.
+function import_cuda()
     @eval import CUDA
-    CUDA.functional(true) || throw(ArgumentError("CUDA is not functional"))
     @eval device_allocated(f) = CUDA.@allocated f()
-    CUDA
+    nothing
+end
+
+function loaded_cuda()
+    cuda = getglobal(@__MODULE__, :CUDA)
+    cuda.functional(true) || throw(ArgumentError("CUDA is not functional"))
+    cuda
 end
 
 function cuda_lift(host, cuda)
@@ -245,7 +253,7 @@ function run_benchmark(options::Options)
     source = capture_source(options.go_repo, patch_path)
     verify_loaded_source(source.root)
     patch_file = relpath(patch_path, dirname(abspath(options.output)))
-    cuda = options.backend == :cuda ? load_cuda() : nothing
+    cuda = options.backend == :cuda ? loaded_cuda() : nothing
     records = Dict{String,String}[]
     rng = Random.Xoshiro(options.seed)
 
@@ -277,7 +285,8 @@ end
 function main(args=ARGS)
     options = parse_options(args)
     options === nothing && return 0
-    records = run_benchmark(options)
+    options.backend == :cuda && import_cuda()
+    records = Base.invokelatest(run_benchmark, options)
     required_paths = options.backend == :cuda ?
         [("ScaledSquaring", "CUDA"), ("NativePade", "CUDA"), ("AugmentedPade", "CPU")] :
         [(name, "CPU") for name in ("ScaledSquaring", "NativePade", "AugmentedPade")]

@@ -29,8 +29,23 @@ SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
-# `GMLDatasets` is not registered, so it is reached by path. `GeometricMachineLearning` used to be
-# here too, pinned to `main`, because the container work these scripts are written against was
-# unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
+# `GMLDatasets` is not registered, so it is reached by path. Until the observer is released,
+# `GeometricOptimizers` is pinned to the exact reviewed head of JuliaGNI/GeometricOptimizers.jl#79,
+# which is #78 (the observer) plus the two fixes the GPU smoke runs required. First, `similar` of a
+# horizontal lift allocated on the host, so `Optimizer(Adam(), network)` on a device-resident
+# network was a `MethodError` and the pendulum stage could not start. Second, and only once that was
+# out of the way, `rgrad` received an ambient gradient the pullback had left on the host beside a
+# device-resident point, which is a CPU `gemm!` on a device pointer; #79 moves it across as a
+# **temporary** shim for a defect in the packages that produce the gradient
+# (JuliaGNI/GeometricMachineLearning.jl#258, JuliaGNI/AbstractNeuralNetworks.jl#39). Replace that
+# source with the exact registry release before the experiment head is frozen, and expect the shim
+# to be gone by then.
 [sources]
 GMLDatasets = {path = ".."}
+GeometricOptimizers = {url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git", rev = "ae50ecea519b108326c756ae8d0fe94e3ccdd828"}
+
+[compat]
+GeometricMachineLearning = "= 0.7.0"
+GeometricOptimizers = "= 0.7.0"
+NeuralNetworkParameters = "= 0.3.0"
+julia = "1.11"

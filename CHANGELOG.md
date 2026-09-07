@@ -8,6 +8,25 @@ breaking release).
 
 ## [Unreleased]
 
+### Removed
+
+- **`.github/workflows/TagBot.yml`.** This package is **not registered in General**, so TagBot had
+  nothing to do: it exists to create a GitHub release once a registry pull request merges, and no
+  registry pull request will ever merge for a package that is not there. Verified against the local
+  registry — the only `SolverBenchmark` in General has UUID `581a75fa-…`, which is
+  JuliaSmoothOptimizers', not `Experiments/SolverBenchmark`'s `24f6d232-…`, so **none** of the five
+  repositories under `Experiments/` is registered.
+
+  It was the only `TagBot.yml` under `Experiments/`, and the reason is recorded in
+  `Knowledge/AI/agent-workflows/README.md:53`: the shared-workflow installer skips `Experiments/`,
+  so this file survived the unification that removed it from the other four. `verify-workflows.jl`
+  is known not to catch the case. Removing the file brings this repository into line with its
+  four siblings; **the installer's `Experiments/` skip is untouched and still the underlying
+  cause.**
+
+  Nothing in CI referenced it. If this package is ever registered, the file comes back from
+  `Knowledge/AI/githooks/`, which is the canonical source.
+
 ### Added
 
 - **`src/pendulum.jl`**, new: `pendulum`, `angular_to_euclidean`, `euclidean_to_angular` and

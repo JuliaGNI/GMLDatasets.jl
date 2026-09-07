@@ -12,20 +12,25 @@ breaking release).
 
 - **`.github/workflows/TagBot.yml`.** This package is **not registered in General**, so TagBot had
   nothing to do: it exists to create a GitHub release once a registry pull request merges, and no
-  registry pull request will ever merge for a package that is not there. Verified against the local
-  registry — the only `SolverBenchmark` in General has UUID `581a75fa-…`, which is
-  JuliaSmoothOptimizers', not `Experiments/SolverBenchmark`'s `24f6d232-…`, so **none** of the five
-  repositories under `Experiments/` is registered.
+  registry pull request will ever merge for a package that is not there. Verified against this
+  package's own identity — UUID `676c5310-75a3-4edf-a7af-a2dbff91674b` appears nowhere in
+  `Registry.toml`, and neither does the name. `Experiments/CLAUDE.md:53` states the general case in
+  one line: nothing under `Experiments/` is registered.
 
-  It was the only `TagBot.yml` under `Experiments/`, and the reason is recorded in
-  `Knowledge/AI/agent-workflows/README.md:53`: the shared-workflow installer skips `Experiments/`,
-  so this file survived the unification that removed it from the other four. `verify-workflows.jl`
-  is known not to catch the case. Removing the file brings this repository into line with its
-  four siblings; **the installer's `Experiments/` skip is untouched and still the underlying
-  cause.**
+  It was the only `TagBot.yml` under `Experiments/`. **The installer did not put it there and does
+  not skip `Experiments/`:** `install-workflows.sh:80` iterates `Packages/*/` and `Experiments/*/`
+  alike, and gates TagBot at `:94` on `kind = package`, exactly as its own header at `:28` says.
+  What let the file survive is that `install_file` only ever *copies* — nothing removes a file the
+  template set no longer covers — and `verify-workflows.jl:146` skips the TagBot comparison for
+  experiments rather than asserting its absence. So there is no recurring cause: the deletion is
+  final, and the installer will not restore it.
 
-  Nothing in CI referenced it. If this package is ever registered, the file comes back from
-  `Knowledge/AI/githooks/`, which is the canonical source.
+  This is the deletion `Experiments/CLAUDE.md:21-25` asks for, where the file is named as "drift
+  rather than intent". Nothing in CI referenced it, and it never triggered on `push` or
+  `pull_request`, so it can never have been a required check. If this package is ever registered,
+  the fix is to bring it into the installer's scope, **not** to hand-copy
+  `Knowledge/AI/githooks/workflows/TagBot.yml` back — hand-copying is the drift the installer
+  exists to prevent.
 
 ### Added
 

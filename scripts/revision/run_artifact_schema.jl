@@ -3,8 +3,9 @@ module RunArtifactSchema
 include("retraction_record_schema.jl")
 using .RetractionRecordSchema: validate_records
 
-export CONFIGURATION_ORDER, IMAGE_LOSS_HEADER, IMAGE_RECORD_HEADER, PENDULUM_RECORD_HEADER,
-       STAGE_HEADER, parse_csv_line, read_table, validate_image_artifacts,
+export CONFIGURATION_ORDER, PENDULUM_CONFIGURATION_ORDER, IMAGE_LOSS_HEADER, IMAGE_RECORD_HEADER,
+       PENDULUM_LOSS_HEADER, PENDULUM_RECORD_HEADER, STAGE_HEADER, normalize_configurations,
+       normalize_pendulum_configurations, parse_csv_line, read_table, validate_image_artifacts,
        validate_pendulum_artifacts, validate_run_artifacts, validate_stage_table
 
 const CONFIGURATION_ORDER = [
@@ -28,8 +29,24 @@ const CONFIGURATION_NAMES = Dict(
     "momentum" => "Riemannian momentum (Stiefel, Cayley retraction)",
 )
 
+# Unlike the transformer, an SAE cannot have an unconstrained Adam row without
+# ceasing to be symplectic.  The pendulum comparison therefore contains these
+# four intrinsic configurations only.
+const PENDULUM_CONFIGURATION_ORDER = [
+    "geometric-adam-cayley",
+    "scalar-moment-adam",
+    "gradient",
+    "momentum",
+]
+const PENDULUM_CONFIGURATION_NAMES = Dict(
+    key => CONFIGURATION_NAMES[key] for key in PENDULUM_CONFIGURATION_ORDER)
+
 const IMAGE_LOSS_HEADER = [
     "run", "configuration", "repetition", "epoch", "batch", "step", "loss",
+]
+
+const PENDULUM_LOSS_HEADER = [
+    "configuration_key", "configuration", "repetition", "seed", "epoch", "loss",
 ]
 
 const IMAGE_RECORD_HEADER = [
@@ -43,9 +60,11 @@ const IMAGE_RECORD_HEADER = [
 ]
 
 const PENDULUM_RECORD_HEADER = [
-    "schema_version", "dataset", "configuration", "repetition", "seed", "status",
-    "epochs_completed", "final_loss", "best_loss", "total_seconds", "seconds_per_epoch",
-    "host_allocated_bytes", "gc_seconds", "backend", "checkpoint",
+    "schema_version", "dataset", "configuration_key", "configuration", "optimizer_role",
+    "learning_rate", "retraction", "second_moment", "transport", "repetition", "seed",
+    "status", "epochs_completed", "final_loss", "best_loss", "total_seconds",
+    "seconds_per_epoch", "host_allocated_bytes", "gc_seconds", "backend", "checkpoint",
+    "message",
 ]
 
 const STAGE_HEADER = ["stage", "status", "started_utc", "finished_utc", "command"]
@@ -148,6 +167,19 @@ function normalize_configurations(value::AbstractString)
     unknown = filter(key -> key ∉ CONFIGURATION_ORDER, requested)
     isempty(unknown) || throw(ArgumentError("unknown configurations: $(join(unknown, ", "))"))
     unique(filter(key -> key in requested, CONFIGURATION_ORDER))
+end
+
+"""Resolve a pendulum configuration selection without admitting standard Adam."""
+function normalize_pendulum_configurations(value::AbstractString)
+    requested = [get(CONFIGURATION_ALIASES, lowercase(entry), lowercase(entry))
+                 for entry in split_list(value)]
+    "all" in requested && return copy(PENDULUM_CONFIGURATION_ORDER)
+    isempty(requested) && throw(ArgumentError("pendulum configuration list is empty"))
+    unknown = filter(key -> key ∉ PENDULUM_CONFIGURATION_ORDER, requested)
+    isempty(unknown) || throw(ArgumentError(
+        "unknown or non-symplectic pendulum configurations: $(join(unknown, ", ")); " *
+        "choose $(join(PENDULUM_CONFIGURATION_ORDER, ", "))"))
+    unique(filter(key -> key in requested, PENDULUM_CONFIGURATION_ORDER))
 end
 
 function validate_image_artifacts(records_path::AbstractString, losses_path::AbstractString;
@@ -270,35 +302,49 @@ function countmap(values)
     counts
 end
 
-function validate_pendulum_artifacts(records_path::AbstractString, run_dir::AbstractString;
-        seeds::Vector{Int}, expected_epochs::Int, expected_backend::AbstractString,
-        allow_partial::Bool=false)
+function validate_pendulum_artifacts(records_path::AbstractString, losses_path::AbstractString,
+        run_dir::AbstractString; seeds::Vector{Int}, configurations::Vector{String},
+        expected_epochs::Int, expected_backend::AbstractString, allow_partial::Bool=false,
+        allow_validation_failures::Bool=false)
+    all(key -> key in PENDULUM_CONFIGURATION_ORDER, configurations) || throw(ArgumentError(
+        "pendulum configurations must be intrinsic SAE configurations"))
     records = read_table(records_path, PENDULUM_RECORD_HEADER; allow_empty=allow_partial)
-    expected = Set((repetition, seed) for (repetition, seed) in enumerate(seeds))
-    observed = Set{Tuple{Int,Int}}()
+    expected = Set((key, repetition, seed)
+        for key in configurations for (repetition, seed) in enumerate(seeds))
+    observed = Set{Tuple{String,Int,Int}}()
     for (offset, record) in enumerate(records)
         line = offset + 1
-        record["schema_version"] == "1" || throw(ArgumentError(
+        record["schema_version"] == "2" || throw(ArgumentError(
             "$records_path:$line has unsupported schema version $(record["schema_version"])"))
         record["dataset"] == "pendulum" || throw(ArgumentError(
             "$records_path:$line has dataset $(record["dataset"])"))
-        record["configuration"] == "geometric-adam" || throw(ArgumentError(
-            "$records_path:$line has configuration $(record["configuration"])"))
+        key = record["configuration_key"]
+        key in configurations || throw(ArgumentError(
+            "$records_path:$line has unexpected configuration key $key"))
+        record["configuration"] == PENDULUM_CONFIGURATION_NAMES[key] || throw(ArgumentError(
+            "$records_path:$line has the wrong display name for $key"))
+        isempty(record["optimizer_role"]) && throw(ArgumentError(
+            "$records_path:$line has an empty optimizer role"))
+        parse_float(record, "learning_rate", records_path, line; nonnegative=true)
+        record["retraction"] == "cayley" || throw(ArgumentError(
+            "$records_path:$line has retraction $(record["retraction"]), expected cayley"))
         repetition = parse_integer(record, "repetition", records_path, line; minimum=1)
         seed = parse_integer(record, "seed", records_path, line; minimum=0)
-        identity = (repetition, seed)
+        identity = (key, repetition, seed)
         identity in expected || throw(ArgumentError(
-            "$records_path:$line has unexpected repetition/seed $(join(identity, '/'))"))
+            "$records_path:$line has unexpected configuration/repetition/seed $(join(identity, '/'))"))
         identity in observed && throw(ArgumentError(
-            "$records_path:$line duplicates repetition/seed $(join(identity, '/'))"))
+            "$records_path:$line duplicates configuration/repetition/seed $(join(identity, '/'))"))
         push!(observed, identity)
-        record["status"] == "ok" || throw(ArgumentError(
-            "$records_path:$line has status $(record["status"])"))
+        status = record["status"]
+        status in ("ok", "failed_validation") || throw(ArgumentError(
+            "$records_path:$line has status $status"))
+        !allow_validation_failures && status != "ok" && throw(ArgumentError(
+            "$records_path:$line records failed scientific validation for $key repetition $repetition"))
         epochs = parse_integer(record, "epochs_completed", records_path, line; minimum=1)
         epochs == expected_epochs || throw(ArgumentError(
             "$records_path:$line completed $epochs epochs; expected $expected_epochs"))
-        for field in ("final_loss", "best_loss", "total_seconds", "seconds_per_epoch",
-                "gc_seconds")
+        for field in ("final_loss", "best_loss", "total_seconds", "seconds_per_epoch", "gc_seconds")
             parse_float(record, field, records_path, line;
                 nonnegative=field in ("total_seconds", "seconds_per_epoch", "gc_seconds"))
         end
@@ -308,16 +354,42 @@ function validate_pendulum_artifacts(records_path::AbstractString, run_dir::Abst
         checkpoint = joinpath(run_dir, basename(record["checkpoint"]))
         isfile(checkpoint) && filesize(checkpoint) > 0 || throw(ArgumentError(
             "$records_path:$line refers to a missing or empty checkpoint: $checkpoint"))
-        basename(checkpoint) == "pendulum-seed-$seed.h5" || throw(ArgumentError(
+        basename(checkpoint) == "pendulum-$key-seed-$seed.h5" || throw(ArgumentError(
             "$records_path:$line has unexpected checkpoint name $(basename(checkpoint))"))
     end
     if allow_partial
         observed ⊆ expected || throw(ArgumentError("pendulum records exceed expected coverage"))
     else
         observed == expected || throw(ArgumentError(
-            "$records_path does not have exact repetition/seed coverage"))
+            "$records_path does not have exact configuration/repetition/seed coverage"))
     end
-    (records=length(records), statuses=countmap(record["status"] for record in records))
+
+    losses = read_table(losses_path, PENDULUM_LOSS_HEADER; allow_empty=allow_partial)
+    epochs_by_run = Dict{Tuple{String,Int,Int},Set{Int}}()
+    for (offset, record) in enumerate(losses)
+        line = offset + 1
+        key = record["configuration_key"]
+        key in configurations || throw(ArgumentError(
+            "$losses_path:$line has unexpected configuration key $key"))
+        record["configuration"] == PENDULUM_CONFIGURATION_NAMES[key] || throw(ArgumentError(
+            "$losses_path:$line has the wrong display name for $key"))
+        repetition = parse_integer(record, "repetition", losses_path, line; minimum=1)
+        seed = parse_integer(record, "seed", losses_path, line; minimum=0)
+        identity = (key, repetition, seed)
+        identity in observed || throw(ArgumentError(
+            "$losses_path:$line has no matching run record"))
+        epoch = parse_integer(record, "epoch", losses_path, line; minimum=1)
+        parse_float(record, "loss", losses_path, line)
+        run_epochs = get!(() -> Set{Int}(), epochs_by_run, identity)
+        epoch in run_epochs && throw(ArgumentError(
+            "$losses_path:$line duplicates epoch $epoch for $(join(identity, '/'))"))
+        push!(run_epochs, epoch)
+    end
+    for identity in observed
+        get(epochs_by_run, identity, Set{Int}()) == Set(1:expected_epochs) || throw(ArgumentError(
+            "$losses_path does not have exact epochs 1:$expected_epochs for $(join(identity, '/'))"))
+    end
+    (records=length(records), losses=length(losses), statuses=countmap(record["status"] for record in records))
 end
 
 function validate_stage_table(path::AbstractString, expected_stages::Vector{String})
@@ -342,7 +414,8 @@ function validate_stage_table(path::AbstractString, expected_stages::Vector{Stri
     (rows=length(records), passed=count(==("ok"), values(latest)), failed=count(!=("ok"), values(latest)))
 end
 
-function expected_stage_names(mode::AbstractString, stages::Vector{String}, seeds::Vector{Int})
+function expected_stage_names(mode::AbstractString, stages::Vector{String}, seeds::Vector{Int},
+        pendulum_configurations::Vector{String}=PENDULUM_CONFIGURATION_ORDER)
     names = String[]
     for stage in stages
         stage == "none" && continue
@@ -350,9 +423,11 @@ function expected_stage_names(mode::AbstractString, stages::Vector{String}, seed
             mode == "full" && push!(names, "$stage-warmup", "$stage-warmup-record-validation")
             push!(names, stage, "$stage-record-validation")
         elseif stage == "pendulum"
-            mode == "full" && push!(names, "pendulum-warmup")
-            for seed in seeds
-                push!(names, "pendulum-seed-$seed")
+            for key in pendulum_configurations
+                mode == "full" && push!(names, "pendulum-$key-warmup")
+                for seed in seeds
+                    push!(names, "pendulum-$key-seed-$seed")
+                end
             end
             push!(names, "pendulum-record-validation")
         elseif stage == "retraction"
@@ -372,6 +447,7 @@ function validate_run_artifacts(run_dir::AbstractString; mode::AbstractString,
         stages::Vector{String}, seeds::Vector{Int}, configurations::Vector{String},
         expected_image_epochs::Int, expected_pendulum_epochs::Int,
         expected_backend::AbstractString, retraction_repo::AbstractString,
+        pendulum_configurations::Vector{String}=PENDULUM_CONFIGURATION_ORDER,
         allow_validation_failures::Bool=false)
     mode in ("smoke", "full") || throw(ArgumentError("unknown mode: $mode"))
     isempty(stages) && throw(ArgumentError("stage list is empty"))
@@ -412,9 +488,12 @@ function validate_run_artifacts(run_dir::AbstractString; mode::AbstractString,
     end
     if "pendulum" in stages
         require_file(joinpath(run_dir, "pendulum-runs.csv"))
-        summary = validate_pendulum_artifacts(joinpath(run_dir, "pendulum-runs.csv"), run_dir;
-            seeds, expected_epochs=expected_pendulum_epochs, expected_backend)
-        push!(summaries, "pendulum=$(summary.records) records")
+        require_file(joinpath(run_dir, "pendulum-losses.csv"))
+        summary = validate_pendulum_artifacts(
+            joinpath(run_dir, "pendulum-runs.csv"), joinpath(run_dir, "pendulum-losses.csv"), run_dir;
+            seeds, configurations=pendulum_configurations, expected_epochs=expected_pendulum_epochs,
+            expected_backend, allow_validation_failures)
+        push!(summaries, "pendulum=$(summary.records) records/$(summary.losses) losses")
     end
     if "retraction" in stages
         required_paths = expected_backend == "cuda" ?
@@ -424,7 +503,7 @@ function validate_run_artifacts(run_dir::AbstractString; mode::AbstractString,
             required_paths, go_repo=retraction_repo)
         push!(summaries, "retraction=$(summary.rows) records")
     end
-    expected_stages = expected_stage_names(mode, stages, seeds)
+    expected_stages = expected_stage_names(mode, stages, seeds, pendulum_configurations)
     stage_summary = validate_stage_table(joinpath(run_dir, "stages.csv"), expected_stages)
     push!(summaries, "stages=$(stage_summary.rows) rows")
     summaries

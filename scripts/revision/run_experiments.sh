@@ -25,7 +25,8 @@ usage: $0 [--smoke|--full] [--stages LIST] [--seeds LIST]
 MNIST and Fashion-MNIST run records use schema 4 and report exclusive gradient/AD,
 optimizer-state/direction, and retraction/application timing. See scripts/revision/README.md.
 The retraction stage writes validated schema-1 CSV plus an exact GeometricOptimizers patch.
-Full mode defaults to all five optimizer configurations and exactly seeds 1234:1243.
+Full mode runs five image configurations and the four intrinsic pendulum SAE configurations,
+each over exactly seeds 1234:1243.
 Smoke mode validates all CSV records, archive members, the checksum, and restart metadata.
 USAGE
 }
@@ -104,6 +105,15 @@ if [[ "$mode" == smoke ]]; then
 fi
 [[ "$allow_no_cuda" -eq 1 ]] && experiment_backend="cpu"
 
+# The pendulum SAE has no unconstrained Adam ablation: PSD layers must retain
+# Stiefel weights for the network to stay symplectic. `all` is therefore the
+# four intrinsic methods, even though it is five methods for the image stages.
+if [[ "$configurations" == "all" ]]; then
+    pendulum_configuration_array=(geometric-adam-cayley scalar-moment-adam gradient momentum)
+else
+    IFS=',' read -r -a pendulum_configuration_array <<< "$configurations"
+fi
+
 if [[ -n "$resume_dir" ]]; then
     [[ -d "$resume_dir" ]] || {
         echo "resume directory does not exist: $resume_dir" >&2
@@ -158,6 +168,8 @@ write_restart_command() {
     for variable in JULIA JULIA_DEPOT_PATH JULIA_LOAD_PATH MNIST_BATCH_SIZE \
             MNIST_TRAINING_SAMPLES MNIST_TEST_SAMPLES MNIST_SMOKE_SAMPLES \
             MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM \
+            SAE_REDUCED_DIM SAE_BATCH_SIZE SAE_STEP_SIZE SAE_SCALAR_MOMENT_ADAM_LEARNING_RATE \
+            SAE_MOMENTUM_COEFFICIENT SAE_ADAM_BETA1 SAE_ADAM_BETA2 SAE_ADAM_EPSILON \
             RETRACTION_PRECISION RETRACTION_ROWS RETRACTION_COLUMNS RETRACTION_SCALES \
             RETRACTION_REPETITIONS RETRACTION_SEED; do
         if [[ -n "${!variable:-}" ]]; then
@@ -189,7 +201,7 @@ write_run_configuration() {
 }
 
 write_required_archive_members() {
-    local dataset seed_value
+    local dataset seed_value configuration_key
     local -a members=(
         artifact-validation.txt archive-required-members.txt environment.txt
         environments/root/Project.toml environments/scripts/Project.toml
@@ -214,13 +226,19 @@ write_required_archive_members() {
         fi
     done
     if contains_stage pendulum; then
-        members+=(pendulum-runs.csv pendulum-record-validation.stdout.txt
+        members+=(pendulum-runs.csv pendulum-losses.csv pendulum-record-validation.stdout.txt
             pendulum-record-validation.stderr.txt)
-        [[ "$mode" == full ]] && members+=(pendulum-warmup.h5 pendulum-warmup.stdout.txt
-            pendulum-warmup.stderr.txt)
-        for seed_value in "${seed_array[@]}"; do
-            members+=("pendulum-seed-$seed_value.h5" "pendulum-seed-$seed_value.stdout.txt"
-                "pendulum-seed-$seed_value.stderr.txt")
+        for configuration_key in "${pendulum_configuration_array[@]}"; do
+            if [[ "$mode" == full ]]; then
+                members+=("pendulum-$configuration_key-warmup.h5"
+                    "pendulum-$configuration_key-warmup.stdout.txt"
+                    "pendulum-$configuration_key-warmup.stderr.txt")
+            fi
+            for seed_value in "${seed_array[@]}"; do
+                members+=("pendulum-$configuration_key-seed-$seed_value.h5"
+                    "pendulum-$configuration_key-seed-$seed_value.stdout.txt"
+                    "pendulum-$configuration_key-seed-$seed_value.stderr.txt")
+            done
         done
     fi
     if contains_stage retraction; then
@@ -431,39 +449,52 @@ fi
 
 if contains_stage pendulum; then
     records="$run_dir/pendulum-runs.csv"
-    if [[ "$mode" == full ]]; then
-        if stage_succeeded pendulum-warmup && [[ -s "$run_dir/pendulum-warmup.h5" ]]; then
-            echo "skipping completed pendulum warm-up"
-        else
-            run_stage pendulum-warmup env SAE_REQUIRE_CUDA=1 SAE_SEED="${seed_array[0]}" \
-                SAE_N_EPOCHS=1 SAE_OUTPUT="$run_dir/pendulum-warmup.h5" \
-                "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
-        fi
-    fi
+    losses="$run_dir/pendulum-losses.csv"
     if [[ -s "$records" ]]; then
         "$julia_bin" --startup-file=no --project=scripts \
             scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --pendulum \
             --allow-partial --seeds "$seeds" --pendulum-epochs "$sae_epochs" \
-            --backend "$experiment_backend" || exit $?
+            --configurations "$configurations" --backend "$experiment_backend" || exit $?
     fi
-    repetition=0
-    for seed_value in ${seeds//,/ }; do
-        repetition=$((repetition + 1))
-        checkpoint="$run_dir/pendulum-seed-${seed_value}.h5"
-        if [[ -s "$checkpoint" ]] && awk -F, -v repetition="$repetition" -v seed="$seed_value" '
-                NR > 1 && $4 == repetition && $5 == seed && $6 == "ok" { found = 1 }
-                END { exit found ? 0 : 1 }
-            ' "$records"; then
-            echo "skipping validated checkpoint $checkpoint"
-            continue
+    for configuration_key in "${pendulum_configuration_array[@]}"; do
+        if [[ "$mode" == full ]]; then
+            warmup_checkpoint="$run_dir/pendulum-$configuration_key-warmup.h5"
+            if stage_succeeded "pendulum-$configuration_key-warmup" && [[ -s "$warmup_checkpoint" ]]; then
+                echo "skipping completed pendulum $configuration_key warm-up"
+            else
+                run_stage "pendulum-$configuration_key-warmup" env SAE_REQUIRE_CUDA=1 \
+                    SAE_CONFIGURATION="$configuration_key" SAE_SEED="${seed_array[0]}" \
+                    SAE_N_EPOCHS=1 SAE_OUTPUT="$warmup_checkpoint" \
+                    "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+            fi
         fi
-        require_cuda=1
-        [[ "$allow_no_cuda" -eq 1 ]] && require_cuda=0
-        run_stage "pendulum-seed-${seed_value}" env SAE_REQUIRE_CUDA="$require_cuda" SAE_SEED="$seed_value" SAE_REPETITION="$repetition" SAE_N_EPOCHS="$sae_epochs" SAE_OUTPUT="$checkpoint" SAE_RECORD="$records" "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+        repetition=0
+        for seed_value in ${seeds//,/ }; do
+            repetition=$((repetition + 1))
+            checkpoint="$run_dir/pendulum-$configuration_key-seed-${seed_value}.h5"
+            if [[ -s "$checkpoint" ]] && awk -F, -v configuration="$configuration_key" \
+                    -v repetition="$repetition" -v seed="$seed_value" '
+                    NR > 1 && $3 == configuration && $10 == repetition && $11 == seed && $12 == "ok" {
+                        found = 1
+                    }
+                    END { exit found ? 0 : 1 }
+                ' "$records"; then
+                echo "skipping validated pendulum checkpoint $checkpoint"
+                continue
+            fi
+            require_cuda=1
+            [[ "$allow_no_cuda" -eq 1 ]] && require_cuda=0
+            run_stage "pendulum-$configuration_key-seed-${seed_value}" env \
+                SAE_REQUIRE_CUDA="$require_cuda" SAE_CONFIGURATION="$configuration_key" \
+                SAE_SEED="$seed_value" SAE_REPETITION="$repetition" SAE_N_EPOCHS="$sae_epochs" \
+                SAE_OUTPUT="$checkpoint" SAE_RECORD="$records" SAE_LOSSES="$losses" \
+                "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+        done
     done
     run_stage pendulum-record-validation "$julia_bin" --startup-file=no --project=scripts \
         scripts/revision/validate_run_artifacts.jl --run-dir "$run_dir" --pendulum \
-        --seeds "$seeds" --pendulum-epochs "$sae_epochs" --backend "$experiment_backend" ||
+        --seeds "$seeds" --configurations "$configurations" --pendulum-epochs "$sae_epochs" \
+        --backend "$experiment_backend" ||
         exit $?
 fi
 

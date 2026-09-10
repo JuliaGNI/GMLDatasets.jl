@@ -28,14 +28,12 @@ at the first optimizer step.
 That second one is a **temporary** shim in `GeometricOptimizers` for a defect in the packages that
 produce the gradient: [`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258)
 and [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39).
-While it is in place, the pendulum stage pays a host-to-device transfer per manifold leaf per step
-inside the region the phase timer attributes to the step, so **the pendulum stage's decomposed
-timings are an upper bound rather than a measurement** and its `optimizer_state_direction_seconds`
-in particular carry that transfer. The image stages are unaffected: they never take this path.
-Replace the pin with the exact registry release before freezing or running the experiment head, and
-expect the shim to be gone by then. The environment preflight checks the reviewed versions, the
-presence of `PhaseTimer`, and that an optimizer cache and state can be built for a parameter set that
-lives on the GPU.
+The pendulum trainer records end-to-end time, host allocation, and GC time, but does not yet emit the
+image trainer's decomposed phase-timing fields. It must therefore not be used for a pendulum
+direction/retraction cost claim until that instrumentation is added. Replace the pin with the exact
+registry release before freezing or running the experiment head, and expect the shim to be gone by
+then. The environment preflight checks the reviewed versions, the presence of `PhaseTimer`, and that
+an optimizer cache and state can be built for a parameter set that lives on the GPU.
 
 The full run rejects a dirty tree and any CUDA device whose name does not contain `RTX 4090`.
 Use `--allow-dirty` only deliberately; the patch and status are included in the bundle. Use
@@ -59,10 +57,14 @@ scripts/revision/run_experiments.sh --smoke --allow-dirty --allow-any-gpu --allo
 ```
 
 Limit stages with `--stages mnist,pendulum` and configurations with
-`--configurations geometric-adam-cayley`. `--configurations all` selects all five rows, including
-the stable key `scalar-moment-adam`, reported as
-`Scalar Moment Adam (Stiefel, Cayley retraction)`. The legacy keys `adam-stiefel` and
-`adam-regular` remain accepted aliases. Smoke mode uses one seed and two epochs.
+`--configurations geometric-adam-cayley`. For MNIST and Fashion-MNIST,
+`--configurations all` selects all five rows, including the non-geometric `standard-adam`
+ablation. For pendulum it selects exactly four intrinsic rows:
+`geometric-adam-cayley`, `scalar-moment-adam`, `gradient`, and `momentum`.
+The SAE has PSD layers with Stiefel weights, so a non-geometric Adam row would no longer be a
+symplectic autoencoder. In its scalar-moment row, only those Stiefel weights use
+`ScalarMomentAdam`; the Euclidean SympNet weights, biases, and scales use ordinary coordinate-wise
+Adam. Smoke mode uses one seed and two epochs.
 For the CPU control-flow smoke only, each image data set is limited to its first 32 training and
 32 test samples with one 32-sample batch. Override that bound with `MNIST_SMOKE_SAMPLES`, or set
 `MNIST_TRAINING_SAMPLES`, `MNIST_TEST_SAMPLES`, and `MNIST_BATCH_SIZE` explicitly. Full mode never
@@ -168,17 +170,23 @@ explicit overrides. The physical-GPU run remains behind the final release gate.
 
 ## Full RTX 4090 run
 
-The orchestration matrix is complete: `--full` needs no development bypass, and its default `all`
-selection contains all five configurations. The experiment-local mixed-tree composite applies an
-independent `ScalarMomentAdam` to each Stiefel leaf and ordinary `Adam` to each Euclidean leaf. It
-computes one shared whole-tree gradient, then updates leaves sequentially in parameter-layout order.
-The proposed `geometric-adam-cayley` row instead uses coordinate-wise moments, while
-`standard-adam` is the unconstrained non-geometric ablation. Do not launch the workstation run until
-the separately documented release gate is satisfied.
+The orchestration matrix is complete: `--full` needs no development bypass. Its image stages select
+five configurations, while its pendulum stage selects the four intrinsic SAE configurations listed
+above. The pendulum scalar-moment adapter applies `ScalarMomentAdam` to each PSD/Stiefel layer and
+ordinary `Adam` to each Euclidean SympNet layer, all from the same minibatch pullback. The proposed
+`geometric-adam-cayley` row instead uses coordinate-wise moments. Do not launch the workstation run
+until the separately documented release gate is satisfied.
 
 ```bash
 scripts/revision/run_in_screen.sh --session gml-revision --full
 screen -r gml-revision
+```
+
+To run only the four-configuration pendulum matrix once the GPU gate is open:
+
+```bash
+scripts/revision/run_in_screen.sh --session gml-pendulum --full --stages pendulum
+screen -r gml-pendulum
 ```
 
 Full mode requires exactly ten seeds. Override them explicitly with
@@ -219,10 +227,11 @@ screen -DmS gml-revision-resume bash -lc 'cd /path/to/GMLDatasets && exec <resta
 ## Validation and archive contract
 
 The runner validates every CSV it emits: the exact schema-version-4 image run header and timing
-invariants, image loss rows and their step counts, schema-version-1 pendulum records and checkpoint
-coverage, schema-version-1 retraction rows and source patch, and the stage table. No JSON files are
-currently emitted. Smoke permits a scientifically inconclusive two-epoch `failed_validation` row,
-but never an exception or missing configuration; full mode requires every row to be `ok`.
+invariants, image loss rows and their step counts, schema-version-2 pendulum records, per-epoch loss
+curves, and configuration-qualified checkpoint coverage, schema-version-1 retraction rows and source
+patch, and the stage table. No JSON files are currently emitted. Smoke permits a scientifically
+inconclusive two-epoch `failed_validation` row, but never an exception or missing configuration; full
+mode requires every row to be `ok`.
 
 Before packaging, `archive-required-members.txt` is generated from the selected mode, stages, seeds,
 and configurations. At minimum every archive contains `run.log`, `stages.csv`, `environment.txt`,

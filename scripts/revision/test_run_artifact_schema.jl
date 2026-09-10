@@ -1,9 +1,10 @@
 using Test
 
 include("run_artifact_schema.jl")
-using .RunArtifactSchema: CONFIGURATION_NAMES, IMAGE_LOSS_HEADER, IMAGE_RECORD_HEADER,
-                          PENDULUM_RECORD_HEADER, STAGE_HEADER, validate_image_artifacts,
-                          validate_pendulum_artifacts, validate_stage_table
+using .RunArtifactSchema: CONFIGURATION_NAMES, PENDULUM_CONFIGURATION_NAMES, IMAGE_LOSS_HEADER,
+                          IMAGE_RECORD_HEADER, PENDULUM_LOSS_HEADER, PENDULUM_RECORD_HEADER,
+                          STAGE_HEADER, validate_image_artifacts, validate_pendulum_artifacts,
+                          validate_stage_table
 
 csv_field(value) = begin
     text = string(value)
@@ -106,16 +107,24 @@ end
             configurations, expected_epochs=2, expected_backend="cpu",
             allow_validation_failures=true).statuses["failed_validation"] == 1
 
-        checkpoints = String[]
+        pendulum_configurations = ["geometric-adam-cayley", "scalar-moment-adam"]
         pendulum_records = Dict{String,Any}[]
-        for (repetition, seed) in enumerate(seeds)
-            checkpoint = joinpath(directory, "pendulum-seed-$seed.h5")
+        pendulum_losses = Dict{String,Any}[]
+        for configuration in pendulum_configurations, (repetition, seed) in enumerate(seeds)
+            checkpoint = joinpath(directory, "pendulum-$configuration-seed-$seed.h5")
             write(checkpoint, "fixture")
-            push!(checkpoints, checkpoint)
             push!(pendulum_records, Dict(
-                "schema_version" => 1,
+                "schema_version" => 2,
                 "dataset" => "pendulum",
-                "configuration" => "geometric-adam",
+                "configuration_key" => configuration,
+                "configuration" => PENDULUM_CONFIGURATION_NAMES[configuration],
+                "optimizer_role" => configuration == "geometric-adam-cayley" ? "proposed" :
+                                    "riemannian-adam-baseline",
+                "learning_rate" => 0.001,
+                "retraction" => "cayley",
+                "second_moment" => configuration == "geometric-adam-cayley" ?
+                                   "coordinate-wise" : "scalar (quotient norm)",
+                "transport" => "global-section",
                 "repetition" => repetition,
                 "seed" => seed,
                 "status" => "ok",
@@ -126,20 +135,37 @@ end
                 "seconds_per_epoch" => 0.6,
                 "host_allocated_bytes" => 1024,
                 "gc_seconds" => 0.1,
-                "backend" => "CPU",
+                "backend" => "cpu",
                 "checkpoint" => checkpoint,
+                "message" => "ok",
             ))
+            for epoch in 1:2
+                push!(pendulum_losses, Dict(
+                    "configuration_key" => configuration,
+                    "configuration" => PENDULUM_CONFIGURATION_NAMES[configuration],
+                    "repetition" => repetition,
+                    "seed" => seed,
+                    "epoch" => epoch,
+                    "loss" => 0.5 - epoch / 10,
+                ))
+            end
         end
         pendulum_path = joinpath(directory, "pendulum-runs.csv")
+        pendulum_losses_path = joinpath(directory, "pendulum-losses.csv")
         write_table(pendulum_path, PENDULUM_RECORD_HEADER, pendulum_records)
-        @test validate_pendulum_artifacts(pendulum_path, directory; seeds,
-            expected_epochs=2, expected_backend="cpu").records == 2
+        write_table(pendulum_losses_path, PENDULUM_LOSS_HEADER, pendulum_losses)
+        @test validate_pendulum_artifacts(pendulum_path, pendulum_losses_path, directory; seeds,
+            configurations=pendulum_configurations, expected_epochs=2,
+            expected_backend="cpu").records == 4
 
         write_table(pendulum_path, PENDULUM_RECORD_HEADER, pendulum_records[1:1])
-        @test validate_pendulum_artifacts(pendulum_path, directory; seeds,
-            expected_epochs=2, expected_backend="cpu", allow_partial=true).records == 1
-        @test_throws ArgumentError validate_pendulum_artifacts(pendulum_path, directory; seeds,
-            expected_epochs=2, expected_backend="cpu")
+        write_table(pendulum_losses_path, PENDULUM_LOSS_HEADER, pendulum_losses[1:2])
+        @test validate_pendulum_artifacts(pendulum_path, pendulum_losses_path, directory; seeds,
+            configurations=pendulum_configurations, expected_epochs=2, expected_backend="cpu",
+            allow_partial=true).records == 1
+        @test_throws ArgumentError validate_pendulum_artifacts(
+            pendulum_path, pendulum_losses_path, directory; seeds,
+            configurations=pendulum_configurations, expected_epochs=2, expected_backend="cpu")
 
         stages_path = joinpath(directory, "stages.csv")
         stage_rows = [

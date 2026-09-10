@@ -1,8 +1,8 @@
 #!/usr/bin/env julia
 
 include("run_artifact_schema.jl")
-using .RunArtifactSchema: normalize_configurations, split_list, validate_image_artifacts,
-                          validate_pendulum_artifacts, validate_run_artifacts
+using .RunArtifactSchema: normalize_configurations, normalize_pendulum_configurations, split_list,
+                          validate_image_artifacts, validate_pendulum_artifacts, validate_run_artifacts
 
 function usage(io::IO=stdout)
     println(io, """usage: validate_run_artifacts.jl --run-dir DIR [options]
@@ -113,11 +113,16 @@ function main(args=ARGS)
             expected_backend=backend, allow_validation_failures)
         println("validated $image artifacts: $(summary.records) records, $(summary.losses) loss rows")
     elseif pendulum
-        summary = validate_pendulum_artifacts(joinpath(run_dir, "pendulum-runs.csv"), run_dir;
-            seeds, expected_epochs=pendulum_epochs, expected_backend=backend, allow_partial)
-        println("validated pendulum artifacts: $(summary.records) records")
+        pendulum_configurations = normalize_pendulum_configurations(configurations_value)
+        summary = validate_pendulum_artifacts(
+            joinpath(run_dir, "pendulum-runs.csv"), joinpath(run_dir, "pendulum-losses.csv"), run_dir;
+            seeds, configurations=pendulum_configurations, expected_epochs=pendulum_epochs,
+            expected_backend=backend, allow_partial, allow_validation_failures)
+        println("validated pendulum artifacts: $(summary.records) records, $(summary.losses) loss rows")
     else
         stages = lowercase.(split_list(stages_value))
+        pendulum_configurations = "pendulum" in stages ?
+            normalize_pendulum_configurations(configurations_value) : String[]
         if "retraction" in stages
             isempty(retraction_repo) && throw(ArgumentError(
                 "--retraction-repo is required when the retraction stage is selected"))
@@ -127,7 +132,7 @@ function main(args=ARGS)
         summaries = validate_run_artifacts(run_dir; mode=lowercase(mode), stages, seeds,
             configurations, expected_image_epochs=image_epochs,
             expected_pendulum_epochs=pendulum_epochs, expected_backend=backend,
-            retraction_repo, allow_validation_failures)
+            retraction_repo, pendulum_configurations, allow_validation_failures)
         println("validated run artifacts: ", join(summaries, "; "))
     end
     0

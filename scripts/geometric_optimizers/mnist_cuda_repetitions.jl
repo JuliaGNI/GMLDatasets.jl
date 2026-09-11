@@ -23,8 +23,11 @@
 # objective, the gradient, the schedule and the bars the runs are judged against — is that of
 # `mnist_cuda.jl`, so a repetition here is comparable to the corresponding run there.
 #
-# By default it repeats `Stiefel weights, Adam`, which is the configuration the paper's result
-# rests on. `MNIST_CONFIGURATIONS` selects others. For `gradient` and `momentum` the default
+# By default it repeats geometric Adam with Stiefel weights and the package-default Cayley
+# retraction, which is the configuration the paper's result rests on. This is not Cayley ADAM:
+# the `scalar-moment-adam` configuration runs `ScalarMomentAdam` from Li et al. (2020) as the
+# per-leaf composite of `scalar_moment_adam_composite.jl`.
+# `MNIST_CONFIGURATIONS` selects other configurations. For `gradient` and `momentum` the default
 # (a seed per repetition) measures the spread over *initializations*, which is a meaningful
 # number but a different one; with `MNIST_VARY_SEED=0` those two would reproduce their run and
 # the repetitions would cost ≈1:50 h each to confirm it.
@@ -36,7 +39,7 @@
 # ≈8 h, about the same as the ≈6:53 h `mnist_cuda.jl` takes for all four. Run it the same way,
 # in a `screen`, through the wrapper next to it:
 #
-#   screen -dmS mnist scripts/geometric_optimizers/run_mnist_repetitions.sh              # 5 × Stiefel weights, Adam
+#   screen -dmS mnist scripts/geometric_optimizers/run_mnist_repetitions.sh              # 10 × geometric Adam
 #   screen -dmS mnist scripts/geometric_optimizers/run_mnist_repetitions.sh --repeat 3   # 3 of them
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --smoke                        # 3 × 2 epochs, ≈4 min
 #
@@ -62,14 +65,27 @@
 #
 # ## Environment variables
 #
-#   MNIST_REPETITIONS     how often each configuration is trained    (default 5)
-#   MNIST_CONFIGURATIONS  which ones, comma separated: `adam-stiefel`, `adam-regular`,
-#                         `gradient`, `momentum`, or `all`           (default adam-stiefel)
+#   MNIST_REPETITIONS     how often each configuration is trained   (default 10)
+#   MNIST_CONFIGURATIONS  which ones, comma separated: `geometric-adam-cayley`, `scalar-moment-adam`,
+#                         `standard-adam`, `gradient`, `momentum`, or `all`
+#                         (`adam-stiefel` and `adam-regular` remain accepted aliases)
+#   MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE
+#                         the rate of the `scalar-moment-adam` baseline (default 1e-3). Separate from
+#                         the rate the other configurations share, because the scalar-moment
+#                         direction has magnitude ≈ 1 in total where `Adam`'s has ≈ 1 per
+#                         component, so the same number buys a step of a different length
+#   MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM
+#                         which ‖·‖² the baseline's scalar second moment accumulates: `0` the
+#                         `GeometricOptimizers` quotient-space norm (default), `1` the faithful
+#                         `li2020efficient` Algorithm 2 ambient norm
 #   MNIST_VARY_SEED       repetition `r` gets the seed `seed + r - 1` (default 1); with `0`
 #                         every repetition uses the same seed, which measures the
 #                         nondeterminism above rather than the spread of the method
 #   MNIST_N_EPOCHS        epochs per repetition        (default 500; use 2 for a smoke test)
 #   MNIST_BATCH_SIZE      images per batch                           (default 2048)
+#   MNIST_TRAINING_SAMPLES
+#                         optional leading training subset; 0 uses the full data set (default 0)
+#   MNIST_TEST_SAMPLES    optional leading test subset; 0 uses the full data set (default 0)
 #   MNIST_ACCURACY_EVERY  epochs between test evaluations (default 25, `0` disables them)
 #   MNIST_REPORT          path of the report            (default mnist_repetitions_report.txt)
 #   MNIST_LOSSES          path of the loss CSV          (default mnist_repetitions_losses.csv)
@@ -81,19 +97,29 @@
 # carries the same code for everything below the loop.
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
+using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!,
+                           observe_optimizer_phase
+using GMLDatasets: split_and_flatten, onehotbatch
 # `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
 # package that owns a parameter set and does its flattening. This script used to reach the old one
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters, mapparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
 using Printf: @printf, @sprintf
 import CUDA, ForwardDiff, JLD2, MLDatasets, Random, Zygote
+
+# The timer is definitions-only and is shared with its focused deterministic regression.
+include("step_timing.jl")
+
+# The `scalar-moment-adam` configuration is the per-leaf composite, not a method of
+# `GeometricOptimizers`; its definitions are in the file next to this one, which the regression
+# test includes as well, so the test exercises the same code the run uses.
+include("scalar_moment_adam_composite.jl")
 
 # --------------------------------------------------------------------------- device ---
 
@@ -103,7 +129,7 @@ const use_cuda = CUDA.functional()
 # are still inferred.
 const to_device = use_cuda ? CUDA.cu : identity
 to_host(x::AbstractArray) = Array(x)
-synchronize_device() = use_cuda ? CUDA.synchronize() : nothing
+const synchronize_device = step_timing_synchronizer(use_cuda, CUDA.synchronize)
 
 # --------------------------------------------------------------------------- report ---
 
@@ -113,6 +139,7 @@ synchronize_device() = use_cuda ? CUDA.synchronize() : nothing
 const report_path = get(ENV, "MNIST_REPORT", "mnist_repetitions_report.txt")
 const output_path = get(ENV, "MNIST_OUTPUT", "mnist_repetitions.jld2")
 const losses_path = get(ENV, "MNIST_LOSSES", "mnist_repetitions_losses.csv")
+const records_path = get(ENV, "MNIST_RECORDS", "mnist_repetitions_runs.csv")
 const report_io = open(report_path, "w")
 
 const losses_io = open(losses_path, "w")
@@ -241,18 +268,30 @@ const L = 16                # the number of transformer blocks
 const add_connection = false
 const T = Float32
 const learning_rate = T(1e-3)
+# The `scalar-moment-adam` baseline keeps its own rate and its own norm mode: the scalar-moment
+# direction has magnitude ≈ 1 in total where `Adam`'s has ≈ 1 per component, so the shared
+# `learning_rate` would buy a step of a different length on the Stiefel leaves, and which ‖·‖²
+# the scalar second moment accumulates is a setting the run records below have to quote.
+const scalar_moment_adam_learning_rate =
+    T(parse(Float64, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE", "1e-3")))
+const scalar_moment_adam_ambient_norm =
+    parse(Bool, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM", "0"))
 const momentum_coefficient = T(0.5)
-const seed = 1234
+const seed = parse(Int, get(ENV, "MNIST_BASE_SEED", "1234"))
 
 const batch_size = parse(Int, get(ENV, "MNIST_BATCH_SIZE", "2048"))
+const training_samples = parse(Int, get(ENV, "MNIST_TRAINING_SAMPLES", "0"))
+const test_samples = parse(Int, get(ENV, "MNIST_TEST_SAMPLES", "0"))
 const n_epochs = parse(Int, get(ENV, "MNIST_N_EPOCHS", "500"))
 const accuracy_every = parse(Int, get(ENV, "MNIST_ACCURACY_EVERY", "25"))
 
-# How often each selected configuration is trained. Five is the smallest number that gives a
-# standard deviation worth printing (four degrees of freedom) and still fits in a night on one
-# GPU. `1` is allowed — it is then the single training `mnist_cuda.jl` performs, and the report
-# says so instead of printing a deviation it does not have.
-const n_repetitions = parse(Int, get(ENV, "MNIST_REPETITIONS", "5"))
+batch_size > 0 || error("MNIST_BATCH_SIZE must be positive")
+training_samples >= 0 || error("MNIST_TRAINING_SAMPLES must be nonnegative")
+test_samples >= 0 || error("MNIST_TEST_SAMPLES must be nonnegative")
+
+# The revision protocol uses ten independently seeded repetitions. `1` remains valid for smoke
+# tests and debugging.
+const n_repetitions = parse(Int, get(ENV, "MNIST_REPETITIONS", "10"))
 @assert n_repetitions ≥ 1 "MNIST_REPETITIONS must be at least 1"
 
 # Whether the repetitions differ in their seed. See the header: with a varying seed the spread
@@ -260,8 +299,13 @@ const n_repetitions = parse(Int, get(ENV, "MNIST_REPETITIONS", "5"))
 # to quote for a result; with a fixed seed it is the nondeterminism alone, which is what made
 # this script necessary and is worth being able to measure separately.
 const vary_seed = parse(Bool, get(ENV, "MNIST_VARY_SEED", "1"))
+const requested_seeds = let value = strip(get(ENV, "MNIST_SEEDS", ""))
+    isempty(value) ? Int[] : parse.(Int, strip.(split(value, ','; keepempty=false)))
+end
+isempty(requested_seeds) || length(requested_seeds) == n_repetitions ||
+    error("MNIST_SEEDS contains $(length(requested_seeds)) seeds but MNIST_REPETITIONS=$n_repetitions")
 
-repetition_seed(r::Integer) = vary_seed ? seed + r - 1 : seed
+repetition_seed(r::Integer) = !isempty(requested_seeds) ? requested_seeds[r] : vary_seed ? seed + r - 1 : seed
 
 const dim = patch_length^2                      # the transformer dimension
 const seq_length = (28 ÷ patch_length)^2        # the number of patches
@@ -283,44 +327,9 @@ const orthonormality_tolerance = T(1e-2)
 const accuracy_floor_min_epochs = 50
 const gradient_tolerance = 1e-4
 
-# ----------------------------------------------------------------------------- data ---
-
-@doc raw"""
-    split_and_flatten(input, patch_length)
-
-Rearrange a batch of images into *flattened patches*, i.e. turn an ``(N, N, k)`` array into
-an ``(\mathtt{patch\_length}^2, (N \div \mathtt{patch\_length})^2, k)`` array.
-
-This is the equivalent of `GeometricMachineLearning.split_and_flatten` and produces the same
-ordering: the patches are numbered column-major over the image and the entries within a
-patch are numbered column-major as well.
-"""
-function split_and_flatten(input::AbstractArray{<:Number, 3}, patch_length::Integer)
-    @assert size(input, 1) == size(input, 2)
-    @assert size(input, 1) % patch_length == 0
-    n = size(input, 1) ÷ patch_length
-    # (i_red, patch_row, j_red, patch_column, k) → (i_red, j_red, patch_row, patch_column, k)
-    output = permutedims(reshape(input, patch_length, n, patch_length, n, size(input, 3)), (
-        1, 3, 2, 4, 5))
-    reshape(output, patch_length^2, n^2, size(input, 3))
-end
-
-"""
-    onehotbatch(target)
-
-Turn a vector of labels (`0` to `9`) into a `10`×`length(target)` matrix of unit vectors.
-"""
-function onehotbatch(target::AbstractVector{<:Integer})
-    output = zeros(T, n_classes, length(target))
-    for (k, label) in pairs(target)
-        output[label + 1, k] = one(T)
-    end
-    output
-end
-
 # ----------------------------------------------------------------------- parameters ---
 
-# The parameters are stored in a flat `NamedTuple` *on the host*. Note that only the
+# The parameters are stored in a flat `NetworkParameters` container *on the host*. Note that only the
 # projections of the attention layers are put on the `StiefelManifold`; the parameters of the
 # `ResNetLayer`s and of the classification layer are ordinary arrays.
 const parameter_layout = [[Symbol(s, "_", l, "_", h) => (dim, Dₕ) for l in 1:L
@@ -389,12 +398,6 @@ function regroup_host(v::AbstractVector{<:Number})
     regroup(i -> reshape(v[parameter_ranges[i]], parameter_sizes[i]...))
 end
 
-# The parameters are moved to the device in a single transfer and split up there; the 353
-# individual parameters are far too small for a transfer each.
-const host_parameters = zeros(T, n_parameters)
-const device_parameters = to_device(zeros(T, n_parameters))
-const device_gradient = to_device(zeros(T, n_parameters))
-
 # The layout of the parameter set, and the ranges this script indexes the flat vector by.
 #
 # Both are read *off the layout* rather than computed here from `parameter_sizes`. That is the whole of
@@ -411,14 +414,20 @@ const device_gradient = to_device(zeros(T, n_parameters))
 # is what takes a `StiefelManifold` down to its dense `A` — by a method `GeometricOptimizers`
 # registers, so this script needs no copy of that knowledge.
 const parameter_flat_layout = parameterlayout(initial_parameters(Random.Xoshiro(seed), true))
-const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.children, i))
+const parameter_ranges = [parameterrange(getfield(parameter_flat_layout.inner.children, i))
                           for i in eachindex(parameter_sizes)]
 const n_parameters = flatlength(parameter_flat_layout)
+
+# The parameters are moved to the device in a single transfer and split up there; the 353
+# individual parameters are far too small for a transfer each.
+const host_parameters = zeros(T, n_parameters)
+const device_parameters = to_device(zeros(T, n_parameters))
+const device_gradient = to_device(zeros(T, n_parameters))
 
 """
     flatten_parameters!(v, ps)
 
-Write the parameter `NamedTuple` into the flat vector `v`, in the same order in which
+Write the parameter container into the flat vector `v`, in the same order in which
 `NeuralNetworkParameters.flatten` writes it (which is the order of `parameter_ranges`).
 """
 function flatten_parameters!(v::AbstractVector{T}, ps::NetworkParameters)
@@ -523,7 +532,7 @@ end
 
 # --------------------------------------------------------------- objective & gradient ---
 
-# The `Optimizer` calls the objective on the parameter `NamedTuple` and `∇F!` on the
+# The `Optimizer` calls the objective on the parameter container and `∇F!` on the
 # *flattened* parameters, both of which live on the host. The current batch is on the device.
 const current_batch = Ref{Tuple{AbstractArray{T, 3}, AbstractMatrix{T}}}()
 
@@ -677,6 +686,15 @@ This is `train` of `mnist_cuda.jl` with the seed as a keyword argument instead o
 which is the whole difference between the two scripts below the run loop — and with the
 repetition written into the loss CSV.
 
+`algorithm` is either a method of `GeometricOptimizers`, one whole-tree `Optimizer` and
+`OptimizerState` per repetition, or the `ScalarMomentAdamConfig` configuration of the
+`scalar-moment-adam` baseline, the per-leaf composite of
+`scalar_moment_adam_composite.jl`: one `Optimizer`/`OptimizerState`
+per leaf of `ps`, stepped in parameter-layout order and sharing the one whole-tree `∇F!` of the
+step. Everything else in this function — the seed, the batches, the loss series, the evaluation
+cadence, the stopping rule — is the same for it as for a method, so its repetitions stay
+comparable to the others' except for the one thing that differs on purpose, the optimizer.
+
 One line per epoch goes into the report as the epoch finishes, so the file describes a run
 that is still in progress just as well as a finished one. `label` is what those lines are
 prefixed with.
@@ -685,27 +703,67 @@ A non-finite epoch loss ends the run: the parameters cannot come back from it, a
 of noticing here is not to spend the remaining epochs proving that.
 """
 function train(
-        stiefel::Bool, algorithm::GeometricOptimizers.OptimizerMethod, input, output,
-        test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
-        repetition::Integer, seed::Integer = seed, n_epochs = n_epochs, learning_rate = learning_rate)
-    rng = Random.Xoshiro(seed)
-    ps = initial_parameters(rng, stiefel)
-
+    stiefel::Bool,
+    algorithm::Union{GeometricOptimizers.OptimizerMethod, ScalarMomentAdamConfig}, input, output,
+    test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
+    repetition::Integer, seed::Integer = seed, n_epochs = n_epochs,
+    learning_rate = learning_rate)
+    # `initial_parameters` and the epoch shuffles use the private RNG below. GO also constructs
+    # randomized global sections through Julia's task-local default RNG, so seed that stream as
+    # well: the recorded repetition seed then controls every pseudorandom initialization for
+    # every configuration, independent of the order in which configurations are run.
     n_batches = size(input, 3) ÷ batch_size
     current_batch[] = (
         to_device(input[:, :, 1:batch_size]), to_device(output[:, 1:batch_size]))
+    timer = ExclusiveStepTimer(synchronize_device)
 
     # Note that the learning rate is supplied through the line search: the *methods* only
     # determine the direction. `Static(learning_rate)` is what `Optimizer` defaults to for
-    # these three methods anyway; it is written out so that the rate is visible right here.
+    # these three methods anyway; it is written out so that the rate is visible right here. A
+    # `ScalarMomentAdamConfig` carries its own rate — the one from
+    # `MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE` — so this keyword does not apply to it.
     #
-    # Both are constructed per repetition, so no cache and no iteration counter survives from
-    # the previous one — a repetition has to start where the corresponding run of
-    # `mnist_cuda.jl` starts, or the statistics below are of something else.
-    optimizer = Optimizer(
-        ps, F; (∇F!) = ∇F!, algorithm = algorithm, linesearch = Static(learning_rate))
-    state = OptimizerState(algorithm, ps)
-    initialize_state!(state)
+    # Rebuilding after the unrecorded warm-up below restores the exact seeded parameters, global
+    # sections, optimizer caches, and data-order RNG that a run without warm-up would have had.
+    function fresh_training_state()
+        Random.seed!(seed)
+        repetition_rng = Random.Xoshiro(seed)
+        parameters = initial_parameters(repetition_rng, stiefel)
+        if algorithm isa ScalarMomentAdamConfig
+            # the per-leaf composite: one optimizer/state per leaf of `ps`, the one shared `∇F!`
+            # of this script, and the rate and the norm mode the configuration recorded
+            local_composite = ScalarMomentAdamComposite(
+                parameters, ∇F!, algorithm; observer = timer)
+            return repetition_rng, parameters, local_composite, nothing, nothing
+        end
+        local_optimizer = Optimizer(parameters, F; (∇F!) = ∇F!, algorithm = algorithm,
+            linesearch = Static(learning_rate), observer = timer)
+        local_state = OptimizerState(algorithm, parameters)
+        initialize_state!(local_state)
+        repetition_rng, parameters, nothing, local_optimizer, local_state
+    end
+
+    function optimizer_step!(parameters, composite, optimizer, state)
+        if algorithm isa ScalarMomentAdamConfig
+            composite_step!(composite, parameters)
+        else
+            observe_optimizer_phase(timer, :optimizer_state_direction) do
+                increase_iteration_number!(state)
+                solver_step!(parameters, state, optimizer)
+                GeometricOptimizers.update!(state, optimizer, parameters)
+            end
+        end
+        nothing
+    end
+
+    # Compile and launch the exact optimizer path once, then discard both the sample and all state
+    # it touched. The measured run starts only after an identically seeded reconstruction and a
+    # timer reset, so compilation and warm-up cannot leak into a steady-state component total.
+    rng, ps, composite, optimizer, state = fresh_training_state()
+    optimizer_step!(ps, composite, optimizer, state)
+    synchronize_device()
+    reset_step_timing!(timer)
+    rng, ps, composite, optimizer, state = fresh_training_state()
 
     losses = T[]
     epoch_losses = T[]
@@ -714,6 +772,7 @@ function train(
     accuracies = T[]
     orthonormalities = T[]
     stopped = ""
+    peak_used[] = 0
 
     synchronize_device()
     initial_time = time()
@@ -728,9 +787,7 @@ function train(
             # the batch is gathered on the host and uploaded; at 6.4 MB per batch this is
             # negligible next to the forward and backward passes
             current_batch[] = (to_device(input[:, :, batch]), to_device(output[:, batch]))
-            increase_iteration_number!(state)
-            solver_step!(ps, state, optimizer)
-            GeometricOptimizers.update!(state, optimizer, ps)
+            optimizer_step!(ps, composite, optimizer, state)
             loss = F(ps)
             push!(losses, loss)
             epoch_loss += loss / n_batches
@@ -774,36 +831,66 @@ function train(
     end
     synchronize_device()
     total_time = time() - initial_time
+    timing = step_timing(timer, length(losses))
+    timing.timed_steps == length(losses) || error(
+        "timing recorded $(timing.timed_steps) steps for $(length(losses)) completed steps")
+    all(value -> isfinite(value) && value >= 0, step_timing_csv_values(timing)) ||
+        error("step timing produced a non-finite or negative schema-v4 value")
 
-    (parameters = ps, losses = losses,
-        epoch_losses = epoch_losses, epoch_times = epoch_times,
-        accuracy_epochs = accuracy_epochs, accuracies = accuracies, orthonormalities = orthonormalities,
-        total_time = total_time, stopped = stopped)
+    (parameters=ps, losses=losses, epoch_losses=epoch_losses, epoch_times=epoch_times,
+        accuracy_epochs=accuracy_epochs, accuracies=accuracies, orthonormalities=orthonormalities,
+        total_time=total_time, step_timing=timing, stopped=stopped,
+        peak_device_bytes=peak_used[])
 end
 
 # ------------------------------------------------------------------ configurations ---
 
-# The four configurations of `mnist_cuda.jl`, by key. `learns` is what the configuration is
-# expected to do; `regular weights, Adam` is the baseline of the paper and is expected to
-# collapse onto the trivial prediction (see the header of `mnist_cuda.jl` for why, and why a
-# flat loss there is the experiment working rather than a defect).
+# The configurations, by key: the four of `mnist_cuda.jl` plus the `scalar-moment-adam`
+# baseline.
+# `learns` is what the configuration is expected to do; standard Adam is the non-geometric
+# ablation and is expected to collapse onto the trivial prediction (see the header of
+# `mnist_cuda.jl` for why, and why a flat loss there is the experiment working rather than a
+# defect).
 #
 # `Adam` takes the *element type* of the parameters, not a learning rate, and it is not
 # converted the way `MomentumMethod` is, so `Adam(T)` is what dispatches to the `Float32`
-# cache.
+# cache. `ScalarMomentAdamConfig` is the per-leaf composite of
+# `scalar_moment_adam_composite.jl`, not a method:
+# `ScalarMomentAdam` on the Stiefel leaves, ordinary `Adam` on the Euclidean ones, and the
+# rate and the norm mode in `second_moment` are the two environment settings above.
 const configurations = Dict(
-    "adam-stiefel" => (name = "Stiefel weights, Adam", stiefel = true,
-        learns = true, algorithm = Adam(T)),
-    "adam-regular" => (name = "regular weights, Adam", stiefel = false,
-        learns = false, algorithm = Adam(T)),
-    "gradient" => (name = "Stiefel weights, gradient", stiefel = true,
-        learns = true, algorithm = GradientMethod()),
-    "momentum" => (name = "Stiefel weights, momentum", stiefel = true,
-        learns = true, algorithm = MomentumMethod(momentum_coefficient))
+    "geometric-adam-cayley" => (name="Geometric Adam (Stiefel, Cayley retraction)",
+        role="proposed", stiefel=true, learns=true, algorithm=Adam(T),
+        learning_rate=learning_rate, retraction="cayley", second_moment="coordinate-wise",
+        transport="global-section"),
+    "scalar-moment-adam" => (name="Scalar Moment Adam (Stiefel, Cayley retraction)",
+        role="riemannian-adam-baseline", stiefel=true, learns=true,
+        algorithm=ScalarMomentAdamConfig(scalar_moment_adam_learning_rate;
+            ambient_norm=scalar_moment_adam_ambient_norm),
+        learning_rate=scalar_moment_adam_learning_rate, retraction="cayley",
+        second_moment=scalar_moment_adam_ambient_norm ? "scalar (ambient norm)" : "scalar (quotient norm)",
+        transport="global-section"),
+    "standard-adam" => (name="Standard Adam (unconstrained)", role="non-geometric-ablation",
+        stiefel=false, learns=false, algorithm=Adam(T), learning_rate=learning_rate, retraction="none",
+        second_moment="coordinate-wise", transport="none"),
+    "gradient" => (name="Riemannian gradient (Stiefel, Cayley retraction)", role="diagnostic",
+        stiefel=true, learns=true, algorithm=GradientMethod(), learning_rate=learning_rate,
+        retraction="cayley",
+        second_moment="none", transport="none"),
+    "momentum" => (name="Riemannian momentum (Stiefel, Cayley retraction)", role="diagnostic",
+        stiefel=true, learns=true, algorithm=MomentumMethod(momentum_coefficient),
+        learning_rate=learning_rate, retraction="cayley", second_moment="none",
+        transport="global-section"),
 )
 
-# in the order of `mnist_cuda.jl`, so that a report of all four is read next to that one
-const configuration_order = ["adam-stiefel", "adam-regular", "gradient", "momentum"]
+# in the order of `mnist_cuda.jl` — the `scalar-moment-adam` baseline follows the configuration it
+# is the baseline for — so that a report of all five is read next to that one
+const configuration_order = ["geometric-adam-cayley", "scalar-moment-adam", "standard-adam", "gradient",
+                             "momentum"]
+const configuration_aliases = Dict(
+    "adam-stiefel" => "geometric-adam-cayley",
+    "adam-regular" => "standard-adam",
+)
 
 """
     selected_configurations()
@@ -813,8 +900,9 @@ resolved before MNIST is loaded, so that an unknown key is one line now rather t
 run eight hours from now.
 """
 function selected_configurations()
-    requested = get(ENV, "MNIST_CONFIGURATIONS", "adam-stiefel")
-    keys_requested = String.(strip.(split(lowercase(requested), ','; keepempty = false)))
+    requested = get(ENV, "MNIST_CONFIGURATIONS", "geometric-adam-cayley")
+    keys_requested = [get(configuration_aliases, key, key) for key in
+                      String.(strip.(split(lowercase(requested), ','; keepempty=false)))]
     "all" in keys_requested && return configuration_order
     unknown = filter(k -> !haskey(configurations, k), keys_requested)
     isempty(unknown) ||
@@ -825,6 +913,9 @@ function selected_configurations()
 end
 
 const selected = selected_configurations()
+const dataset_name = lowercase(get(ENV, "MNIST_DATASET", "mnist"))
+dataset_name in ("mnist", "fashion-mnist") ||
+    error("MNIST_DATASET must be `mnist` or `fashion-mnist`, got `$dataset_name`")
 
 # One entry per training, in the order they are run: all repetitions of a configuration before
 # the next one, so that a run which is cut short has complete statistics for the configurations
@@ -837,19 +928,35 @@ const jobs = [(key = key, configuration = configurations[key],
 
 const script_start = time()
 
-println("loading MNIST ...")
-train_x, train_y = MLDatasets.MNIST(split = :train)[:]
-test_x, test_y = MLDatasets.MNIST(split = :test)[:]
+println("loading $dataset_name ...")
+dataset = dataset_name == "mnist" ? MLDatasets.MNIST : MLDatasets.FashionMNIST
+train_x, train_y = dataset(split=:train)[:]
+test_x, test_y = dataset(split=:test)[:]
+
+if training_samples > 0
+    n = min(training_samples, size(train_x, 3))
+    train_x = train_x[:, :, 1:n]
+    train_y = train_y[1:n]
+end
+if test_samples > 0
+    n = min(test_samples, size(test_x, 3))
+    test_x = test_x[:, :, 1:n]
+    test_y = test_y[1:n]
+end
 
 # the data set stays on the host; the batches are uploaded one at a time
-const train_input = split_and_flatten(T.(train_x), patch_length)
-const train_output = onehotbatch(train_y)
-const test_input = split_and_flatten(T.(test_x), patch_length)
-const test_output = onehotbatch(test_y)
+const train_input = split_and_flatten(
+    T.(train_x); patch_length=patch_length, number_of_patches=seq_length)
+const train_output = reshape(onehotbatch(T, train_y), n_classes, length(train_y))
+const test_input = split_and_flatten(
+    T.(test_x); patch_length=patch_length, number_of_patches=seq_length)
+const test_output = reshape(onehotbatch(T, test_y), n_classes, length(test_y))
 
 @assert size(train_input) == (dim, seq_length, size(train_x, 3))
 
 const n_batches = size(train_input, 3) ÷ batch_size
+n_batches > 0 || error(
+    "MNIST_BATCH_SIZE=$batch_size exceeds the selected $(size(train_input, 3)) training samples")
 
 # ------------------------------------------------------------------- what will be run ---
 
@@ -859,6 +966,8 @@ announce(@sprintf("%i repetition(s) of %i configuration(s) — %i trainings, %i 
     n_repetitions, length(selected), length(jobs), length(jobs) * n_epochs * n_batches))
 announce(@sprintf("configurations: %s",
     join((configurations[k].name for k in selected), "; ")))
+announce(@sprintf("learning rates: shared %.8g; scalar-moment-adam %.8g",
+    learning_rate, scalar_moment_adam_learning_rate))
 announce(vary_seed ?
          @sprintf("seeds: %s (one per repetition)",
     join((repetition_seed(r) for r in 1:n_repetitions), ", ")) :
@@ -909,14 +1018,25 @@ the output of `mnist_cuda.jl` therefore reads this file as well, and gets the re
 they were separate configurations.
 """
 function save_results(results)
-    output = Dict{String, Any}("n_epochs" => n_epochs, "batch_size" => batch_size,
+    output = Dict{String, Any}("schema_version" => MNIST_RUN_SCHEMA_VERSION,
+        "n_epochs" => n_epochs, "batch_size" => batch_size,
         "n_batches" => n_batches, "gradient_errors" => collect(gradient_errors),
         "n_results" => length(results), "n_repetitions" => n_repetitions,
         "vary_seed" => vary_seed, "seed" => seed,
-        "configurations" => [configurations[k].name for k in selected])
+        "configuration_keys" => selected,
+        "configurations" => [configurations[k].name for k in selected],
+        "learning_rate" => learning_rate,
+        "scalar_moment_adam_learning_rate" => scalar_moment_adam_learning_rate,
+        "scalar_moment_adam_ambient_norm" => scalar_moment_adam_ambient_norm)
     for (i, result) in pairs(results)
         output["name$i"] = result.name
+        output["configuration_key$i"] = result.configuration_key
         output["configuration$i"] = result.configuration
+        output["optimizer_role$i"] = result.optimizer_role
+        output["learning_rate$i"] = result.learning_rate
+        output["retraction$i"] = result.retraction
+        output["second_moment$i"] = result.second_moment
+        output["transport$i"] = result.transport
         output["repetition$i"] = result.repetition
         output["seed$i"] = result.seed
         output["parameters$i"] = result.parameters
@@ -928,6 +1048,9 @@ function save_results(results)
         output["orthonormalities$i"] = result.orthonormalities
         output["orthonormality$i"] = result.orthonormality
         output["total_time$i"] = result.total_time
+        for column in STEP_TIMING_CSV_COLUMNS
+            output["$column$i"] = getproperty(result.step_timing, Symbol(column))
+        end
         output["accuracy$i"] = result.accuracy
     end
     for (key, of) in ("accuracy_samples" => (r -> r.accuracy),
@@ -944,8 +1067,47 @@ function save_results(results)
     JLD2.save(output_path, output)
 end
 
+csv_field(value) = "\"" * replace(string(value), '"' => "\"\"") * "\""
+
+function write_run_records(results, failures)
+    open(records_path, "w") do io
+        println(io, join(("schema_version", "dataset", "configuration_key", "configuration",
+            "optimizer_role", "learning_rate", "retraction", "second_moment", "transport",
+            "repetition", "seed", "status", "epochs_completed", "final_loss", "best_loss",
+            "test_accuracy", "total_seconds", "seconds_per_epoch", STEP_TIMING_CSV_COLUMNS...,
+            "peak_device_bytes", "backend", "message"), ','))
+        for result in results
+            epochs_completed = length(result.epoch_losses)
+            final_loss = isempty(result.epoch_losses) ? NaN : last(result.epoch_losses)
+            best_loss = isempty(result.epoch_losses) ? NaN : minimum(result.epoch_losses)
+            result_verdict = verdict(result)
+            status = result_verdict == "ok" ? "ok" : "failed_validation"
+            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name),
+                csv_field(result.configuration_key),
+                csv_field(result.configuration), csv_field(result.optimizer_role), result.learning_rate,
+                csv_field(result.retraction),
+                csv_field(result.second_moment), csv_field(result.transport),
+                result.repetition, result.seed, status, epochs_completed, final_loss, best_loss,
+                result.accuracy, result.total_time,
+                result.total_time / max(epochs_completed, 1),
+                step_timing_csv_values(result.step_timing)..., result.peak_device_bytes,
+                use_cuda ? "cuda" : "cpu", csv_field(result_verdict)), ','))
+        end
+        for failure in failures
+            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name),
+                csv_field(failure.configuration_key), csv_field(failure.configuration),
+                csv_field(failure.optimizer_role), failure.learning_rate,
+                csv_field(failure.retraction), csv_field(failure.second_moment),
+                csv_field(failure.transport), failure.repetition, failure.seed, "exception", 0,
+                NaN, NaN, NaN, NaN, NaN, 0, NaN, NaN, NaN, NaN, NaN, NaN,
+                peak_used[], use_cuda ? "cuda" : "cpu",
+                csv_field(first(split(failure.message, '\n')))), ','))
+        end
+    end
+end
+
 results = []
-failures = Tuple{String, String}[]
+failures = []
 
 for (j, job) in pairs(jobs)
     run = job.configuration
@@ -962,20 +1124,30 @@ for (j, job) in pairs(jobs)
             repetition = job.repetition, seed = job.seed,
             n_epochs = n_epochs)
         score = T(accuracy(trained.parameters, test_input, test_output))
-        push!(results,
-            (name = name, configuration = run.name,
-                repetition = job.repetition, seed = job.seed,
-                stiefel = run.stiefel, learns = run.learns,
-                parameters = map(freeparameters, trained.parameters), losses = trained.losses,
-                epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
-                accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
-                orthonormalities = trained.orthonormalities,
-                total_time = trained.total_time, accuracy = score, stopped = trained.stopped,
-                orthonormality = orthonormality_error(trained.parameters),
-                sound = parameters_are_sound(trained.parameters)))
+        push!(results, (name=name, configuration_key=job.key, configuration=run.name,
+            repetition=job.repetition, seed=job.seed,
+            stiefel=run.stiefel, learns=run.learns, optimizer_role=run.role,
+            learning_rate=run.learning_rate, retraction=run.retraction,
+            second_moment=run.second_moment, transport=run.transport,
+            # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
+            # structured leaves by their portable free storage, as the earlier result schema did.
+            parameters=mapparameters(freeparameters, trained.parameters), losses=trained.losses,
+            epoch_losses=trained.epoch_losses, epoch_times=trained.epoch_times,
+            accuracy_epochs=trained.accuracy_epochs, accuracies=trained.accuracies,
+            orthonormalities=trained.orthonormalities,
+            total_time=trained.total_time, step_timing=trained.step_timing,
+            accuracy=score, stopped=trained.stopped,
+            peak_device_bytes=trained.peak_device_bytes,
+            orthonormality=orthonormality_error(trained.parameters),
+            sound=parameters_are_sound(trained.parameters)))
         announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
             duration(trained.total_time),
             trained.total_time / max(1, length(trained.losses)), score))
+        announce(@sprintf("%s step timing: AD %.6f, optimizer %.6f, retraction/application %.6f s/step (%i steps)",
+            label, trained.step_timing.gradient_ad_seconds_per_step,
+            trained.step_timing.optimizer_state_direction_seconds_per_step,
+            trained.step_timing.retraction_application_seconds_per_step,
+            trained.step_timing.timed_steps))
         save_results(results)
         announce(@sprintf("%s written to %s", label, output_path))
     catch e
@@ -984,7 +1156,11 @@ for (j, job) in pairs(jobs)
         # repetition that threw is missing from the statistics, and the verdict says so.
         e isa InterruptException && rethrow()
         message = sprint(showerror, e)
-        push!(failures, (name, message))
+        push!(failures, (name=name, configuration_key=job.key, configuration=run.name,
+            optimizer_role=run.role, learning_rate=run.learning_rate,
+            retraction=run.retraction, second_moment=run.second_moment,
+            transport=run.transport, repetition=job.repetition, seed=job.seed,
+            message=message))
         clear_progress()
         announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
         report(message)
@@ -1065,10 +1241,10 @@ for (result, v) in zip(results, verdicts)
         duration(result.total_time),
         v * (n_done < n_epochs ? " [$n_done of $n_epochs epochs]" : "")))
 end
-for (name, message) in failures
+for failure in failures
     announce(@sprintf("%-29s %6s %8s %8s %10s %10s %10s   THREW: %s",
-        name, "—", "—", "—", "—", "—", "—",
-        first(split(message, '\n'))))
+        failure.name, "—", "—", "—", "—", "—", "—",
+        first(split(failure.message, '\n'))))
 end
 
 # ------------------------------------------------------------------------ statistics ---
@@ -1169,7 +1345,7 @@ for key in selected
 end
 if any(r -> !r.learns, results)
     announce()
-    announce("`regular weights, Adam` is the baseline of the paper and is expected to stall at the")
+    announce("`Standard Adam (unconstrained)` is the non-geometric ablation and is expected to stall at the")
     announce(@sprintf("trivial-prediction plateau of %.3f at an accuracy of %.2f; without the Stiefel constraint",
         trivial_loss, chance_accuracy))
     announce("the gradient vanishes through the 16 unnormalized transformer blocks. It is a failure above")
@@ -1177,9 +1353,11 @@ if any(r -> !r.learns, results)
 end
 
 save_results(results)
+write_run_records(results, failures)
 announce()
 announce("parameters:   " * abspath(output_path))
 announce("loss curves:  " * abspath(losses_path))
+announce("run records:  " * abspath(records_path))
 announce("this report:  " * abspath(report_path))
 close(losses_io)
 close(report_io)

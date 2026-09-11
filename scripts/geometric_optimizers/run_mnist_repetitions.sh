@@ -5,9 +5,9 @@
 #
 #   screen -S mnist                                     # then, inside it:
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --smoke            # 3 × 2 epochs, ≈4 min
-#   scripts/geometric_optimizers/run_mnist_repetitions.sh                    # 5 × 500 epochs of Adam on Stiefel, ≈8 h
+#   scripts/geometric_optimizers/run_mnist_repetitions.sh                    # 10 × 500 epochs of Adam on Stiefel
 #   scripts/geometric_optimizers/run_mnist_repetitions.sh --repeat 3         # 3 of them, ≈4:45 h
-#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all four configurations, ≈21 h
+#   scripts/geometric_optimizers/run_mnist_repetitions.sh -c all --repeat 3   # all five configurations, ≈24 h
 #
 # Detach with `C-a d`, log out, come back with `screen -r mnist`. Or start it detached in one
 # go, which is what an ssh session is for:
@@ -17,7 +17,7 @@
 # One repetition is one configuration of the full run, i.e. ≈1:35 h for `Adam` on an RTX 4090 —
 # multiply. This is the sibling of `run_mnist_cuda.sh`, which runs all four configurations
 # *once* and is what the learning curves of the documentation come from; this one answers how
-# far a single accuracy from it can be trusted. It leaves the same four files behind in
+# far a single accuracy from it can be trusted. It leaves five files behind in
 # `results/`:
 #
 #   <stamp>_report.txt        the environment, the gradient checks, one line per epoch and
@@ -26,9 +26,10 @@
 #                             run, configuration, repetition, epoch, batch, step, loss
 #   <stamp>_parameters.jld2   the parameters, losses, timings and accuracies of every
 #                             repetition, plus the samples the statistics come from
+#   <stamp>_runs.csv          one machine-readable outcome/timing record per repetition
 #   <stamp>_stdout.txt        everything the process wrote, including a backtrace if it died
 #
-# `<stamp>` is the start time, so a second run never overwrites the first. Copy all four off
+# `<stamp>` is the start time, so a second run never overwrites the first. Copy all five off
 # the machine when it is done — they are self-contained.
 #
 # Run this from anywhere; it changes to the repository root itself.
@@ -40,11 +41,11 @@ cd "$(dirname "$0")/.."
 julia_bin="${JULIA:-julia}"
 mode="repetitions"
 repetitions=""      # what `--repeat` said, if it was given at all
-configurations="${MNIST_CONFIGURATIONS:-adam-stiefel}"
+configurations="${MNIST_CONFIGURATIONS:-geometric-adam-cayley}"
 
 usage() {
     echo "usage: $0 [--smoke] [--repeat N] [-c|--configurations LIST]" >&2
-    echo "  LIST is comma separated: adam-stiefel, adam-regular, gradient, momentum, or all" >&2
+    echo "  LIST is comma separated: geometric-adam-cayley, scalar-moment-adam, standard-adam, gradient, momentum, or all" >&2
 }
 
 while [ $# -gt 0 ]; do
@@ -58,13 +59,13 @@ while [ $# -gt 0 ]; do
 done
 
 # `--repeat` wins over `MNIST_REPETITIONS`, which wins over the default — and the default of a
-# smoke test is three rather than five, so that it stays a smoke test when neither was given
+# smoke test is three rather than ten, so that it stays a smoke test when neither was given
 # while still computing a deviation over more than two samples.
 if [ -z "$repetitions" ]; then
     if [ "$mode" = "smoke" ]; then
         repetitions="${MNIST_REPETITIONS:-3}"
     else
-        repetitions="${MNIST_REPETITIONS:-5}"
+        repetitions="${MNIST_REPETITIONS:-10}"
     fi
 fi
 
@@ -80,6 +81,7 @@ mkdir -p results
 export MNIST_REPORT="results/${stamp}_report.txt"
 export MNIST_LOSSES="results/${stamp}_losses.csv"
 export MNIST_OUTPUT="results/${stamp}_parameters.jld2"
+export MNIST_RECORDS="results/${stamp}_runs.csv"
 export MNIST_REPETITIONS="$repetitions"
 export MNIST_CONFIGURATIONS="$configurations"
 stdout_log="results/${stamp}_stdout.txt"
@@ -105,14 +107,14 @@ echo "seeds             ${MNIST_VARY_SEED:-1} (0 = the same seed every time)"
 echo "report            $MNIST_REPORT"
 echo "loss curves       $MNIST_LOSSES"
 echo "parameters        $MNIST_OUTPUT"
+echo "run records       $MNIST_RECORDS"
 echo "stdout            $stdout_log"
 echo "follow it with    tail -f $MNIST_REPORT"
 echo
 
-# A machine that has not run this before has no `scripts/Manifest.toml`. Resolving it here
-# means a dependency that cannot be installed says so now, in one line, rather than as a
-# precompilation error out of the script itself — and `errexit` stops before MNIST is even
-# downloaded. It is a no-op once the environment exists.
+# The checked-in manifest pins the reviewed experiment stack. Instantiating it here means an
+# unavailable dependency fails before MNIST is downloaded; it is a no-op once the environment
+# exists.
 "$julia_bin" --project=scripts --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 echo
 
@@ -141,6 +143,7 @@ if [ "$status" -eq 0 ]; then
     echo "    $MNIST_REPORT"
     echo "    $MNIST_LOSSES"
     echo "    $MNIST_OUTPUT"
+    echo "    $MNIST_RECORDS"
     echo "    $stdout_log"
     echo "e.g. from the other machine:"
     echo "    scp '<user>@<host>:$(pwd)/results/${stamp}_*' ."

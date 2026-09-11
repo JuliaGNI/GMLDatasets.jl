@@ -3,9 +3,12 @@ using GMLDatasets
 using GMLDatasets: patch_index
 using GMLDatasets: within_patch_index
 using GMLDatasets: index_conversion
+using AbstractNeuralNetworks: networkbackend
 using GeometricMachineLearning
 # A `Chain`'s parameters are a `NetworkParameters`; the `Tuple` arm is what `applychain` takes once the
-# layers have been split out.
+# layers have been split out. `NamedTuple` stays in the union too: `NeuralNetworkParameters`'
+# `ZygoteRules.pullback` seeds the reverse pass with the wrapped `NamedTuple`, so a function
+# differentiated with respect to a parameter set is called with one.
 using NeuralNetworkParameters: NetworkParameters
 import Zygote, Random
 
@@ -55,6 +58,44 @@ end
 test_onehotbatch([1, 2, 5, 0])
 @test onehotbatch([0]) == reshape([1, zeros(Int, 9)...], 10, 1, 1)
 
+@testset "MNIST repetition-trainer preprocessing contract" begin
+    patch_length = 7
+    n = 28 ÷ patch_length
+    images = reshape(Float32.(1:(28 * 28 * 3)), 28, 28, 3)
+
+    # Reference implementation previously carried by `mnist_cuda_repetitions.jl`.
+    trainer_patches = reshape(
+        permutedims(reshape(images, patch_length, n, patch_length, n, size(images, 3)),
+            (1, 3, 2, 4, 5)),
+        patch_length^2, n^2, size(images, 3))
+    package_patches = split_and_flatten(
+        images; patch_length=patch_length, number_of_patches=n^2)
+
+    @test size(package_patches) == (49, 16, 3)
+    @test eltype(package_patches) === Float32
+    @test package_patches == trainer_patches
+    @test typeof(networkbackend(package_patches)) === typeof(networkbackend(images))
+
+    labels = UInt8[0, 9, 3]
+    encoded = onehotbatch(Float32, labels)
+    trainer_targets = zeros(Float32, 10, length(labels))
+    for (sample, label) in pairs(labels)
+        trainer_targets[label + 1, sample] = 1.0f0
+    end
+
+    @test size(encoded) == (10, 1, 3)
+    @test eltype(encoded) === Float32
+    @test reshape(encoded, 10, length(labels)) == trainer_targets
+    @test typeof(networkbackend(encoded)) === typeof(networkbackend(labels))
+
+    # The established API keeps its rank, values, element type, and host backend.
+    compatible = onehotbatch(labels)
+    @test size(compatible) == (10, 1, 3)
+    @test eltype(compatible) === UInt8
+    @test compatible == UInt8.(encoded)
+    @test typeof(networkbackend(compatible)) === typeof(networkbackend(labels))
+end
+
 @doc raw"""
 Generates an MNIST-like dummy data set.
 
@@ -93,7 +134,7 @@ function test_optimizer_for_classification_layer(;
     loss = FeedForwardLoss()
     loss_dl(
         model::GeometricMachineLearning.Chain, ps::Union{
-            Tuple, NetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
+            Tuple, NamedTuple, NetworkParameters}, dl::DataLoader) = loss(model, ps, dl.input, dl.output)
     loss₁ = loss_dl(model, ps, dl)
 
     opt = Optimizer(GradientOptimizer(), ps)

@@ -42,7 +42,9 @@ fi
 
 printf -v repo_quoted '%q' "$repo_root"
 printf -v runner_command '%q ' "$repo_root/scripts/revision/run_experiments.sh" "${runner_args[@]}"
-screen -DmS "$session_name" bash -lc "cd $repo_quoted && exec $runner_command"
+# -d -m forks and returns immediately. -D -m would keep screen in the launching shell's
+# foreground, so a dropped ssh connection would take the run down with it.
+screen -dmS "$session_name" bash -lc "cd $repo_quoted && exec $runner_command"
 
 echo "started detached screen session: $session_name"
 echo "attach: screen -r $session_name"

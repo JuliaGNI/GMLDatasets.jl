@@ -94,7 +94,7 @@ if [[ ",$stages," == *",none,"* && ${#stage_array[@]} -ne 1 ]]; then
 fi
 repetitions="${#seed_array[@]}"
 epochs=500
-sae_epochs=12000
+sae_epochs=1000
 experiment_backend="cuda"
 if [[ "$mode" == smoke ]]; then
     seed_array=("${seed_array[0]}")

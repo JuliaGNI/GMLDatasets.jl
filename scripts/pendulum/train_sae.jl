@@ -27,7 +27,7 @@ import GeometricOptimizers
 include("scalar_moment_adam.jl")
 
 const REDUCED_DIM = parse(Int, get(ENV, "SAE_REDUCED_DIM", "2"))
-const N_EPOCHS = parse(Int, get(ENV, "SAE_N_EPOCHS", "12000"))
+const N_EPOCHS = parse(Int, get(ENV, "SAE_N_EPOCHS", "1000"))
 const BATCH_SIZE = parse(Int, get(ENV, "SAE_BATCH_SIZE", "256"))
 const LEARNING_RATE = parse(Float32, get(ENV, "SAE_STEP_SIZE", "1e-4"))
 const SCALAR_MOMENT_LEARNING_RATE = parse(Float32,

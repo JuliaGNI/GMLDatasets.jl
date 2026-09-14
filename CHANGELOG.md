@@ -8,6 +8,32 @@ breaking release).
 
 ## [Unreleased]
 
+### Changed
+
+- **`[compat]` widens to the current releases of four dependencies**, as one change rather than four:
+  `AbstractNeuralNetworks = "0.7, 0.8"`, `GeometricMachineLearning = "0.6, 0.7"`,
+  `GeometricProblems = "0.8, 0.9"` and `NeuralNetworkParameters = "0.2.2, 0.3"`. These arrived as four
+  separate CompatHelper pull requests, and separately none of them can go green: they are one
+  dependency family, released together, so resolving any one of the new majors drags the others in
+  with it. Combining them is what lets a single CI run answer whether the package works against the
+  current ecosystem.
+
+  The `NeuralNetworkParameters` floor stays at **0.2.2**, not the bare `0.2` two of those pull
+  requests proposed. `test/mnist_utils.jl` annotates against `ParameterSet`, which 0.2.2 added, so a
+  `0.2` floor would advertise support for versions that cannot run the test suite.
+
+- **The parameter-set annotation in `test/mnist_utils.jl` admits a `NamedTuple`.** Under
+  `GeometricMachineLearning` 0.7, `NeuralNetworkParameters`' `ZygoteRules.pullback` seeds the reverse
+  pass with the wrapped `NamedTuple` rather than the container, so `loss_dl` is called with one while
+  differentiating and the old `Union{Tuple, NetworkParameters}` was a `MethodError`.
+
+- **The documentation workflow builds the TikZ figure before Documenter runs.** The MNIST tutorial's
+  patch-splitting figure is TikZ, and Documenter's cross-reference check needs the `.png` files to
+  exist. The job installs `texlive-xetex`, `texlive-pictures` and `poppler-utils`, then runs
+  `make all -C docs/src/mnist` after `julia-buildpkg` — after, because the Makefile's `images` target
+  runs in the root environment that `buildpkg` has just instantiated. This is now the fourth
+  repository that legitimately keeps its own `Documenter.yml`, and the file's header says so.
+
 ### Removed
 
 - **`.github/workflows/TagBot.yml`.** This package is **not registered in General**, so TagBot had

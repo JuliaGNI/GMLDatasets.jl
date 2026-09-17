@@ -243,9 +243,9 @@ screen -DmS gml-revision-resume bash -lc 'cd /path/to/GMLDatasets && exec <resta
 The runner validates every CSV it emits: the exact schema-version-4 image run header and timing
 invariants, image loss rows and their step counts, schema-version-2 pendulum records, per-epoch loss
 curves, and configuration-qualified checkpoint coverage, schema-version-1 retraction rows and source
-patch, and the stage table. No JSON files are currently emitted. Smoke permits a scientifically
-inconclusive two-epoch `failed_validation` row, but never an exception or missing configuration; full
-mode requires every row to be `ok`.
+patch, and the stage table. Smoke permits a scientifically inconclusive two-epoch
+`failed_validation` row, but never an exception or missing configuration; full mode requires every
+row to be `ok`.
 
 Before packaging, the runner writes `run-configuration.txt`, `restart-command.txt`, both repository
 SHAs, statuses and exact dirty-tree patches where available, and copies the root `Project.toml`, the

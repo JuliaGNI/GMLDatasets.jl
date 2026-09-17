@@ -6,34 +6,40 @@ and always packages the partial or complete directory as a `.tar.gz` plus SHA-25
 
 ## Setup
 
-Instantiate the pinned scripts environment before disconnecting from the network:
+Resolve and instantiate the scripts environment before disconnecting from the network:
 
 ```bash
-julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
 ```
 
-The checked-in manifest records the reviewed revision-experiment stack:
-`GeometricMachineLearning` v0.7.0, `NeuralNetworkParameters` v0.3.0, and temporarily the exact
-`ae50ece` head of
-[`GeometricOptimizers.jl` PR #79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79).
-The Git revision supplies the observer and `PhaseTimer` used by the timing adapter below, from
-[PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78) which #79 is branched off, and
-the two fixes the GPU runs required. `similar` of a horizontal lift allocated on the host, which
-made the optimizer of a device-resident network a `MethodError` and stopped the pendulum stage of run
-`20260903T125418Z_smoke`; and then, with that out of the way, `rgrad` receiving an ambient gradient
-the pullback had left on the host beside a device-resident point, which is a CPU `gemm!` on a device
-pointer and stopped the pendulum stage of runs `20260903T185459Z_smoke` and `20260903T191704Z_smoke`
-at the first optimizer step.
+`scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from `main`,
+because the harness needs the optimizer step observer and `PhaseTimer` of
+[`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78) and
+the backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
+[#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and
+[#85](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/85), none of which is in 0.7.0. Use
+`Pkg.update` rather than `Pkg.instantiate` or `Pkg.resolve`: to `resolve` a `rev = "main"` source is
+a fixed pin, so it reports a stale commit as satisfiable and leaves the environment silently behind
+`main`.
 
-That second one is a **temporary** shim in `GeometricOptimizers` for a defect in the packages that
-produce the gradient: [`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258)
-and [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39).
-The pendulum trainer records end-to-end time, host allocation, and GC time, but does not yet emit the
-image trainer's decomposed phase-timing fields. It must therefore not be used for a pendulum
-direction/retraction cost claim until that instrumentation is added. Replace the pin with the exact
-registry release before freezing or running the experiment head, and expect the shim to be gone by
-then. The environment preflight checks the reviewed versions, the presence of `PhaseTimer`, and that
-an optimizer cache and state can be built for a parameter set that lives on the GPU.
+`Manifest.toml` is **not** tracked. A manifest pinning two moving branch commits goes stale the day
+after it is committed; every run bundle instead carries the manifest that run actually resolved,
+under `environments/scripts/`, which is the copy a result has to be reproduced from.
+
+Two of those upstream fixes are what the environment preflight probes, because no version number
+can express them: that an optimizer cache and state can be built for a parameter set living on the
+GPU, and that the Riemannian gradient of a device-resident point lands on the device. Both once
+cost a run its pendulum stage after the image stages had already succeeded. The second is currently
+provided by a **temporary** shim in `GeometricOptimizers` for a defect in the packages that produce
+the gradient — [`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258)
+and [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39) —
+which moves the gradient across per manifold leaf per step, inside the region the phase timer
+attributes to the step. **A pendulum timing published from a run on that shim is an upper bound
+rather than a measurement.** The image stages never take this path and are unaffected.
+
+The pendulum trainer records end-to-end time, host allocation, and GC time, but does not yet emit
+the image trainer's decomposed phase-timing fields. It must therefore not be used for a pendulum
+direction/retraction cost claim until that instrumentation is added.
 
 The full run rejects a dirty tree and any CUDA device whose name does not contain `RTX 4090`.
 Use `--allow-dirty` only deliberately; the patch and status are included in the bundle. Use
@@ -206,12 +212,20 @@ pendulum and retraction stages. Use the RTX 4090 smoke logs to refine that estim
 ## Resume and monitor
 
 The runner prints a normalized restart command into `restart-command.txt`. It includes
-`--resume-dir`, all resolved command-line choices, and every recognized environment override that
-changes an experiment. A completed image-data stage is skipped only after its run and loss CSVs
-revalidate with exact configuration/seed coverage. Pendulum skips only checkpoint/record pairs from
-a schema-valid partial record file. Retraction output is skipped only after its schema, required
-algorithm/backend paths, source identity, and patch checksum revalidate. An interrupted image-data
-matrix is rerun as a unit because the trainer does not resume within that matrix.
+`--resume-dir`, all resolved command-line choices, and every `MNIST_*`, `SAE_*` and `RETRACTION_*`
+variable that is set — a prefix sweep, so an override added to a trainer later is carried into the
+restart command without anyone having to remember it.
+
+A completed image-data stage is skipped only after its run and loss CSVs revalidate with exact
+configuration/seed coverage. An interrupted image-data matrix is rerun as a unit, because the
+trainer does not resume within that matrix. Retraction output is skipped only after its schema,
+required algorithm/backend paths, source identity, and patch checksum revalidate.
+
+Pendulum skips only checkpoint/record pairs from a schema-valid partial record file, and the list
+of those pairs comes from `validate_run_artifacts.jl --list-complete` rather than from the shell.
+The runner cannot read `configuration_key`, `repetition` and `seed` out of `pendulum-runs.csv`
+itself: the display name between them is a quoted field containing a comma, so splitting the row on
+commas shifts every later column by one.
 
 ```bash
 tail -f results/revision/<stamp>/run.log
@@ -233,14 +247,15 @@ patch, and the stage table. No JSON files are currently emitted. Smoke permits a
 inconclusive two-epoch `failed_validation` row, but never an exception or missing configuration; full
 mode requires every row to be `ok`.
 
-Before packaging, `archive-required-members.txt` is generated from the selected mode, stages, seeds,
-and configurations. At minimum every archive contains `run.log`, `stages.csv`, `environment.txt`,
-`nvidia-smi.txt`, `run-configuration.txt`, `restart-command.txt`, the root `Project.toml`, the
-scripts `Project.toml` and resolved `Manifest.toml`, both repository SHAs/statuses/exact dirty-tree
-patches when available, `artifact-validation.txt`, and the member list itself. Selected stages add
-their raw records, reports, stdout/stderr logs, checkpoints, and validation logs. The tar member list
-is checked against that manifest before the SHA-256 file is written, and the checksum is immediately
-verified. Failed runs still produce a partial archive, but do not claim artifact-validation success.
+Before packaging, the runner writes `run-configuration.txt`, `restart-command.txt`, both repository
+SHAs, statuses and exact dirty-tree patches where available, and copies the root `Project.toml`, the
+scripts `Project.toml` and the resolved `Manifest.toml` into `environments/`. The archive is then
+compared **against the run directory itself**: every path under it must appear in the tar. That is
+what the check is, rather than a hand-maintained list of expected members — such a list is a second
+copy of this script's control flow and goes stale the first time a stage gains an output, while the
+directory cannot. Which artifacts a stage had to produce in the first place is the Julia
+validator's question, and it answers it by name. The checksum is written and immediately verified.
+Failed runs still produce a partial archive, but do not claim artifact-validation success.
 
 ## Transfer and verify
 

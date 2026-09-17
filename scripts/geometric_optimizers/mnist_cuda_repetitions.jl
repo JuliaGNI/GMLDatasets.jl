@@ -105,7 +105,8 @@ using GMLDatasets: split_and_flatten, onehotbatch
 # through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
 # `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
 # `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
-using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters, mapparameters,
+using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
+                               mapparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
@@ -115,6 +116,11 @@ import CUDA, ForwardDiff, JLD2, MLDatasets, Random, Zygote
 
 # The timer is definitions-only and is shared with its focused deterministic regression.
 include("step_timing.jl")
+
+# The configuration table and the run-record header the validators read, so that this script
+# writes exactly what they expect rather than a second copy of it.
+include(joinpath(@__DIR__, "..", "revision", "configurations.jl"))
+include(joinpath(@__DIR__, "..", "revision", "csv_records.jl"))
 
 # The `scalar-moment-adam` configuration is the per-leaf composite, not a method of
 # `GeometricOptimizers`; its definitions are in the file next to this one, which the regression
@@ -272,10 +278,9 @@ const learning_rate = T(1e-3)
 # direction has magnitude ≈ 1 in total where `Adam`'s has ≈ 1 per component, so the shared
 # `learning_rate` would buy a step of a different length on the Stiefel leaves, and which ‖·‖²
 # the scalar second moment accumulates is a setting the run records below have to quote.
-const scalar_moment_adam_learning_rate =
-    T(parse(Float64, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE", "1e-3")))
-const scalar_moment_adam_ambient_norm =
-    parse(Bool, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM", "0"))
+const scalar_moment_adam_learning_rate = T(parse(
+    Float64, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE", "1e-3")))
+const scalar_moment_adam_ambient_norm = parse(Bool, get(ENV, "MNIST_SCALAR_MOMENT_ADAM_AMBIENT_NORM", "0"))
 const momentum_coefficient = T(0.5)
 const seed = parse(Int, get(ENV, "MNIST_BASE_SEED", "1234"))
 
@@ -300,12 +305,14 @@ const n_repetitions = parse(Int, get(ENV, "MNIST_REPETITIONS", "10"))
 # this script necessary and is worth being able to measure separately.
 const vary_seed = parse(Bool, get(ENV, "MNIST_VARY_SEED", "1"))
 const requested_seeds = let value = strip(get(ENV, "MNIST_SEEDS", ""))
-    isempty(value) ? Int[] : parse.(Int, strip.(split(value, ','; keepempty=false)))
+    isempty(value) ? Int[] : parse.(Int, strip.(split(value, ','; keepempty = false)))
 end
 isempty(requested_seeds) || length(requested_seeds) == n_repetitions ||
     error("MNIST_SEEDS contains $(length(requested_seeds)) seeds but MNIST_REPETITIONS=$n_repetitions")
 
-repetition_seed(r::Integer) = !isempty(requested_seeds) ? requested_seeds[r] : vary_seed ? seed + r - 1 : seed
+function repetition_seed(r::Integer)
+    !isempty(requested_seeds) ? requested_seeds[r] : vary_seed ? seed + r - 1 : seed
+end
 
 const dim = patch_length^2                      # the transformer dimension
 const seq_length = (28 ÷ patch_length)^2        # the number of patches
@@ -703,11 +710,11 @@ A non-finite epoch loss ends the run: the parameters cannot come back from it, a
 of noticing here is not to spend the remaining epochs proving that.
 """
 function train(
-    stiefel::Bool,
-    algorithm::Union{GeometricOptimizers.OptimizerMethod, ScalarMomentAdamConfig}, input, output,
-    test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
-    repetition::Integer, seed::Integer = seed, n_epochs = n_epochs,
-    learning_rate = learning_rate)
+        stiefel::Bool,
+        algorithm::Union{GeometricOptimizers.OptimizerMethod, ScalarMomentAdamConfig}, input, output,
+        test_input, test_output; label::AbstractString, run_index::Integer, run_name::AbstractString,
+        repetition::Integer, seed::Integer = seed, n_epochs = n_epochs,
+        learning_rate = learning_rate)
     # `initial_parameters` and the epoch shuffles use the private RNG below. GO also constructs
     # randomized global sections through Julia's task-local default RNG, so seed that stream as
     # well: the recorded repetition seed then controls every pseudorandom initialization for
@@ -834,19 +841,24 @@ function train(
     timing = step_timing(timer, length(losses))
     timing.timed_steps == length(losses) || error(
         "timing recorded $(timing.timed_steps) steps for $(length(losses)) completed steps")
-    all(value -> isfinite(value) && value >= 0, step_timing_csv_values(timing)) ||
+    all(value -> isfinite(value) && value >= 0, step_timing_values(timing)) ||
         error("step timing produced a non-finite or negative schema-v4 value")
 
-    (parameters=ps, losses=losses, epoch_losses=epoch_losses, epoch_times=epoch_times,
-        accuracy_epochs=accuracy_epochs, accuracies=accuracies, orthonormalities=orthonormalities,
-        total_time=total_time, step_timing=timing, stopped=stopped,
-        peak_device_bytes=peak_used[])
+    (parameters = ps, losses = losses,
+        epoch_losses = epoch_losses, epoch_times = epoch_times,
+        accuracy_epochs = accuracy_epochs, accuracies = accuracies, orthonormalities = orthonormalities,
+        total_time = total_time, step_timing = timing, stopped = stopped,
+        peak_device_bytes = peak_used[])
 end
 
 # ------------------------------------------------------------------ configurations ---
 
-# The configurations, by key: the four of `mnist_cuda.jl` plus the `scalar-moment-adam`
-# baseline.
+# What only this script knows about each configuration: whether the attention projections sit on
+# the Stiefel manifold, whether the configuration is expected to learn, the optimizer object, and
+# the rate. The display name, role, retraction, second moment and transport come from
+# `CONFIGURATIONS` in `scripts/revision/configurations.jl`, which is what the run records and the
+# validators read, so the five rows cannot drift apart from what a results table says they are.
+#
 # `learns` is what the configuration is expected to do; standard Adam is the non-geometric
 # ablation and is expected to collapse onto the trivial prediction (see the header of
 # `mnist_cuda.jl` for why, and why a flat loss there is the experiment working rather than a
@@ -855,64 +867,36 @@ end
 # `Adam` takes the *element type* of the parameters, not a learning rate, and it is not
 # converted the way `MomentumMethod` is, so `Adam(T)` is what dispatches to the `Float32`
 # cache. `ScalarMomentAdamConfig` is the per-leaf composite of
-# `scalar_moment_adam_composite.jl`, not a method:
-# `ScalarMomentAdam` on the Stiefel leaves, ordinary `Adam` on the Euclidean ones, and the
-# rate and the norm mode in `second_moment` are the two environment settings above.
-const configurations = Dict(
-    "geometric-adam-cayley" => (name="Geometric Adam (Stiefel, Cayley retraction)",
-        role="proposed", stiefel=true, learns=true, algorithm=Adam(T),
-        learning_rate=learning_rate, retraction="cayley", second_moment="coordinate-wise",
-        transport="global-section"),
-    "scalar-moment-adam" => (name="Scalar Moment Adam (Stiefel, Cayley retraction)",
-        role="riemannian-adam-baseline", stiefel=true, learns=true,
-        algorithm=ScalarMomentAdamConfig(scalar_moment_adam_learning_rate;
-            ambient_norm=scalar_moment_adam_ambient_norm),
-        learning_rate=scalar_moment_adam_learning_rate, retraction="cayley",
-        second_moment=scalar_moment_adam_ambient_norm ? "scalar (ambient norm)" : "scalar (quotient norm)",
-        transport="global-section"),
-    "standard-adam" => (name="Standard Adam (unconstrained)", role="non-geometric-ablation",
-        stiefel=false, learns=false, algorithm=Adam(T), learning_rate=learning_rate, retraction="none",
-        second_moment="coordinate-wise", transport="none"),
-    "gradient" => (name="Riemannian gradient (Stiefel, Cayley retraction)", role="diagnostic",
-        stiefel=true, learns=true, algorithm=GradientMethod(), learning_rate=learning_rate,
-        retraction="cayley",
-        second_moment="none", transport="none"),
-    "momentum" => (name="Riemannian momentum (Stiefel, Cayley retraction)", role="diagnostic",
-        stiefel=true, learns=true, algorithm=MomentumMethod(momentum_coefficient),
-        learning_rate=learning_rate, retraction="cayley", second_moment="none",
-        transport="global-section"),
+# `scalar_moment_adam_composite.jl`, not a method: `ScalarMomentAdam` on the Stiefel leaves,
+# ordinary `Adam` on the Euclidean ones. Its `second_moment` is the one entry that overrides the
+# shared table, because which ‖·‖² the scalar moment accumulates is an environment setting.
+const trainer_settings = Dict(
+    "geometric-adam-cayley" => (stiefel = true, learns = true, algorithm = Adam(T),
+        learning_rate = learning_rate),
+    "scalar-moment-adam" => (stiefel = true, learns = true,
+        algorithm = ScalarMomentAdamConfig(scalar_moment_adam_learning_rate;
+            ambient_norm = scalar_moment_adam_ambient_norm),
+        learning_rate = scalar_moment_adam_learning_rate,
+        second_moment = scalar_moment_adam_ambient_norm ? "scalar (ambient norm)" :
+                        "scalar (quotient norm)"),
+    "standard-adam" => (stiefel = false, learns = false, algorithm = Adam(T),
+        learning_rate = learning_rate),
+    "gradient" => (stiefel = true, learns = true, algorithm = GradientMethod(),
+        learning_rate = learning_rate),
+    "momentum" =>
+        (stiefel = true, learns = true, algorithm = MomentumMethod(momentum_coefficient),
+            learning_rate = learning_rate)
 )
 
-# in the order of `mnist_cuda.jl` — the `scalar-moment-adam` baseline follows the configuration it
-# is the baseline for — so that a report of all five is read next to that one
-const configuration_order = ["geometric-adam-cayley", "scalar-moment-adam", "standard-adam", "gradient",
-                             "momentum"]
-const configuration_aliases = Dict(
-    "adam-stiefel" => "geometric-adam-cayley",
-    "adam-regular" => "standard-adam",
-)
+const configurations = Dict(key => merge(CONFIGURATIONS[key], settings)
+for (key, settings) in trainer_settings)
 
-"""
-    selected_configurations()
-
-The configurations `MNIST_CONFIGURATIONS` asks for, in the order of `mnist_cuda.jl`. This is
-resolved before MNIST is loaded, so that an unknown key is one line now rather than an empty
-run eight hours from now.
-"""
-function selected_configurations()
-    requested = get(ENV, "MNIST_CONFIGURATIONS", "geometric-adam-cayley")
-    keys_requested = [get(configuration_aliases, key, key) for key in
-                      String.(strip.(split(lowercase(requested), ','; keepempty=false)))]
-    "all" in keys_requested && return configuration_order
-    unknown = filter(k -> !haskey(configurations, k), keys_requested)
-    isempty(unknown) ||
-        error("unknown configuration(s) $(join(unknown, ", ")) in MNIST_CONFIGURATIONS — " *
-              "known are $(join(configuration_order, ", ")) and `all`")
-    isempty(keys_requested) && error("MNIST_CONFIGURATIONS is empty")
-    filter(in(keys_requested), configuration_order)
-end
-
-const selected = selected_configurations()
+# The configurations `MNIST_CONFIGURATIONS` asks for, in the order of `mnist_cuda.jl` — the
+# `scalar-moment-adam` baseline follows the configuration it is the baseline for, so that a
+# report of all five is read next to that one. Resolved before MNIST is loaded, so that an
+# unknown key is one line now rather than an empty run eight hours from now.
+const selected = normalize_configurations(
+    get(ENV, "MNIST_CONFIGURATIONS", "geometric-adam-cayley"))
 const dataset_name = lowercase(get(ENV, "MNIST_DATASET", "mnist"))
 dataset_name in ("mnist", "fashion-mnist") ||
     error("MNIST_DATASET must be `mnist` or `fashion-mnist`, got `$dataset_name`")
@@ -930,8 +914,8 @@ const script_start = time()
 
 println("loading $dataset_name ...")
 dataset = dataset_name == "mnist" ? MLDatasets.MNIST : MLDatasets.FashionMNIST
-train_x, train_y = dataset(split=:train)[:]
-test_x, test_y = dataset(split=:test)[:]
+train_x, train_y = dataset(split = :train)[:]
+test_x, test_y = dataset(split = :test)[:]
 
 if training_samples > 0
     n = min(training_samples, size(train_x, 3))
@@ -946,10 +930,10 @@ end
 
 # the data set stays on the host; the batches are uploaded one at a time
 const train_input = split_and_flatten(
-    T.(train_x); patch_length=patch_length, number_of_patches=seq_length)
+    T.(train_x); patch_length = patch_length, number_of_patches = seq_length)
 const train_output = reshape(onehotbatch(T, train_y), n_classes, length(train_y))
 const test_input = split_and_flatten(
-    T.(test_x); patch_length=patch_length, number_of_patches=seq_length)
+    T.(test_x); patch_length = patch_length, number_of_patches = seq_length)
 const test_output = reshape(onehotbatch(T, test_y), n_classes, length(test_y))
 
 @assert size(train_input) == (dim, seq_length, size(train_x, 3))
@@ -1048,7 +1032,7 @@ function save_results(results)
         output["orthonormalities$i"] = result.orthonormalities
         output["orthonormality$i"] = result.orthonormality
         output["total_time$i"] = result.total_time
-        for column in STEP_TIMING_CSV_COLUMNS
+        for column in STEP_TIMING_COLUMNS
             output["$column$i"] = getproperty(result.step_timing, Symbol(column))
         end
         output["accuracy$i"] = result.accuracy
@@ -1067,43 +1051,72 @@ function save_results(results)
     JLD2.save(output_path, output)
 end
 
-csv_field(value) = "\"" * replace(string(value), '"' => "\"\"") * "\""
+"""
+    run_record(job, status, message, measured)
+
+One row of the schema-v4 run record table, as a dictionary keyed by `IMAGE_RECORD_HEADER`. `job`
+supplies the configuration metadata every row repeats and `measured` the numbers this row has.
+A dictionary rather than a positional tuple, because a failure row whose numbers are all `NaN`
+would otherwise be aligned with the header by counting `NaN`s; `write_records` rejects a row
+whose keys are not exactly the header.
+"""
+function run_record(job, status, message, measured)
+    merge(
+        Dict{String, Any}(
+            "schema_version" => MNIST_RUN_SCHEMA_VERSION,
+            "dataset" => dataset_name,
+            "configuration_key" => job.configuration_key,
+            "configuration" => job.configuration,
+            "optimizer_role" => job.optimizer_role,
+            "learning_rate" => job.learning_rate,
+            "retraction" => job.retraction,
+            "second_moment" => job.second_moment,
+            "transport" => job.transport,
+            "repetition" => job.repetition,
+            "seed" => job.seed,
+            "status" => status,
+            "backend" => use_cuda ? "cuda" : "cpu",
+            "message" => message
+        ),
+        measured)
+end
 
 function write_run_records(results, failures)
-    open(records_path, "w") do io
-        println(io, join(("schema_version", "dataset", "configuration_key", "configuration",
-            "optimizer_role", "learning_rate", "retraction", "second_moment", "transport",
-            "repetition", "seed", "status", "epochs_completed", "final_loss", "best_loss",
-            "test_accuracy", "total_seconds", "seconds_per_epoch", STEP_TIMING_CSV_COLUMNS...,
-            "peak_device_bytes", "backend", "message"), ','))
-        for result in results
-            epochs_completed = length(result.epoch_losses)
-            final_loss = isempty(result.epoch_losses) ? NaN : last(result.epoch_losses)
-            best_loss = isempty(result.epoch_losses) ? NaN : minimum(result.epoch_losses)
-            result_verdict = verdict(result)
-            status = result_verdict == "ok" ? "ok" : "failed_validation"
-            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name),
-                csv_field(result.configuration_key),
-                csv_field(result.configuration), csv_field(result.optimizer_role), result.learning_rate,
-                csv_field(result.retraction),
-                csv_field(result.second_moment), csv_field(result.transport),
-                result.repetition, result.seed, status, epochs_completed, final_loss, best_loss,
-                result.accuracy, result.total_time,
-                result.total_time / max(epochs_completed, 1),
-                step_timing_csv_values(result.step_timing)..., result.peak_device_bytes,
-                use_cuda ? "cuda" : "cpu", csv_field(result_verdict)), ','))
-        end
-        for failure in failures
-            println(io, join((MNIST_RUN_SCHEMA_VERSION, csv_field(dataset_name),
-                csv_field(failure.configuration_key), csv_field(failure.configuration),
-                csv_field(failure.optimizer_role), failure.learning_rate,
-                csv_field(failure.retraction), csv_field(failure.second_moment),
-                csv_field(failure.transport), failure.repetition, failure.seed, "exception", 0,
-                NaN, NaN, NaN, NaN, NaN, 0, NaN, NaN, NaN, NaN, NaN, NaN,
-                peak_used[], use_cuda ? "cuda" : "cpu",
-                csv_field(first(split(failure.message, '\n')))), ','))
-        end
+    rows = Dict{String, Any}[]
+    for result in results
+        epochs = length(result.epoch_losses)
+        result_verdict = verdict(result)
+        measured = Dict{String, Any}(
+            "epochs_completed" => epochs,
+            "final_loss" => isempty(result.epoch_losses) ? NaN : last(result.epoch_losses),
+            "best_loss" =>
+                isempty(result.epoch_losses) ? NaN : minimum(result.epoch_losses),
+            "test_accuracy" => result.accuracy,
+            "total_seconds" => result.total_time,
+            "seconds_per_epoch" => result.total_time / max(epochs, 1),
+            "peak_device_bytes" => result.peak_device_bytes
+        )
+        merge!(measured,
+            Dict(zip(STEP_TIMING_COLUMNS, step_timing_values(result.step_timing))))
+        push!(rows,
+            run_record(result, result_verdict == "ok" ? "ok" : "failed_validation",
+                result_verdict, measured))
     end
+
+    # A repetition that threw kept no result and no partial timing snapshot, so every number is
+    # `NaN`: "unavailable", not a measured zero. The two exceptions are `epochs_completed` and
+    # `timed_steps`, where zero is what actually happened.
+    unavailable = Dict{String, Any}(field => NaN
+    for field in ("final_loss", "best_loss", "test_accuracy", "total_seconds",
+        "seconds_per_epoch", STEP_TIMING_COLUMNS...))
+    for failure in failures
+        measured = merge(unavailable,
+            Dict{String, Any}("epochs_completed" => 0, "timed_steps" => 0,
+                "peak_device_bytes" => peak_used[]))
+        push!(rows, run_record(failure, "exception", first(split(failure.message, '\n')),
+            measured))
+    end
+    write_records(records_path, IMAGE_RECORD_HEADER, rows)
 end
 
 results = []
@@ -1124,22 +1137,23 @@ for (j, job) in pairs(jobs)
             repetition = job.repetition, seed = job.seed,
             n_epochs = n_epochs)
         score = T(accuracy(trained.parameters, test_input, test_output))
-        push!(results, (name=name, configuration_key=job.key, configuration=run.name,
-            repetition=job.repetition, seed=job.seed,
-            stiefel=run.stiefel, learns=run.learns, optimizer_role=run.role,
-            learning_rate=run.learning_rate, retraction=run.retraction,
-            second_moment=run.second_moment, transport=run.transport,
-            # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
-            # structured leaves by their portable free storage, as the earlier result schema did.
-            parameters=mapparameters(freeparameters, trained.parameters), losses=trained.losses,
-            epoch_losses=trained.epoch_losses, epoch_times=trained.epoch_times,
-            accuracy_epochs=trained.accuracy_epochs, accuracies=trained.accuracies,
-            orthonormalities=trained.orthonormalities,
-            total_time=trained.total_time, step_timing=trained.step_timing,
-            accuracy=score, stopped=trained.stopped,
-            peak_device_bytes=trained.peak_device_bytes,
-            orthonormality=orthonormality_error(trained.parameters),
-            sound=parameters_are_sound(trained.parameters)))
+        push!(results,
+            (name = name, configuration_key = job.key, configuration = run.name,
+                repetition = job.repetition, seed = job.seed,
+                stiefel = run.stiefel, learns = run.learns, optimizer_role = run.role,
+                learning_rate = run.learning_rate, retraction = run.retraction,
+                second_moment = run.second_moment, transport = run.transport,
+                # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
+                # structured leaves by their portable free storage, as the earlier result schema did.
+                parameters = mapparameters(freeparameters, trained.parameters), losses = trained.losses,
+                epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
+                accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
+                orthonormalities = trained.orthonormalities,
+                total_time = trained.total_time, step_timing = trained.step_timing,
+                accuracy = score, stopped = trained.stopped,
+                peak_device_bytes = trained.peak_device_bytes,
+                orthonormality = orthonormality_error(trained.parameters),
+                sound = parameters_are_sound(trained.parameters)))
         announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
             duration(trained.total_time),
             trained.total_time / max(1, length(trained.losses)), score))
@@ -1156,11 +1170,12 @@ for (j, job) in pairs(jobs)
         # repetition that threw is missing from the statistics, and the verdict says so.
         e isa InterruptException && rethrow()
         message = sprint(showerror, e)
-        push!(failures, (name=name, configuration_key=job.key, configuration=run.name,
-            optimizer_role=run.role, learning_rate=run.learning_rate,
-            retraction=run.retraction, second_moment=run.second_moment,
-            transport=run.transport, repetition=job.repetition, seed=job.seed,
-            message=message))
+        push!(failures,
+            (name = name, configuration_key = job.key, configuration = run.name,
+                optimizer_role = run.role, learning_rate = run.learning_rate,
+                retraction = run.retraction, second_moment = run.second_moment,
+                transport = run.transport, repetition = job.repetition, seed = job.seed,
+                message = message))
         clear_progress()
         announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
         report(message)

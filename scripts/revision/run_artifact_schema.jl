@@ -1,433 +1,273 @@
-module RunArtifactSchema
+# Validation of one runner output directory: the image and pendulum run records, their loss
+# curves, the retraction records and the stage table.
+#
+# The image and pendulum record headers share their first fifteen columns — everything that
+# identifies a job and reports its outcome — so `validate_run_row` checks that prefix once and
+# each caller adds the columns that are its own.
+#
+# This file holds definitions only; `records.jl` is the module that includes it.
 
-include("retraction_record_schema.jl")
-using .RetractionRecordSchema: validate_records
-
-export CONFIGURATION_ORDER, PENDULUM_CONFIGURATION_ORDER, IMAGE_LOSS_HEADER, IMAGE_RECORD_HEADER,
-       PENDULUM_LOSS_HEADER, PENDULUM_RECORD_HEADER, STAGE_HEADER, normalize_configurations,
-       normalize_pendulum_configurations, parse_csv_line, read_table, validate_image_artifacts,
-       validate_pendulum_artifacts, validate_run_artifacts, validate_stage_table
-
-const CONFIGURATION_ORDER = [
-    "geometric-adam-cayley",
-    "scalar-moment-adam",
-    "standard-adam",
-    "gradient",
-    "momentum",
-]
-
-const CONFIGURATION_ALIASES = Dict(
-    "adam-stiefel" => "geometric-adam-cayley",
-    "adam-regular" => "standard-adam",
-)
-
-const CONFIGURATION_NAMES = Dict(
-    "geometric-adam-cayley" => "Geometric Adam (Stiefel, Cayley retraction)",
-    "scalar-moment-adam" => "Scalar Moment Adam (Stiefel, Cayley retraction)",
-    "standard-adam" => "Standard Adam (unconstrained)",
-    "gradient" => "Riemannian gradient (Stiefel, Cayley retraction)",
-    "momentum" => "Riemannian momentum (Stiefel, Cayley retraction)",
-)
-
-# Unlike the transformer, an SAE cannot have an unconstrained Adam row without
-# ceasing to be symplectic.  The pendulum comparison therefore contains these
-# four intrinsic configurations only.
-const PENDULUM_CONFIGURATION_ORDER = [
-    "geometric-adam-cayley",
-    "scalar-moment-adam",
-    "gradient",
-    "momentum",
-]
-const PENDULUM_CONFIGURATION_NAMES = Dict(
-    key => CONFIGURATION_NAMES[key] for key in PENDULUM_CONFIGURATION_ORDER)
-
-const IMAGE_LOSS_HEADER = [
-    "run", "configuration", "repetition", "epoch", "batch", "step", "loss",
-]
-
-const PENDULUM_LOSS_HEADER = [
-    "configuration_key", "configuration", "repetition", "seed", "epoch", "loss",
-]
-
-const IMAGE_RECORD_HEADER = [
-    "schema_version", "dataset", "configuration_key", "configuration", "optimizer_role",
-    "learning_rate", "retraction", "second_moment", "transport", "repetition", "seed",
-    "status", "epochs_completed", "final_loss", "best_loss", "test_accuracy",
-    "total_seconds", "seconds_per_epoch", "timed_steps", "gradient_ad_seconds_total",
-    "gradient_ad_seconds_per_step", "optimizer_state_direction_seconds_total",
-    "optimizer_state_direction_seconds_per_step", "retraction_application_seconds_total",
-    "retraction_application_seconds_per_step", "peak_device_bytes", "backend", "message",
-]
-
-const PENDULUM_RECORD_HEADER = [
-    "schema_version", "dataset", "configuration_key", "configuration", "optimizer_role",
-    "learning_rate", "retraction", "second_moment", "transport", "repetition", "seed",
-    "status", "epochs_completed", "final_loss", "best_loss", "total_seconds",
-    "seconds_per_epoch", "host_allocated_bytes", "gc_seconds", "backend", "checkpoint",
-    "message",
-]
-
-const STAGE_HEADER = ["stage", "status", "started_utc", "finished_utc", "command"]
 const IMAGE_DATASETS = Set(("mnist", "fashion-mnist"))
 const RUN_STAGES = Set(("mnist", "fashion-mnist", "pendulum", "retraction", "none"))
 
-function parse_csv_line(line::AbstractString)
-    fields = String[]
-    field = IOBuffer()
-    quoted = false
-    just_closed_quote = false
-    index = firstindex(line)
-    while index <= lastindex(line)
-        character = line[index]
-        if quoted
-            if character == '"'
-                next_index = nextind(line, index)
-                if next_index <= lastindex(line) && line[next_index] == '"'
-                    write(field, '"')
-                    index = next_index
-                else
-                    quoted = false
-                    just_closed_quote = true
-                end
-            else
-                write(field, character)
-            end
-        elseif just_closed_quote
-            character == ',' || throw(ArgumentError(
-                "unexpected character after a closing CSV quote"))
-            push!(fields, String(take!(field)))
-            just_closed_quote = false
-        elseif character == ','
-            push!(fields, String(take!(field)))
-        elseif character == '"'
-            position(field) == 0 || throw(ArgumentError("CSV quote must begin a field"))
-            quoted = true
-        else
-            write(field, character)
-        end
-        index = nextind(line, index)
-    end
-    quoted && throw(ArgumentError("unterminated quoted CSV field"))
-    push!(fields, String(take!(field)))
-    fields
+countmap(values) = Dict(value => count(==(value), values) for value in unique(values))
+
+"""
+    require_exactly(observed, expected, what, where)
+
+Reject a set of identities that is not exactly `expected`. Coverage is the one property of a
+results matrix no individual row can carry.
+"""
+function require_exactly(observed, expected, what, where)
+    observed == expected ||
+        throw(ArgumentError("$where does not have exact $what coverage"))
+    nothing
 end
 
-function read_table(path::AbstractString, expected_header; allow_empty::Bool=false)
-    isfile(path) || throw(ArgumentError("missing CSV file: $path"))
-    lines = readlines(path)
-    isempty(lines) && throw(ArgumentError("CSV file is empty: $path"))
-    header = parse_csv_line(first(lines))
-    header == expected_header || throw(ArgumentError(
-        "unexpected header in $path; expected $(join(expected_header, ','))"))
+"""
+    validate_run_row(record, where; schema_version, dataset, configurations, statuses,
+                     epochs_minimum, allow_validation_failures)
 
-    records = Dict{String,String}[]
-    for (offset, line) in enumerate(Iterators.drop(lines, 1))
-        line_number = offset + 1
-        isempty(line) && throw(ArgumentError("blank CSV row at $path:$line_number"))
-        fields = parse_csv_line(line)
-        length(fields) == length(expected_header) || throw(ArgumentError(
-            "$path:$line_number has $(length(fields)) fields; expected $(length(expected_header))"))
-        push!(records, Dict(zip(expected_header, fields)))
-    end
-    !allow_empty && isempty(records) && throw(ArgumentError("CSV file has no data rows: $path"))
-    records
+Check the fifteen columns every run record shares and return the identifying triple and the
+epoch count. `statuses` is the set this record kind admits; anything in it other than `ok` is a
+scientific failure and is rejected unless `allow_validation_failures`.
+"""
+function validate_run_row(record, where; schema_version, dataset, configurations, statuses,
+        epochs_minimum, allow_validation_failures)
+    record["schema_version"] == schema_version || throw(ArgumentError(
+        "$where has unsupported schema version $(record["schema_version"])"))
+    record["dataset"] == dataset || throw(ArgumentError(
+        "$where has dataset $(record["dataset"]), expected $dataset"))
+    key = record["configuration_key"]
+    key in configurations ||
+        throw(ArgumentError("$where has unexpected configuration key $key"))
+    record["configuration"] == CONFIGURATION_NAMES[key] ||
+        throw(ArgumentError("$where has the wrong display name for $key"))
+    isempty(record["optimizer_role"]) &&
+        throw(ArgumentError("$where has an empty optimizer role"))
+    parse_float(record, "learning_rate", where; nonnegative = true)
+
+    status = record["status"]
+    status in statuses || throw(ArgumentError("$where has unknown status $status"))
+    status == "exception" && throw(ArgumentError("$where records an exception for $key"))
+    allow_validation_failures || status == "ok" ||
+        throw(ArgumentError("$where records failed scientific validation for $key"))
+
+    repetition = parse_integer(record, "repetition", where; minimum = 1)
+    seed = parse_integer(record, "seed", where; minimum = 0)
+    epochs = parse_integer(record, "epochs_completed", where; minimum = epochs_minimum)
+    parse_float(record, "final_loss", where)
+    parse_float(record, "best_loss", where)
+    ((key, repetition, seed), epochs)
 end
 
-function parse_integer(record, field, path, line; minimum=nothing)
-    value = tryparse(Int, record[field])
-    value === nothing && throw(ArgumentError(
-        "$path:$line has invalid integer $field: $(record[field])"))
-    minimum !== nothing && value < minimum && throw(ArgumentError(
-        "$path:$line has $field below $minimum: $value"))
-    value
+"""Collect one row's identity into `observed`, rejecting an unexpected or repeated job."""
+function record_job!(observed, expected, identity, where)
+    identity in expected ||
+        throw(ArgumentError("$where has unexpected job $(join(identity, '/'))"))
+    identity in observed &&
+        throw(ArgumentError("$where duplicates job $(join(identity, '/'))"))
+    push!(observed, identity)
+    nothing
 end
 
-function parse_float(record, field, path, line; finite::Bool=true, nonnegative::Bool=false)
-    value = tryparse(Float64, record[field])
-    value === nothing && throw(ArgumentError(
-        "$path:$line has invalid float $field: $(record[field])"))
-    finite && !isfinite(value) && throw(ArgumentError(
-        "$path:$line has non-finite $field: $value"))
-    nonnegative && value < 0 && throw(ArgumentError(
-        "$path:$line has negative $field: $value"))
-    value
+function expected_jobs(configurations, seeds)
+    Set((key, repetition, seed)
+    for key in configurations for (repetition, seed) in enumerate(seeds))
 end
 
-function split_list(value::AbstractString)
-    entries = strip.(split(value, ','; keepempty=false))
-    filter!(!isempty, entries)
-    entries
+"""Record `index` under `key`, rejecting a repeat; used for loss steps and loss epochs."""
+function record_index!(indices, key, index, what, where)
+    seen = get!(() -> Set{Int}(), indices, key)
+    index in seen &&
+        throw(ArgumentError("$where duplicates $what $index for $(join(key, '/'))"))
+    push!(seen, index)
+    nothing
 end
 
-function normalize_configurations(value::AbstractString)
-    requested = [get(CONFIGURATION_ALIASES, lowercase(entry), lowercase(entry))
-                 for entry in split_list(value)]
-    "all" in requested && return copy(CONFIGURATION_ORDER)
-    isempty(requested) && throw(ArgumentError("configuration list is empty"))
-    unknown = filter(key -> key ∉ CONFIGURATION_ORDER, requested)
-    isempty(unknown) || throw(ArgumentError("unknown configurations: $(join(unknown, ", "))"))
-    unique(filter(key -> key in requested, CONFIGURATION_ORDER))
-end
-
-"""Resolve a pendulum configuration selection without admitting standard Adam."""
-function normalize_pendulum_configurations(value::AbstractString)
-    requested = [get(CONFIGURATION_ALIASES, lowercase(entry), lowercase(entry))
-                 for entry in split_list(value)]
-    "all" in requested && return copy(PENDULUM_CONFIGURATION_ORDER)
-    isempty(requested) && throw(ArgumentError("pendulum configuration list is empty"))
-    unknown = filter(key -> key ∉ PENDULUM_CONFIGURATION_ORDER, requested)
-    isempty(unknown) || throw(ArgumentError(
-        "unknown or non-symplectic pendulum configurations: $(join(unknown, ", ")); " *
-        "choose $(join(PENDULUM_CONFIGURATION_ORDER, ", "))"))
-    unique(filter(key -> key in requested, PENDULUM_CONFIGURATION_ORDER))
-end
-
-function validate_image_artifacts(records_path::AbstractString, losses_path::AbstractString;
+function validate_image_artifacts(
+        records_path::AbstractString, losses_path::AbstractString;
         dataset::AbstractString, seeds::Vector{Int}, configurations::Vector{String},
         expected_epochs::Int, expected_backend::AbstractString,
-        allow_validation_failures::Bool=false)
+        allow_validation_failures::Bool = false)
     dataset in IMAGE_DATASETS || throw(ArgumentError("unknown image dataset: $dataset"))
-    expected_backend in ("cpu", "cuda") || throw(ArgumentError(
-        "unknown image backend: $expected_backend"))
+    expected_backend in ("cpu", "cuda") ||
+        throw(ArgumentError("unknown image backend: $expected_backend"))
     records = read_table(records_path, IMAGE_RECORD_HEADER)
-    expected = Set((key, repetition, seed)
-        for key in configurations for (repetition, seed) in enumerate(seeds))
-    observed = Set{Tuple{String,Int,Int}}()
-    timed_steps = Dict{Tuple{String,Int},Int}()
+    expected = expected_jobs(configurations, seeds)
+    observed = Set{Tuple{String, Int, Int}}()
+    timed_steps = Dict{Tuple{String, Int}, Int}()
 
-    total_columns = (
-        "gradient_ad_seconds_total",
-        "optimizer_state_direction_seconds_total",
-        "retraction_application_seconds_total",
-    )
-    per_step_columns = (
-        "gradient_ad_seconds_per_step",
-        "optimizer_state_direction_seconds_per_step",
-        "retraction_application_seconds_per_step",
-    )
     for (offset, record) in enumerate(records)
-        line = offset + 1
-        record["schema_version"] == "4" || throw(ArgumentError(
-            "$records_path:$line has unsupported schema version $(record["schema_version"])"))
-        record["dataset"] == dataset || throw(ArgumentError(
-            "$records_path:$line has dataset $(record["dataset"]), expected $dataset"))
-        key = record["configuration_key"]
-        key in configurations || throw(ArgumentError(
-            "$records_path:$line has unexpected configuration key $key"))
-        record["configuration"] == CONFIGURATION_NAMES[key] || throw(ArgumentError(
-            "$records_path:$line has the wrong display name for $key"))
-        repetition = parse_integer(record, "repetition", records_path, line; minimum=1)
-        seed = parse_integer(record, "seed", records_path, line; minimum=0)
-        identity = (key, repetition, seed)
-        identity in expected || throw(ArgumentError(
-            "$records_path:$line has unexpected job $(join(identity, '/'))"))
-        identity in observed && throw(ArgumentError(
-            "$records_path:$line duplicates job $(join(identity, '/'))"))
-        push!(observed, identity)
-
-        status = record["status"]
-        status in ("ok", "failed_validation", "exception") || throw(ArgumentError(
-            "$records_path:$line has unknown status $status"))
-        status == "exception" && throw(ArgumentError(
-            "$records_path:$line records an exception for $key repetition $repetition"))
-        !allow_validation_failures && status != "ok" && throw(ArgumentError(
-            "$records_path:$line records failed scientific validation for $key repetition $repetition"))
-        isempty(record["optimizer_role"]) && throw(ArgumentError(
-            "$records_path:$line has an empty optimizer role"))
-        parse_float(record, "learning_rate", records_path, line; nonnegative=true)
+        where = "$records_path:$(offset + 1)"
+        identity, epochs = validate_run_row(
+            record, where; schema_version = string(MNIST_RUN_SCHEMA_VERSION), dataset,
+            configurations, statuses = ("ok", "failed_validation", "exception"),
+            epochs_minimum = 0, allow_validation_failures)
+        record_job!(observed, expected, identity, where)
+        epochs == expected_epochs ||
+            throw(ArgumentError("$where completed $epochs epochs; expected $expected_epochs"))
         record["backend"] == expected_backend || throw(ArgumentError(
-            "$records_path:$line has backend $(record["backend"]), expected $expected_backend"))
-        epochs = parse_integer(record, "epochs_completed", records_path, line; minimum=0)
-        epochs == expected_epochs || throw(ArgumentError(
-            "$records_path:$line completed $epochs epochs; expected $expected_epochs"))
-        for field in ("final_loss", "best_loss", "test_accuracy", "total_seconds",
-                "seconds_per_epoch")
-            parse_float(record, field, records_path, line;
-                nonnegative=field in ("total_seconds", "seconds_per_epoch"))
-        end
-        steps = parse_integer(record, "timed_steps", records_path, line; minimum=0)
-        totals = [parse_float(record, field, records_path, line; nonnegative=true)
-                  for field in total_columns]
-        per_steps = [parse_float(record, field, records_path, line; nonnegative=true)
-                     for field in per_step_columns]
+            "$where has backend $(record["backend"]), expected $expected_backend"))
+        parse_float(record, "test_accuracy", where)
+        parse_float(record, "total_seconds", where; nonnegative = true)
+        parse_float(record, "seconds_per_epoch", where; nonnegative = true)
+        parse_integer(record, "peak_device_bytes", where; minimum = 0)
+
+        steps = parse_integer(record, "timed_steps", where; minimum = 0)
+        totals, per_steps = timing_pairs(record, where)
         if steps == 0
             all(iszero, totals) && all(iszero, per_steps) || throw(ArgumentError(
-                "$records_path:$line has nonzero timing for a zero-step result"))
+                "$where has nonzero timing for a zero-step result"))
         else
-            all(isapprox(per_step, total / steps; rtol=1e-10, atol=1e-12)
-                for (total, per_step) in zip(totals, per_steps)) || throw(ArgumentError(
-                "$records_path:$line has inconsistent total/per-step timing"))
+            all(isapprox(per_step, total / steps; rtol = 1.0e-10, atol = 1.0e-12)
+            for (total, per_step) in zip(totals, per_steps)) ||
+                throw(ArgumentError("$where has inconsistent total/per-step timing"))
         end
-        parse_integer(record, "peak_device_bytes", records_path, line; minimum=0)
-        timed_steps[(record["configuration"], repetition)] = steps
+        timed_steps[(record["configuration"], identity[2])] = steps
     end
-    observed == expected || throw(ArgumentError(
-        "$records_path does not have exact configuration/repetition/seed coverage"))
+    require_exactly(observed, expected, "configuration/repetition/seed", records_path)
 
     losses = read_table(losses_path, IMAGE_LOSS_HEADER)
-    loss_steps = Dict{Tuple{String,Int},Set{Int}}()
+    loss_steps = Dict{Tuple{String, Int}, Set{Int}}()
     expected_names = Set(CONFIGURATION_NAMES[key] for key in configurations)
     for (offset, record) in enumerate(losses)
-        line = offset + 1
-        parse_integer(record, "run", losses_path, line; minimum=1)
-        record["configuration"] in expected_names || throw(ArgumentError(
-            "$losses_path:$line has an unexpected configuration"))
-        repetition = parse_integer(record, "repetition", losses_path, line; minimum=1)
-        parse_integer(record, "epoch", losses_path, line; minimum=1)
-        parse_integer(record, "batch", losses_path, line; minimum=1)
-        step = parse_integer(record, "step", losses_path, line; minimum=1)
-        parse_float(record, "loss", losses_path, line)
+        where = "$losses_path:$(offset + 1)"
+        parse_integer(record, "run", where; minimum = 1)
+        record["configuration"] in expected_names ||
+            throw(ArgumentError("$where has an unexpected configuration"))
+        repetition = parse_integer(record, "repetition", where; minimum = 1)
+        parse_integer(record, "epoch", where; minimum = 1)
+        parse_integer(record, "batch", where; minimum = 1)
+        step = parse_integer(record, "step", where; minimum = 1)
+        parse_float(record, "loss", where)
         key = (record["configuration"], repetition)
-        haskey(timed_steps, key) || throw(ArgumentError(
-            "$losses_path:$line has no matching run record"))
-        steps = get!(() -> Set{Int}(), loss_steps, key)
-        step in steps && throw(ArgumentError(
-            "$losses_path:$line duplicates step $step for $(key[1]) repetition $(key[2])"))
-        push!(steps, step)
+        haskey(timed_steps, key) ||
+            throw(ArgumentError("$where has no matching run record"))
+        record_index!(loss_steps, key, step, "step", where)
     end
-    for (key, timed_step_count) in timed_steps
-        observed_steps = get(loss_steps, key, Set{Int}())
-        observed_steps == Set(1:timed_step_count) || throw(ArgumentError(
-            "$losses_path does not have exact steps 1:$timed_step_count for $(key[1]) " *
+    for (key, step_count) in timed_steps
+        get(loss_steps, key, Set{Int}()) == Set(1:step_count) || throw(ArgumentError(
+            "$losses_path does not have exact steps 1:$step_count for $(key[1]) " *
             "repetition $(key[2])"))
     end
-    (records=length(records), losses=length(losses), statuses=countmap(record["status"] for record in records))
+    (records = length(records), losses = length(losses),
+        statuses = countmap([record["status"] for record in records]))
 end
 
-function countmap(values)
-    counts = Dict{String,Int}()
-    for value in values
-        counts[value] = get(counts, value, 0) + 1
-    end
-    counts
+"""The three timing totals and the three per-step values of one image record."""
+function timing_pairs(record, where)
+    totals = [parse_float(record, field, where; nonnegative = true)
+              for field in STEP_TIMING_COLUMNS if endswith(field, "_total")]
+    per_steps = [parse_float(record, field, where; nonnegative = true)
+                 for field in STEP_TIMING_COLUMNS if endswith(field, "_per_step")]
+    (totals, per_steps)
 end
 
-function validate_pendulum_artifacts(records_path::AbstractString, losses_path::AbstractString,
+function validate_pendulum_artifacts(
+        records_path::AbstractString, losses_path::AbstractString,
         run_dir::AbstractString; seeds::Vector{Int}, configurations::Vector{String},
-        expected_epochs::Int, expected_backend::AbstractString, allow_partial::Bool=false,
-        allow_validation_failures::Bool=false)
+        expected_epochs::Int, expected_backend::AbstractString, allow_partial::Bool = false,
+        allow_validation_failures::Bool = false)
     all(key -> key in PENDULUM_CONFIGURATION_ORDER, configurations) || throw(ArgumentError(
         "pendulum configurations must be intrinsic SAE configurations"))
-    records = read_table(records_path, PENDULUM_RECORD_HEADER; allow_empty=allow_partial)
-    expected = Set((key, repetition, seed)
-        for key in configurations for (repetition, seed) in enumerate(seeds))
-    observed = Set{Tuple{String,Int,Int}}()
+    records = read_table(records_path, PENDULUM_RECORD_HEADER; allow_empty = allow_partial)
+    expected = expected_jobs(configurations, seeds)
+    observed = Set{Tuple{String, Int, Int}}()
+
     for (offset, record) in enumerate(records)
-        line = offset + 1
-        record["schema_version"] == "2" || throw(ArgumentError(
-            "$records_path:$line has unsupported schema version $(record["schema_version"])"))
-        record["dataset"] == "pendulum" || throw(ArgumentError(
-            "$records_path:$line has dataset $(record["dataset"])"))
-        key = record["configuration_key"]
-        key in configurations || throw(ArgumentError(
-            "$records_path:$line has unexpected configuration key $key"))
-        record["configuration"] == PENDULUM_CONFIGURATION_NAMES[key] || throw(ArgumentError(
-            "$records_path:$line has the wrong display name for $key"))
-        isempty(record["optimizer_role"]) && throw(ArgumentError(
-            "$records_path:$line has an empty optimizer role"))
-        parse_float(record, "learning_rate", records_path, line; nonnegative=true)
+        where = "$records_path:$(offset + 1)"
+        identity, epochs = validate_run_row(
+            record, where; schema_version = string(PENDULUM_RUN_SCHEMA_VERSION),
+            dataset = "pendulum", configurations, statuses = ("ok", "failed_validation"),
+            epochs_minimum = 1, allow_validation_failures)
+        record_job!(observed, expected, identity, where)
+        epochs == expected_epochs ||
+            throw(ArgumentError("$where completed $epochs epochs; expected $expected_epochs"))
         record["retraction"] == "cayley" || throw(ArgumentError(
-            "$records_path:$line has retraction $(record["retraction"]), expected cayley"))
-        repetition = parse_integer(record, "repetition", records_path, line; minimum=1)
-        seed = parse_integer(record, "seed", records_path, line; minimum=0)
-        identity = (key, repetition, seed)
-        identity in expected || throw(ArgumentError(
-            "$records_path:$line has unexpected configuration/repetition/seed $(join(identity, '/'))"))
-        identity in observed && throw(ArgumentError(
-            "$records_path:$line duplicates configuration/repetition/seed $(join(identity, '/'))"))
-        push!(observed, identity)
-        status = record["status"]
-        status in ("ok", "failed_validation") || throw(ArgumentError(
-            "$records_path:$line has status $status"))
-        !allow_validation_failures && status != "ok" && throw(ArgumentError(
-            "$records_path:$line records failed scientific validation for $key repetition $repetition"))
-        epochs = parse_integer(record, "epochs_completed", records_path, line; minimum=1)
-        epochs == expected_epochs || throw(ArgumentError(
-            "$records_path:$line completed $epochs epochs; expected $expected_epochs"))
-        for field in ("final_loss", "best_loss", "total_seconds", "seconds_per_epoch", "gc_seconds")
-            parse_float(record, field, records_path, line;
-                nonnegative=field in ("total_seconds", "seconds_per_epoch", "gc_seconds"))
-        end
-        parse_integer(record, "host_allocated_bytes", records_path, line; minimum=0)
+            "$where has retraction $(record["retraction"]), expected cayley"))
+        parse_float(record, "total_seconds", where; nonnegative = true)
+        parse_float(record, "seconds_per_epoch", where; nonnegative = true)
+        parse_float(record, "gc_seconds", where; nonnegative = true)
+        parse_integer(record, "host_allocated_bytes", where; minimum = 0)
         occursin(expected_backend, lowercase(record["backend"])) || throw(ArgumentError(
-            "$records_path:$line has backend $(record["backend"]), expected $expected_backend"))
+            "$where has backend $(record["backend"]), expected $expected_backend"))
+
+        key, _, seed = identity
         checkpoint = joinpath(run_dir, basename(record["checkpoint"]))
         isfile(checkpoint) && filesize(checkpoint) > 0 || throw(ArgumentError(
-            "$records_path:$line refers to a missing or empty checkpoint: $checkpoint"))
+            "$where refers to a missing or empty checkpoint: $checkpoint"))
         basename(checkpoint) == "pendulum-$key-seed-$seed.h5" || throw(ArgumentError(
-            "$records_path:$line has unexpected checkpoint name $(basename(checkpoint))"))
+            "$where has unexpected checkpoint name $(basename(checkpoint))"))
     end
     if allow_partial
-        observed ⊆ expected || throw(ArgumentError("pendulum records exceed expected coverage"))
+        observed ⊆ expected ||
+            throw(ArgumentError("pendulum records exceed expected coverage"))
     else
-        observed == expected || throw(ArgumentError(
-            "$records_path does not have exact configuration/repetition/seed coverage"))
+        require_exactly(observed, expected, "configuration/repetition/seed", records_path)
     end
 
-    losses = read_table(losses_path, PENDULUM_LOSS_HEADER; allow_empty=allow_partial)
-    epochs_by_run = Dict{Tuple{String,Int,Int},Set{Int}}()
+    losses = read_table(losses_path, PENDULUM_LOSS_HEADER; allow_empty = allow_partial)
+    epochs_by_run = Dict{Tuple{String, Int, Int}, Set{Int}}()
     for (offset, record) in enumerate(losses)
-        line = offset + 1
+        where = "$losses_path:$(offset + 1)"
         key = record["configuration_key"]
-        key in configurations || throw(ArgumentError(
-            "$losses_path:$line has unexpected configuration key $key"))
-        record["configuration"] == PENDULUM_CONFIGURATION_NAMES[key] || throw(ArgumentError(
-            "$losses_path:$line has the wrong display name for $key"))
-        repetition = parse_integer(record, "repetition", losses_path, line; minimum=1)
-        seed = parse_integer(record, "seed", losses_path, line; minimum=0)
-        identity = (key, repetition, seed)
-        identity in observed || throw(ArgumentError(
-            "$losses_path:$line has no matching run record"))
-        epoch = parse_integer(record, "epoch", losses_path, line; minimum=1)
-        parse_float(record, "loss", losses_path, line)
-        run_epochs = get!(() -> Set{Int}(), epochs_by_run, identity)
-        epoch in run_epochs && throw(ArgumentError(
-            "$losses_path:$line duplicates epoch $epoch for $(join(identity, '/'))"))
-        push!(run_epochs, epoch)
+        key in configurations ||
+            throw(ArgumentError("$where has unexpected configuration key $key"))
+        record["configuration"] == CONFIGURATION_NAMES[key] ||
+            throw(ArgumentError("$where has the wrong display name for $key"))
+        identity = (key, parse_integer(record, "repetition", where; minimum = 1),
+            parse_integer(record, "seed", where; minimum = 0))
+        identity in observed || throw(ArgumentError("$where has no matching run record"))
+        parse_float(record, "loss", where)
+        record_index!(epochs_by_run, identity,
+            parse_integer(record, "epoch", where; minimum = 1), "epoch", where)
     end
     for identity in observed
-        get(epochs_by_run, identity, Set{Int}()) == Set(1:expected_epochs) || throw(ArgumentError(
-            "$losses_path does not have exact epochs 1:$expected_epochs for $(join(identity, '/'))"))
+        get(epochs_by_run, identity, Set{Int}()) == Set(1:expected_epochs) ||
+            throw(ArgumentError("$losses_path does not have exact epochs 1:$expected_epochs " *
+                                "for $(join(identity, '/'))"))
     end
-    (records=length(records), losses=length(losses), statuses=countmap(record["status"] for record in records))
+    (records = length(records), losses = length(losses),
+        statuses = countmap([record["status"] for record in records]))
 end
 
 function validate_stage_table(path::AbstractString, expected_stages::Vector{String})
-    records = read_table(path, STAGE_HEADER; allow_empty=isempty(expected_stages))
-    latest = Dict{String,String}()
+    records = read_table(path, STAGE_HEADER; allow_empty = isempty(expected_stages))
+    latest = Dict{String, String}()
     for (offset, record) in enumerate(records)
-        line = offset + 1
-        isempty(record["stage"]) && throw(ArgumentError("$path:$line has an empty stage"))
-        (record["status"] == "ok" || occursin(r"^failed:[1-9][0-9]*$", record["status"])) ||
-            throw(ArgumentError("$path:$line has invalid status $(record["status"])"))
-        isempty(record["started_utc"]) && throw(ArgumentError(
-            "$path:$line has an empty start timestamp"))
-        isempty(record["finished_utc"]) && throw(ArgumentError(
-            "$path:$line has an empty finish timestamp"))
-        isempty(record["command"]) && throw(ArgumentError("$path:$line has an empty command"))
+        where = "$path:$(offset + 1)"
+        for field in ("stage", "started_utc", "finished_utc", "command")
+            isempty(record[field]) && throw(ArgumentError("$where has an empty $field"))
+        end
+        record["status"] == "ok" || occursin(r"^failed:[1-9][0-9]*$", record["status"]) ||
+            throw(ArgumentError("$where has invalid status $(record["status"])"))
         latest[record["stage"]] = record["status"]
     end
     for stage in expected_stages
         get(latest, stage, "missing") == "ok" || throw(ArgumentError(
             "$path has no latest successful row for required stage $stage"))
     end
-    (rows=length(records), passed=count(==("ok"), values(latest)), failed=count(!=("ok"), values(latest)))
+    (rows = length(records), passed = count(==("ok"), values(latest)),
+        failed = count(!=("ok"), values(latest)))
 end
 
-function expected_stage_names(mode::AbstractString, stages::Vector{String}, seeds::Vector{Int},
-        pendulum_configurations::Vector{String}=PENDULUM_CONFIGURATION_ORDER)
+"""The stage names a run of this shape must have completed, in the order the runner writes them."""
+function expected_stage_names(
+        mode::AbstractString, stages::Vector{String}, seeds::Vector{Int},
+        pendulum_configurations::Vector{String} = PENDULUM_CONFIGURATION_ORDER)
     names = String[]
     for stage in stages
-        stage == "none" && continue
-        if stage in IMAGE_DATASETS
-            mode == "full" && push!(names, "$stage-warmup", "$stage-warmup-record-validation")
+        if stage == "none"
+            continue
+        elseif stage in IMAGE_DATASETS
+            mode == "full" &&
+                push!(names, "$stage-warmup", "$stage-warmup-record-validation")
             push!(names, stage, "$stage-record-validation")
         elseif stage == "pendulum"
             for key in pendulum_configurations
                 mode == "full" && push!(names, "pendulum-$key-warmup")
-                for seed in seeds
-                    push!(names, "pendulum-$key-seed-$seed")
-                end
+                append!(names, ["pendulum-$key-seed-$seed" for seed in seeds])
             end
             push!(names, "pendulum-record-validation")
         elseif stage == "retraction"
@@ -437,24 +277,38 @@ function expected_stage_names(mode::AbstractString, stages::Vector{String}, seed
     names
 end
 
-function require_file(path::AbstractString; nonempty::Bool=true)
+function require_file(path::AbstractString)
     isfile(path) || throw(ArgumentError("missing required artifact: $path"))
-    nonempty && filesize(path) == 0 && throw(ArgumentError("required artifact is empty: $path"))
+    filesize(path) == 0 && throw(ArgumentError("required artifact is empty: $path"))
     path
+end
+
+"""Require and validate the four artifacts of one image stage, and describe what it held."""
+function validate_image_stage(
+        run_dir, dataset, prefix; seeds, configurations, expected_epochs,
+        expected_backend, allow_validation_failures)
+    for name in ("$prefix-report.txt", "$prefix-losses.csv", "$prefix-runs.csv", "$prefix.jld2")
+        require_file(joinpath(run_dir, name))
+    end
+    summary = validate_image_artifacts(joinpath(run_dir, "$prefix-runs.csv"),
+        joinpath(run_dir, "$prefix-losses.csv"); dataset, seeds, configurations,
+        expected_epochs, expected_backend, allow_validation_failures)
+    "$prefix=$(summary.records) records/$(summary.losses) losses"
 end
 
 function validate_run_artifacts(run_dir::AbstractString; mode::AbstractString,
         stages::Vector{String}, seeds::Vector{Int}, configurations::Vector{String},
         expected_image_epochs::Int, expected_pendulum_epochs::Int,
         expected_backend::AbstractString, retraction_repo::AbstractString,
-        pendulum_configurations::Vector{String}=PENDULUM_CONFIGURATION_ORDER,
-        allow_validation_failures::Bool=false)
+        pendulum_configurations::Vector{String} = PENDULUM_CONFIGURATION_ORDER,
+        allow_validation_failures::Bool = false)
     mode in ("smoke", "full") || throw(ArgumentError("unknown mode: $mode"))
     isempty(stages) && throw(ArgumentError("stage list is empty"))
-    all(stage -> stage in RUN_STAGES, stages) || throw(ArgumentError(
-        "unknown stage in $(join(stages, ','))"))
-    "none" in stages && length(stages) != 1 && throw(ArgumentError(
-        "the test-only `none` stage cannot be combined with experiment stages"))
+    all(stage -> stage in RUN_STAGES, stages) ||
+        throw(ArgumentError("unknown stage in $(join(stages, ','))"))
+    "none" in stages && length(stages) != 1 &&
+        throw(ArgumentError(
+            "the test-only `none` stage cannot be combined with experiment stages"))
     isempty(seeds) && throw(ArgumentError("seed list is empty"))
 
     require_file(joinpath(run_dir, "environment.txt"))
@@ -462,51 +316,38 @@ function validate_run_artifacts(run_dir::AbstractString; mode::AbstractString,
     summaries = String[]
     for dataset in ("mnist", "fashion-mnist")
         dataset in stages || continue
-        for filename in ("$dataset-report.txt", "$dataset-losses.csv", "$dataset-runs.csv",
-                "$dataset.jld2")
-            require_file(joinpath(run_dir, filename))
-        end
-        summary = validate_image_artifacts(
-            joinpath(run_dir, "$dataset-runs.csv"),
-            joinpath(run_dir, "$dataset-losses.csv"); dataset, seeds, configurations,
-            expected_epochs=expected_image_epochs, expected_backend,
-            allow_validation_failures)
-        push!(summaries, "$dataset=$(summary.records) records/$(summary.losses) losses")
-        if mode == "full"
-            for filename in ("$dataset-warmup-report.txt", "$dataset-warmup-losses.csv",
-                    "$dataset-warmup-runs.csv", "$dataset-warmup.jld2")
-                require_file(joinpath(run_dir, filename))
-            end
-            warmup = validate_image_artifacts(
-                joinpath(run_dir, "$dataset-warmup-runs.csv"),
-                joinpath(run_dir, "$dataset-warmup-losses.csv"); dataset,
-                seeds=[first(seeds)], configurations, expected_epochs=1, expected_backend,
-                allow_validation_failures=true)
-            push!(summaries,
-                "$dataset-warmup=$(warmup.records) records/$(warmup.losses) losses")
-        end
+        push!(summaries,
+            validate_image_stage(run_dir, dataset, dataset; seeds, configurations,
+                expected_epochs = expected_image_epochs, expected_backend,
+                allow_validation_failures))
+        # `full` also runs a one-epoch warm-up of the whole matrix before the measured run. It
+        # is one seed and one epoch, and is allowed to be scientifically inconclusive.
+        mode == "full" && push!(summaries,
+            validate_image_stage(
+                run_dir, dataset, "$dataset-warmup"; seeds = [first(seeds)],
+                configurations, expected_epochs = 1, expected_backend,
+                allow_validation_failures = true))
     end
     if "pendulum" in stages
         require_file(joinpath(run_dir, "pendulum-runs.csv"))
         require_file(joinpath(run_dir, "pendulum-losses.csv"))
-        summary = validate_pendulum_artifacts(
-            joinpath(run_dir, "pendulum-runs.csv"), joinpath(run_dir, "pendulum-losses.csv"), run_dir;
-            seeds, configurations=pendulum_configurations, expected_epochs=expected_pendulum_epochs,
-            expected_backend, allow_validation_failures)
+        summary = validate_pendulum_artifacts(joinpath(run_dir, "pendulum-runs.csv"),
+            joinpath(run_dir, "pendulum-losses.csv"), run_dir; seeds,
+            configurations = pendulum_configurations,
+            expected_epochs = expected_pendulum_epochs, expected_backend,
+            allow_validation_failures)
         push!(summaries, "pendulum=$(summary.records) records/$(summary.losses) losses")
     end
     if "retraction" in stages
-        required_paths = expected_backend == "cuda" ?
-            [("AugmentedPade", "CPU"), ("ScaledSquaring", "CUDA"), ("NativePade", "CUDA")] :
-            [("AugmentedPade", "CPU"), ("ScaledSquaring", "CPU"), ("NativePade", "CPU")]
+        device_backend = expected_backend == "cuda" ? "CUDA" : "CPU"
+        required_paths = [("AugmentedPade", "CPU"), ("ScaledSquaring", device_backend),
+            ("NativePade", device_backend)]
         summary = validate_records(joinpath(run_dir, "retraction-runs.csv");
-            required_paths, go_repo=retraction_repo)
+            required_paths, go_repo = retraction_repo)
         push!(summaries, "retraction=$(summary.rows) records")
     end
-    expected_stages = expected_stage_names(mode, stages, seeds, pendulum_configurations)
-    stage_summary = validate_stage_table(joinpath(run_dir, "stages.csv"), expected_stages)
+    stage_summary = validate_stage_table(joinpath(run_dir, "stages.csv"),
+        expected_stage_names(mode, stages, seeds, pendulum_configurations))
     push!(summaries, "stages=$(stage_summary.rows) rows")
     summaries
-end
-
 end

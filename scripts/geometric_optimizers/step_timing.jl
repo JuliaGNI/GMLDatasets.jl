@@ -6,20 +6,16 @@
 # are not mislabeled as optimizer-state work.
 #
 # This file contains definitions only so the focused regression can exercise the same timer and
-# schema helpers as the trainer without loading data or starting an experiment.
+# schema helpers as the trainer without loading data or starting an experiment. It also brings in
+# the shared headers, which is where the seven timing column names live and where the validators
+# read them from.
 
 using GeometricOptimizers: PhaseTimer
 
-const MNIST_RUN_SCHEMA_VERSION = 4
-const STEP_TIMING_CSV_COLUMNS = (
-    "timed_steps",
-    "gradient_ad_seconds_total",
-    "gradient_ad_seconds_per_step",
-    "optimizer_state_direction_seconds_total",
-    "optimizer_state_direction_seconds_per_step",
-    "retraction_application_seconds_total",
-    "retraction_application_seconds_per_step",
-)
+include(joinpath(@__DIR__, "..", "revision", "headers.jl"))
+
+const STEP_TIMING_PHASES = (
+    :gradient, :objective, :optimizer_state_direction, :retraction_application)
 
 """
     step_timing_synchronizer(device_active, synchronize)
@@ -27,15 +23,14 @@ const STEP_TIMING_CSV_COLUMNS = (
 Return `synchronize` when a device is active and a no-op otherwise. Keeping this choice outside
 the timer makes the CPU path independent of CUDA while preserving the same boundary calls.
 """
-step_timing_synchronizer(device_active::Bool, synchronize) =
+function step_timing_synchronizer(device_active::Bool, synchronize)
     device_active ? synchronize : (() -> nothing)
-
-const STEP_TIMING_PHASES =
-    (:gradient, :objective, :optimizer_state_direction, :retraction_application)
+end
 
 """Construct the upstream exclusive timer with the phases used by schema v4."""
-ExclusiveStepTimer(synchronize=(() -> nothing); clock=time_ns) =
-    PhaseTimer(; phases=STEP_TIMING_PHASES, synchronize, clock)
+function ExclusiveStepTimer(synchronize = (() -> nothing); clock = time_ns)
+    PhaseTimer(; phases = STEP_TIMING_PHASES, synchronize, clock)
+end
 
 """
     reset_step_timing!(timer)
@@ -62,21 +57,22 @@ function step_timing(timer::PhaseTimer, completed_steps::Integer)
         "$completed_steps completed steps"))
     steps = Int(completed_steps)
     divisor = max(steps, 1)
-    gradient_seconds = Float64(get(timer.exclusive, :gradient, UInt64(0))) * 1.0e-9
-    optimizer_seconds =
-        Float64(get(timer.exclusive, :optimizer_state_direction, UInt64(0))) * 1.0e-9
-    retraction_seconds =
-        Float64(get(timer.exclusive, :retraction_application, UInt64(0))) * 1.0e-9
+    seconds(phase) = Float64(get(timer.exclusive, phase, UInt64(0))) * 1.0e-9
+    gradient_seconds = seconds(:gradient)
+    optimizer_seconds = seconds(:optimizer_state_direction)
+    retraction_seconds = seconds(:retraction_application)
     (
-        timed_steps=steps,
-        gradient_ad_seconds_total=gradient_seconds,
-        gradient_ad_seconds_per_step=gradient_seconds / divisor,
-        optimizer_state_direction_seconds_total=optimizer_seconds,
-        optimizer_state_direction_seconds_per_step=optimizer_seconds / divisor,
-        retraction_application_seconds_total=retraction_seconds,
-        retraction_application_seconds_per_step=retraction_seconds / divisor,
+        timed_steps = steps,
+        gradient_ad_seconds_total = gradient_seconds,
+        gradient_ad_seconds_per_step = gradient_seconds / divisor,
+        optimizer_state_direction_seconds_total = optimizer_seconds,
+        optimizer_state_direction_seconds_per_step = optimizer_seconds / divisor,
+        retraction_application_seconds_total = retraction_seconds,
+        retraction_application_seconds_per_step = retraction_seconds / divisor
     )
 end
 
-step_timing_csv_values(timing::NamedTuple) = Tuple(getproperty(timing, Symbol(column))
-    for column in STEP_TIMING_CSV_COLUMNS)
+function step_timing_values(timing::NamedTuple)
+    Tuple(getproperty(timing, Symbol(column))
+    for column in STEP_TIMING_COLUMNS)
+end

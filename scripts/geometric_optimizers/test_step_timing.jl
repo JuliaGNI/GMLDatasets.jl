@@ -13,7 +13,7 @@ include(joinpath(@__DIR__, "step_timing.jl"))
     clock() = timestamps[(clock_index[] += 1)]
     synchronizations = Ref(0)
     synchronize() = (synchronizations[] += 1; nothing)
-    timer = ExclusiveStepTimer(synchronize; clock=clock)
+    timer = ExclusiveStepTimer(synchronize; clock = clock)
     @test timer isa PhaseTimer
 
     timer(:optimizer_state_direction, :enter)
@@ -46,25 +46,29 @@ include(joinpath(@__DIR__, "step_timing.jl"))
           timing.optimizer_state_direction_seconds_total
     @test timing.retraction_application_seconds_per_step ==
           timing.retraction_application_seconds_total
-    @test all(isfinite, step_timing_csv_values(timing))
-    @test all(>=(0), step_timing_csv_values(timing))
+    @test all(isfinite, step_timing_values(timing))
+    @test all(>=(0), step_timing_values(timing))
 end
 
 @testset "warm-up reset and schema-v4 columns" begin
     timer = ExclusiveStepTimer()
     timing = step_timing(timer, 0)
     @test timing.timed_steps == 0
-    @test all(iszero, step_timing_csv_values(timing))
+    @test all(iszero, step_timing_values(timing))
     @test MNIST_RUN_SCHEMA_VERSION == 4
-    @test STEP_TIMING_CSV_COLUMNS == (
+    @test STEP_TIMING_COLUMNS == [
         "timed_steps",
         "gradient_ad_seconds_total",
         "gradient_ad_seconds_per_step",
         "optimizer_state_direction_seconds_total",
         "optimizer_state_direction_seconds_per_step",
         "retraction_application_seconds_total",
-        "retraction_application_seconds_per_step",
-    )
+        "retraction_application_seconds_per_step"
+    ]
+    # The trainer writes these seven under exactly these names, and the validator reads them
+    # from the same `headers.jl` constant: the last three columns of `IMAGE_RECORD_HEADER`
+    # follow them, so a column inserted between the two would show up here.
+    @test IMAGE_RECORD_HEADER[(end - 9):(end - 3)] == STEP_TIMING_COLUMNS
 end
 
 @testset "device synchronization selection" begin

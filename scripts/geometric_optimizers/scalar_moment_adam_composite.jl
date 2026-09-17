@@ -1,62 +1,46 @@
 # The `ScalarMomentAdam` (Li et al. 2020) baseline as a per-leaf composite.
 #
-# `ScalarMomentAdam` — the Adam of `li2020efficient`, Algorithm 2, with its scalar second
-# moment — is restricted to a single `StiefelManifold`: it rejects ordinary arrays,
-# whole parameter sets and mixed parameter trees on purpose, and `GeometricOptimizers` 0.7.0
-# deliberately does not widen it. (The method's retraction is a parameter — `Cayley`, the
-# default, or any other `AbstractRetraction`; this composite runs it with `Cayley`, which the
-# configuration records.) The transformer this harness trains is a mixed tree —
-# `StiefelManifold` attention projections next to ordinary `Matrix` and `Vector` leaves — so
-# the baseline is assembled around the released methods rather than passed to them: one
+# `ScalarMomentAdam` — the Adam of `li2020efficient`, Algorithm 2, with its scalar second moment —
+# accepts a single `StiefelManifold` and rejects arrays, parameter sets and mixed trees on
+# purpose; `GeometricOptimizers` deliberately does not widen it. The transformer trained here is a
+# mixed tree, `StiefelManifold` attention projections beside ordinary `Matrix` and `Vector`
+# leaves, so the baseline is assembled around the released methods rather than passed to them: one
 # `Optimizer`/`OptimizerState` per leaf, `ScalarMomentAdam` on each Stiefel leaf and ordinary
-# `Adam` on each Euclidean one, all sharing the one minibatch gradient evaluation of the step.
+# `Adam` on each Euclidean one, all sharing the step's one minibatch gradient. The retraction is a
+# parameter of the method; this composite runs `Cayley`, which the configuration records.
 #
-# What one step does, in `composite_step!`:
+# `composite_step!` flattens the container into the shared buffer, evaluates `∇F!` once for the
+# whole tree, invalidates every leaf cache, then steps the leaves in parameter-layout order with
+# the trainer's `increase_iteration_number!` / `solver_step!` / `update!` triple. Each leaf has
+# independent state and reads only its own slice of the same frozen pre-step gradient, so no leaf
+# acts on information an earlier one has changed.
 #
-#   1. the `NetworkParameters` container is flattened into the shared flat buffer,
-#   2. one whole-tree `∇F!` evaluation — the single reverse pass of the step — writes every
-#      leaf's ambient gradient into the shared flat gradient,
-#   3. every leaf's optimizer cache is invalidated (below),
-#   4. the leaves step in parameter-layout order, each with the trainer's per-step sequence
-#      `increase_iteration_number!`, `solver_step!`, `update!`, each reading only its own slice
-#      of the shared gradient.
+# The invalidation is the minibatch-correctness seam. `solver_step!` ends by refreshing the
+# accepted-point gradient and marking it current, and `store_gradient!` reuses it on the next step
+# while the point and the section still match — which for a bare-array leaf they do, by value,
+# after the in-place sync. The step after a changed batch would then consume the previous batch's
+# cached slice. The objective has changed under every cache, so every leaf is invalidated before
+# any step: cheap, and it does not have to reason about which leaf the hazard bites on.
+# `test_scalar_moment_adam_composite.jl` pins the seam on the array leaf, where the staleness is
+# visible in the iterate.
 #
-# The leaves are applied sequentially in place and in parameter-layout order. Every leaf has
-# independent optimizer state and consumes its slice of the same frozen pre-step gradient; no
-# later leaf recomputes information after an earlier leaf has changed. The explicit layout-order
-# loop is part of the composite's definition.
+# Each leaf's merit is a sentinel, `sum(abs2, freeparameters(x))`, not the network loss. `Static`
+# never evaluates a merit inside the step, so the sentinel never enters the iterate; it is what
+# the `solver_step!` NaN guard and the state's `f` read. It must stay O(leaf size) and finite
+# because it runs once per leaf per step — 369 leaves, and a per-leaf network evaluation would
+# cost a forward and a backward pass each. A retraction that corrupts its leaf still lands a
+# non-finite sentinel, so the guard keeps working.
 #
-# The invalidation in 3 is the minibatch-correctness seam. `solver_step!` ends by refreshing
-# the accepted-point gradient and marking it current, and `store_gradient!` reuses it on the
-# next step when the point and the section still match — which for a bare-array leaf they do,
-# by value, after the in-place sync. Left to itself, the step that follows a changed batch
-# would consume the previous batch's cached gradient slice. The objective has changed under
-# every cache, so every leaf is invalidated before any step, Stiefel or array alike: it is
-# cheap, and it does not have to reason about which leaf the hazard bites on.
-# `test_scalar_moment_adam_composite.jl` pins the seam on the array leaf, where the staleness
-# is visible in the iterate.
-#
-# Each leaf's merit is a sentinel, `sum(abs2, freeparameters(x))`, and not the network loss.
-# The `Static` line search never evaluates a merit in the step, so the sentinel never enters
-# the iterate; it is what the `solver_step!` NaN guard and the state's `f` read. It has to
-# stay O(leaf size) and finite because it is called once per leaf per step — 369 leaves, and a
-# per-leaf whole-network evaluation would cost a further forward and backward pass each. A
-# retraction that corrupts its leaf still lands a non-finite sentinel, so the guard keeps
-# working, and the trainer's per-epoch `isfinite(epoch_loss)` stop backstops what it cannot
-# see.
-#
-# The learning rate is not a method parameter in `GeometricOptimizers`: the methods produce a
-# direction and `linesearch = Static(η)` is the rate. It is a required argument of
-# `ScalarMomentAdamConfig` rather than a default, so the baseline keeps its own tuning budget
-# when it is wired into `configurations` — the scalar-moment direction has magnitude ≈ 1 in
-# total where `Adam`'s has magnitude ≈ 1 per component, so the same rate buys a step of a
-# different length on the two leaf kinds.
+# The learning rate is a required argument of `ScalarMomentAdamConfig`, not a default: in
+# `GeometricOptimizers` the methods give a direction and `linesearch = Static(η)` is the rate, and
+# the scalar-moment direction has magnitude ≈ 1 in total where `Adam`'s has ≈ 1 per component, so
+# the same number buys a step of a different length on the two leaf kinds.
 #
 # This file holds definitions only; `include` runs nothing.
 
 using GeometricOptimizers
 using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!,
-                           cache, section, invalidate_latest_gradient!, NoStepObserver,
+                           cache, invalidate_latest_gradient!, NoStepObserver,
                            observe_optimizer_phase
 using NeuralNetworkParameters: NetworkParameters, ParameterLayout, flatten!, freeparameters,
                                parameterlayout, parameterrange, flatlength
@@ -75,22 +59,21 @@ The name is the method's, not the retraction's: `ScalarMomentAdam` takes any
 The learning rate is a required argument, not a default, for the reason in the file header:
 the two leaf kinds scale it differently, so the baseline tunes it as its own number.
 
-`ambient_norm` records which ‖·‖² the Stiefel leaves' scalar second moment accumulates —
+`ambient_norm` chooses which ‖·‖² the Stiefel leaves' scalar second moment accumulates —
 `true` is the faithful `li2020efficient` Algorithm 2 port, `false` the `GeometricOptimizers`
-default — so a run's records can trace a number back to the mode that made it.
+default. It is not stored here: the trainer writes it into every run record's `second_moment`,
+which is where a number is traced back to the mode that made it.
 """
 struct ScalarMomentAdamConfig{T}
     learning_rate::T
     stiefel_method::ScalarMomentAdam{T}
     array_method::Adam{T}
-    ambient_norm::Bool
 
-    function ScalarMomentAdamConfig(learning_rate::T; β₁=9.0e-1, β₂=9.9e-1, δ=1.0e-8,
-        ambient_norm::Bool=false) where {T<:AbstractFloat}
+    function ScalarMomentAdamConfig(learning_rate::T; β₁ = 9.0e-1, β₂ = 9.9e-1, δ = 1.0e-8,
+            ambient_norm::Bool = false) where {T <: AbstractFloat}
         new{T}(T(learning_rate),
-            ScalarMomentAdam(T; β₁=β₁, β₂=β₂, δ=δ, ambient_norm=ambient_norm),
-            Adam(T; β₁=β₁, β₂=β₂, δ=δ),
-            ambient_norm)
+            ScalarMomentAdam(T; β₁ = β₁, β₂ = β₂, δ = δ, ambient_norm = ambient_norm),
+            Adam(T; β₁ = β₁, β₂ = β₂, δ = δ))
     end
 end
 
@@ -114,13 +97,13 @@ The per-repetition composite over a `NetworkParameters` container `ps`: one leaf
 shared flat buffers the whole-tree `∇F!` and the flattening read and write, and `∇F!` itself —
 the trainer's, which reads the current batch from its own `current_batch[]`.
 """
-struct ScalarMomentAdamComposite{T,OT}
+struct ScalarMomentAdamComposite{T, OT}
     leaves::Vector{ScalarMomentAdamLeaf{T}}
     layout::ParameterLayout
     ranges::Vector{UnitRange{Int}}
     flat_parameters::Vector{T}
     flat_gradient::Vector{T}
-    ∇F!
+    ∇F!::Any
     observer::OT
 end
 
@@ -147,8 +130,9 @@ leaf, so the in-place sync of `solver_step!` reaches the container without a cop
 """
 leaf_solution(x, stiefel::Bool) = (stiefel || x isa AbstractVector) ? x : vec(x)
 
-function ScalarMomentAdamComposite(ps::NetworkParameters, ∇F!, config::ScalarMomentAdamConfig{T};
-    observer=NoStepObserver()) where {T}
+function ScalarMomentAdamComposite(
+        ps::NetworkParameters, ∇F!, config::ScalarMomentAdamConfig{T};
+        observer = NoStepObserver()) where {T}
     layout = parameterlayout(ps)
     # A `NetworkParameters` adds a `ParametersLayout` around the wrapped `NamedTuple` layout.
     # Read that inner layout explicitly; `eachindex(ps)` yields the parameter keys, while the
@@ -175,15 +159,15 @@ function ScalarMomentAdamComposite(ps::NetworkParameters, ∇F!, config::ScalarM
         G = GradientFunction{T}(F_leaf, ∇F_leaf!, length(x₀))
         problem = OptimizerProblem(F_leaf, ∇F_leaf!, x₀)
         method = stiefel ? config.stiefel_method : config.array_method
-        optimizer = Optimizer(x₀, problem; algorithm=method,
-            linesearch=Static(T; α=config.learning_rate),
-            gradient=G, retraction=Cayley(), observer=leaf_observer)
+        optimizer = Optimizer(x₀, problem; algorithm = method,
+            linesearch = Static(T; α = config.learning_rate),
+            gradient = G, retraction = Cayley(), observer = leaf_observer)
         state = OptimizerState(method, x₀)
         initialize_state!(state)
         leaves[i] = ScalarMomentAdamLeaf{T}(i, stiefel, optimizer, state)
     end
 
-    ScalarMomentAdamComposite{T,typeof(observer)}(leaves, layout, ranges, flat_parameters,
+    ScalarMomentAdamComposite{T, typeof(observer)}(leaves, layout, ranges, flat_parameters,
         flat_gradient, ∇F!, observer)
 end
 

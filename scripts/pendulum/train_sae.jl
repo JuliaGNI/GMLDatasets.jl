@@ -26,6 +26,12 @@ import GeometricOptimizers
 
 include("scalar_moment_adam.jl")
 
+# The configuration table and the record headers the validators read, so that this script writes
+# exactly what they expect rather than a second copy of it.
+include(joinpath(@__DIR__, "..", "revision", "headers.jl"))
+include(joinpath(@__DIR__, "..", "revision", "configurations.jl"))
+include(joinpath(@__DIR__, "..", "revision", "csv_records.jl"))
+
 const REDUCED_DIM = parse(Int, get(ENV, "SAE_REDUCED_DIM", "2"))
 const N_EPOCHS = parse(Int, get(ENV, "SAE_N_EPOCHS", "1000"))
 const BATCH_SIZE = parse(Int, get(ENV, "SAE_BATCH_SIZE", "256"))
@@ -44,103 +50,77 @@ const RECORD_PATH = get(ENV, "SAE_RECORD", "")
 const LOSSES_PATH = get(ENV, "SAE_LOSSES", "")
 const REQUIRE_CUDA = parse(Bool, get(ENV, "SAE_REQUIRE_CUDA", "0"))
 
-const CONFIGURATION_ORDER = (
-    "geometric-adam-cayley",
-    "scalar-moment-adam",
-    "gradient",
-    "momentum",
-)
+"""
+    configuration(T)
 
+The configuration `SAE_CONFIGURATION` selects, as its shared metadata plus the optimizer method
+and the learning rate this script builds for it. `PENDULUM_CONFIGURATION_ORDER` is the four
+intrinsic configurations: an SAE cannot have an unconstrained Adam row and stay symplectic.
+"""
 function configuration(T::Type{<:AbstractFloat})
-    proposed = (
-        name = "Geometric Adam (Stiefel, Cayley retraction)",
-        role = "proposed",
-        learning_rate = T(LEARNING_RATE),
-        retraction = "cayley",
-        second_moment = "coordinate-wise",
-        transport = "global-section",
-        method = GeometricOptimizers.Adam(T;
-            β₁=T(ADAM_BETA1), β₂=T(ADAM_BETA2), δ=T(ADAM_EPSILON)),
+    selected = normalize_pendulum_configurations(CONFIGURATION_KEY)
+    length(selected) == 1 || error(
+        "SAE_CONFIGURATION names one configuration, got `$CONFIGURATION_KEY`")
+    key = only(selected)
+    methods = Dict(
+        "geometric-adam-cayley" => (learning_rate = T(LEARNING_RATE),
+            method = GeometricOptimizers.Adam(T;
+                β₁ = T(ADAM_BETA1), β₂ = T(ADAM_BETA2), δ = T(ADAM_EPSILON))),
+        "scalar-moment-adam" => (learning_rate = T(SCALAR_MOMENT_LEARNING_RATE),
+            method = SAEScalarMomentAdam(T;
+                beta1 = T(ADAM_BETA1), beta2 = T(ADAM_BETA2), epsilon = T(ADAM_EPSILON))),
+        "gradient" => (learning_rate = T(LEARNING_RATE),
+            method = GeometricOptimizers.GradientMethod()),
+        "momentum" => (learning_rate = T(LEARNING_RATE),
+            method = GeometricOptimizers.MomentumMethod(T(MOMENTUM_COEFFICIENT)))
     )
-    scalar = (
-        name = "Scalar Moment Adam (Stiefel, Cayley retraction)",
-        role = "riemannian-adam-baseline",
-        learning_rate = T(SCALAR_MOMENT_LEARNING_RATE),
-        retraction = "cayley",
-        second_moment = "scalar (quotient norm)",
-        transport = "global-section",
-        method = SAEScalarMomentAdam(T;
-            beta1=T(ADAM_BETA1), beta2=T(ADAM_BETA2), epsilon=T(ADAM_EPSILON)),
-    )
-    gradient = (
-        name = "Riemannian gradient (Stiefel, Cayley retraction)",
-        role = "diagnostic",
-        learning_rate = T(LEARNING_RATE),
-        retraction = "cayley",
-        second_moment = "none",
-        transport = "none",
-        method = GeometricOptimizers.GradientMethod(),
-    )
-    momentum = (
-        name = "Riemannian momentum (Stiefel, Cayley retraction)",
-        role = "diagnostic",
-        learning_rate = T(LEARNING_RATE),
-        retraction = "cayley",
-        second_moment = "none",
-        transport = "global-section",
-        method = GeometricOptimizers.MomentumMethod(T(MOMENTUM_COEFFICIENT)),
-    )
-    configurations = Dict(
-        "geometric-adam-cayley" => proposed,
-        "scalar-moment-adam" => scalar,
-        "gradient" => gradient,
-        "momentum" => momentum,
-    )
-    haskey(configurations, CONFIGURATION_KEY) || error(
-        "unknown SAE_CONFIGURATION=$CONFIGURATION_KEY; choose $(join(CONFIGURATION_ORDER, ", "))")
-    configurations[CONFIGURATION_KEY]
+    merge(CONFIGURATIONS[key], methods[key])
 end
 
-csv_field(value) = "\"" * replace(string(value), '"' => "\"\"") * "\""
-
-function write_record(configuration, losses, elapsed_seconds, allocated_bytes, gc_seconds, backend)
+function write_record(
+        configuration, losses, elapsed_seconds, allocated_bytes, gc_seconds, backend)
     isempty(RECORD_PATH) && return nothing
-    mkpath(dirname(RECORD_PATH))
-    new_file = !isfile(RECORD_PATH)
     finite_losses = all(isfinite, losses)
-    status = finite_losses ? "ok" : "failed_validation"
-    message = finite_losses ? "ok" : "non-finite reconstruction loss"
-    open(RECORD_PATH, "a") do io
-        new_file && println(io, join((
-            "schema_version", "dataset", "configuration_key", "configuration", "optimizer_role",
-            "learning_rate", "retraction", "second_moment", "transport", "repetition", "seed",
-            "status", "epochs_completed", "final_loss", "best_loss", "total_seconds",
-            "seconds_per_epoch", "host_allocated_bytes", "gc_seconds", "backend", "checkpoint",
-            "message",
-        ), ','))
-        println(io, join((
-            2, "pendulum", CONFIGURATION_KEY, csv_field(configuration.name),
-            configuration.role, configuration.learning_rate, configuration.retraction,
-            configuration.second_moment, configuration.transport, REPETITION, SEED, status,
-            length(losses), last(losses), minimum(losses), elapsed_seconds,
-            elapsed_seconds / max(length(losses), 1), allocated_bytes, gc_seconds,
-            backend, abspath(OUTPUT), csv_field(message),
-        ), ','))
-    end
+    append_record(RECORD_PATH,
+        PENDULUM_RECORD_HEADER,
+        Dict{String, Any}(
+            "schema_version" => PENDULUM_RUN_SCHEMA_VERSION,
+            "dataset" => "pendulum",
+            "configuration_key" => CONFIGURATION_KEY,
+            "configuration" => configuration.name,
+            "optimizer_role" => configuration.role,
+            "learning_rate" => configuration.learning_rate,
+            "retraction" => configuration.retraction,
+            "second_moment" => configuration.second_moment,
+            "transport" => configuration.transport,
+            "repetition" => REPETITION,
+            "seed" => SEED,
+            "status" => finite_losses ? "ok" : "failed_validation",
+            "epochs_completed" => length(losses),
+            "final_loss" => last(losses),
+            "best_loss" => minimum(losses),
+            "total_seconds" => elapsed_seconds,
+            "seconds_per_epoch" => elapsed_seconds / max(length(losses), 1),
+            "host_allocated_bytes" => allocated_bytes,
+            "gc_seconds" => gc_seconds,
+            "backend" => backend,
+            "checkpoint" => abspath(OUTPUT),
+            "message" => finite_losses ? "ok" : "non-finite reconstruction loss"
+        ))
     nothing
 end
 
 function write_losses(configuration, losses)
     isempty(LOSSES_PATH) && return nothing
-    mkpath(dirname(LOSSES_PATH))
-    new_file = !isfile(LOSSES_PATH)
-    open(LOSSES_PATH, "a") do io
-        new_file && println(io, "configuration_key,configuration,repetition,seed,epoch,loss")
-        for (epoch, loss) in enumerate(losses)
-            println(io, join((CONFIGURATION_KEY, csv_field(configuration.name), REPETITION, SEED,
-                epoch, loss), ','))
-        end
-    end
+    append_records(LOSSES_PATH, PENDULUM_LOSS_HEADER,
+        (Dict{String, Any}(
+             "configuration_key" => CONFIGURATION_KEY,
+             "configuration" => configuration.name,
+             "repetition" => REPETITION,
+             "seed" => SEED,
+             "epoch" => epoch,
+             "loss" => loss
+         ) for (epoch, loss) in enumerate(losses)))
     nothing
 end
 
@@ -149,28 +129,29 @@ end
 # four configurations.
 Random.seed!(SEED)
 
-REQUIRE_CUDA && !CUDA.functional() && error("SAE_REQUIRE_CUDA=1 but CUDA.functional() is false")
+REQUIRE_CUDA && !CUDA.functional() &&
+    error("SAE_REQUIRE_CUDA=1 but CUDA.functional() is false")
 backend, to_device = CUDA.functional() ? (CUDABackend(), cu) : (CPU(), identity)
 
 solution = pendulum()
 data = to_device(Float32.(angular_to_euclidean(solution)))
-dl = DataLoader(data; autoencoder=true, suppress_info=true)
+dl = DataLoader(data; autoencoder = true, suppress_info = true)
 
 # `SymplecticAutoencoder` caps the number of blocks at `full_dim - reduced_dim`,
 # so depth comes from the layers inside each block.
 architecture = SymplecticAutoencoder(dl.input_dim, REDUCED_DIM;
-    n_encoder_blocks=2,
-    n_decoder_blocks=2,
-    n_encoder_layers=10,
-    n_decoder_layers=20,
-    n_decoder_output_layers=10,
-    sympnet_upscale=20)
+    n_encoder_blocks = 2,
+    n_decoder_blocks = 2,
+    n_encoder_layers = 10,
+    n_decoder_layers = 20,
+    n_decoder_output_layers = 10,
+    sympnet_upscale = 20)
 network = NeuralNetwork(architecture, backend, eltype(dl))
 selected = configuration(eltype(dl))
-optimizer = Optimizer(selected.method, network; retraction=cayley)
+optimizer = Optimizer(selected.method, network; retraction = cayley)
 
 CUDA.functional() && CUDA.synchronize()
-timed = @timed optimizer(network, dl, Batch(BATCH_SIZE), N_EPOCHS; show_progress=false)
+timed = @timed optimizer(network, dl, Batch(BATCH_SIZE), N_EPOCHS; show_progress = false)
 CUDA.functional() && CUDA.synchronize()
 losses = timed.value
 backend_name = CUDA.functional() ? "cuda" : "cpu"

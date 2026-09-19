@@ -134,6 +134,79 @@ breaking release).
   `network_loss` keep their `::NamedTuple` annotations — those take the *regrouped* parameters, which
   are a `NamedTuple` of vectors of matrices and not a parameter set at all.
 
+### Added
+
+- **`scripts/revision/`, the offline experiment harness** the paper revision's measurement,
+  statistics and reproducibility requirements depend on. `run_experiments.sh` drives MNIST,
+  Fashion-MNIST, the pendulum SAE and the retraction microbenchmarks non-interactively, over ten
+  seeds in full mode; `run_in_screen.sh` detaches it so a dropped SSH connection cannot kill an
+  eight-hour run. Every stage streams to a durable log, records its status in `stages.csv`, and the
+  whole run directory is packaged as a `.tar.gz` with an immediately verified SHA-256 alongside the
+  Julia, CUDA and Git environments it ran in.
+
+  What is new in the trainers, rather than around them: the image trainer takes a dataset and a seed
+  list, so a repetition is paired across configurations and across MNIST and Fashion-MNIST, and it
+  gains the `scalar-moment-adam` baseline — `ScalarMomentAdam` ([li2020efficient], Algorithm 2) on
+  the Stiefel leaves and ordinary `Adam` on the Euclidean ones, as a per-leaf composite, because
+  `GeometricOptimizers` deliberately restricts that method to a single `StiefelManifold`. Both
+  trainers write machine-readable run records and per-step or per-epoch loss curves, which is what
+  the statistics in the paper are computed from rather than from parsed report prose.
+
+  **The decomposed timings are the point of schema 4.** Gradient/AD, optimizer-state/direction and
+  retraction/application are measured as mutually exclusive intervals through the
+  `GeometricOptimizers` step observer, synchronising the device at every boundary, after an
+  identically seeded warm-up step is discarded. `scripts/revision/README.md` states exactly what
+  falls inside each category and what falls outside all three — the three totals are optimizer-step
+  components and are not expected to add up to `total_seconds`.
+
+  **Two gaps, both deliberate.** The pendulum trainer records end-to-end time, host allocation and
+  GC time but *not* the decomposed phase timings, so it cannot carry a direction/retraction cost
+  claim yet. And the Riemannian gradient of a device-resident point currently reaches the device
+  through a **temporary shim** in `GeometricOptimizers`, for a defect in the packages that produce
+  the gradient ([`GeometricMachineLearning` #258](https://github.com/JuliaGNI/GeometricMachineLearning.jl/issues/258),
+  [`AbstractNeuralNetworks` #39](https://github.com/JuliaGNI/AbstractNeuralNetworks.jl/issues/39)).
+  That shim moves the gradient across per manifold leaf per step, inside the region the phase timer
+  attributes to the step, so **a pendulum timing published from a run carrying it is an upper bound
+  rather than a measurement.** The image stages never take that path and are unaffected.
+
+### Changed
+
+- **The scripts environment resolves `GeometricMachineLearning` and `GeometricOptimizers` from
+  `main`.** The harness needs the optimizer step observer and `PhaseTimer` of
+  [GeometricOptimizers #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78) and the
+  backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
+  [#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and
+  [#85](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/85), none of which is in 0.7.0.
+  `scripts/Manifest.toml` stays untracked: a manifest pinning two moving branch commits is stale the
+  day after it is committed, and every run bundle already carries the manifest that run resolved.
+  Refresh with `Pkg.update`, never `Pkg.resolve` — to `resolve` a `rev = "main"` source is a fixed
+  pin, so it calls a stale commit satisfiable and leaves the environment silently behind.
+
+  Two of those fixes are what `scripts/revision/check_environment.jl` probes, because no version
+  number can express them: that an optimizer cache and state can be built for a parameter set living
+  on the GPU, and that the Riemannian gradient of a device-resident point lands on the device. Both
+  once cost a run its pendulum stage after the image stages had already spent their hours — the
+  image trainer keeps its parameters in a **host** container and copies to the device inside `∇F!`,
+  so nothing before the pendulum stage ever builds a device-resident cache. The preflight asserts
+  the property the harness needs, not the shim that currently provides it, so it stays correct when
+  the shim retires.
+
+- **`src/mnist_utils.jl`: `onehotbatch(S, target)`.** The one-argument form is unchanged and now
+  calls the new one with the label element type. The image trainer used to carry its own
+  `onehotbatch` and `split_and_flatten`; it now imports both from the package, and
+  `test/mnist_utils.jl` pins the patch ordering, shapes, element types and host backend the trainer
+  requires of them.
+
+### Fixed
+
+- **The pendulum stage never resumed.** Its restart test read `configuration_key`, `repetition` and
+  `seed` out of `pendulum-runs.csv` with `awk -F,`, but the display name between them is a quoted
+  field containing a comma — `"Geometric Adam (Stiefel, Cayley retraction)"` — so every later column
+  was shifted by one and the test compared `transport` against a repetition number. It could not
+  match, so an interrupted pendulum matrix re-ran every seed it had already completed, silently and
+  at full cost. The runner now asks `validate_run_artifacts.jl --list-complete` for the completed
+  jobs, which parses the CSV properly.
+
 ## [0.1.0]
 
 Initial release. Nothing here is new code — it is the MLDatasets-dependent material extracted from

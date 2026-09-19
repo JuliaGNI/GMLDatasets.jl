@@ -25,12 +25,31 @@ NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
-# `GMLDatasets` is not registered, so it is reached by path. `GeometricMachineLearning` used to be
-# here too, pinned to `main`, because the container work these scripts are written against was
-# unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
+# `GMLDatasets` is not registered, so it is reached by path.
+#
+# `GeometricMachineLearning` and `GeometricOptimizers` come from `main` rather than from the
+# registry. The harness needs the optimizer step observer (`PhaseTimer`,
+# JuliaGNI/GeometricOptimizers.jl#78) and the backend fixes that made a device-resident manifold
+# parameter set usable (#79, #84, #85); none of these is in 0.7.0. `main` still declares 0.7.0, so
+# the `[compat]` bounds below are satisfied by the branch and by the release that will supersede it.
+#
+# `Manifest.toml` is not tracked — a manifest pinning two moving branch commits goes stale the day
+# after it is committed, and the run bundle already carries the one a run actually resolved, under
+# `environments/scripts/`. Instantiate before a run, and refresh with `Pkg.update`, not
+# `Pkg.resolve`: a `rev = "main"` source is a fixed pin to `resolve`, which reports the stale commit
+# as satisfiable and leaves the environment behind `main` without saying so.
 [sources]
 GMLDatasets = {path = ".."}
+GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git", rev = "main"}
+GeometricOptimizers = {url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git", rev = "main"}
+
+[compat]
+GeometricMachineLearning = "0.7"
+GeometricOptimizers = "0.7"
+NeuralNetworkParameters = "0.3"
+julia = "1.11"

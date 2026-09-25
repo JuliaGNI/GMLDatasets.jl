@@ -8,6 +8,24 @@ breaking release).
 
 ## [Unreleased]
 
+### Added
+
+- **`onehotbatch(S, target)`**, which encodes the labels in a chosen element type. The one-argument
+  form is unchanged and is now a forwarder to it, so the encoding keeps the label type by default.
+
+  A trainer wants `Float32` targets and gets `UInt8` ones from an `UInt8` label vector, which then
+  promotes the whole loss on first contact. Every caller had been converting afterwards, allocating a
+  second array of the same size to do it; the element type belongs where the array is allocated.
+  `KernelAbstractions.zeros(backend, S, …)` is the one line that changes, so the output still lives
+  on the same backend as `target`.
+
+- **A testset pinning the preprocessing contract of `split_and_flatten` and `onehotbatch`** —
+  ordering, shape, element type and host backend — against the reference implementations that the
+  MNIST repetition trainer in `scripts/` used to carry inline. That trainer imports both from this
+  package now, and this testset is what keeps the package from drifting away from the script that
+  depends on it: without it the drift is invisible here and shows up as a wrong number eight hours
+  into a run.
+
 ### Changed
 
 - **`[compat]` widens to the current releases of four dependencies**, as one change rather than four:

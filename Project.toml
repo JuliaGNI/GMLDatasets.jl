@@ -26,17 +26,18 @@ Random = "1"
 SafeTestsets = "0.1"
 Test = "1"
 Zygote = "0.7"
-# 1.11 is the floor across this family of packages. It used to be 1.11 for a local reason as well --
-# the `[sources]` block that pinned `GeometricMachineLearning` to `main` is a Julia 1.11 feature -- and
-# that reason is gone: 0.6.0 is registered and the block with it.
 julia = "1.11"
 
 [extras]
 NeuralNetworkParameters = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
+# `SHA` is a test dependency and not a package one: it is what `scripts/revision/records.jl` hashes
+# a captured source patch with, and the two record-schema suites under `scripts/revision/` run from
+# `test/runtests.jl` so that they are exercised by CI rather than only by hand.
 [targets]
-test = ["NeuralNetworkParameters", "Random", "Test", "SafeTestsets", "Zygote"]
+test = ["NeuralNetworkParameters", "Random", "SHA", "Test", "SafeTestsets", "Zygote"]

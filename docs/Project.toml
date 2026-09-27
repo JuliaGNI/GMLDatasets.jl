@@ -13,6 +13,7 @@ GMLDatasets = {path = ".."}
 GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl"}
 
 [compat]
+Bibliography = "0.4.0"
 Documenter = "1"
 DocumenterCitations = "1"
 DocumenterInterLinks = "1"

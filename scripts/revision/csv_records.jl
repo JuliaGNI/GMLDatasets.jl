@@ -59,31 +59,14 @@ function parse_csv_line(line::AbstractString)
 end
 
 """
-    write_records(path, header, records)
-
-Write `records` — dictionaries keyed by the entries of `header` — to `path`, in header order.
-A record whose keys are not exactly `header` is a programming error and is rejected rather than
-written with a silently missing column.
-"""
-function write_records(path::AbstractString, header, records)
-    mkpath(dirname(abspath(path)))
-    open(path, "w") do io
-        println(io, join(header, ','))
-        for record in records
-            Set(keys(record)) == Set(header) ||
-                throw(ArgumentError("record fields do not match the schema of $path"))
-            println(io, join((csv_field(record[field]) for field in header), ','))
-        end
-    end
-    path
-end
-
-"""
     append_records(path, header, records)
 
-Append rows to `path`, writing `header` first if the file is new. The pendulum matrix runs one
-process per configuration and seed, each appending its own rows to the shared tables, so those
-cannot be written as one `write_records` call.
+Append `records` — dictionaries keyed by the entries of `header` — to `path`, in header order,
+writing `header` first if the file is new. A record whose keys are not exactly `header` is a
+programming error and is rejected rather than written with a silently missing column.
+
+The pendulum matrix runs one process per configuration and seed, each appending its own rows to
+the shared tables; everything else writes a whole table with [`write_records`](@ref).
 """
 function append_records(path::AbstractString, header, records)
     mkpath(dirname(abspath(path)))
@@ -103,6 +86,12 @@ function append_record(path::AbstractString, header, record)
     append_records(path, header, (record,))
 end
 
+"""Write `records` to `path` as a new table, replacing any file already there."""
+function write_records(path::AbstractString, header, records)
+    rm(path; force = true)
+    append_records(path, header, records)
+end
+
 """
     read_table(path, expected_header; allow_empty = false)
 
@@ -110,15 +99,15 @@ Read `path` as a CSV table with exactly `expected_header`, returning one `Dict` 
 """
 function read_table(path::AbstractString, expected_header; allow_empty::Bool = false)
     isfile(path) || throw(ArgumentError("missing CSV file: $path"))
-    lines = readlines(path)
-    isempty(lines) && throw(ArgumentError("CSV file is empty: $path"))
-    header = parse_csv_line(first(lines))
+    rows = csv_rows(readlines(path))
+    isempty(rows) && throw(ArgumentError("CSV file is empty: $path"))
+    header = parse_csv_line(last(first(rows)))
     header == expected_header || throw(ArgumentError(
         "unexpected header in $path; expected $(join(expected_header, ','))"))
 
     records = Dict{String, String}[]
-    for (offset, line) in enumerate(Iterators.drop(lines, 1))
-        location = "$path:$(offset + 1)"
+    for (line_number, line) in Iterators.drop(rows, 1)
+        location = "$path:$line_number"
         isempty(line) && throw(ArgumentError("blank CSV row at $location"))
         fields = parse_csv_line(line)
         length(fields) == length(expected_header) || throw(ArgumentError(
@@ -128,6 +117,23 @@ function read_table(path::AbstractString, expected_header; allow_empty::Bool = f
     allow_empty || !isempty(records) ||
         throw(ArgumentError("CSV file has no data rows: $path"))
     records
+end
+
+"""
+Join the physical `lines` of a CSV file into its rows, each with the number of its first line. A
+quoted field may contain a newline, so a row ends only where its count of `"` is even; a doubled
+quote inside a field counts twice and does not change that.
+"""
+function csv_rows(lines)
+    rows = Tuple{Int, String}[]
+    for (line_number, line) in enumerate(lines)
+        if !isempty(rows) && isodd(count(==('"'), last(rows)[2]))
+            rows[end] = (last(rows)[1], last(rows)[2] * "\n" * line)
+        else
+            push!(rows, (line_number, line))
+        end
+    end
+    rows
 end
 
 function parse_bool(record, field, location)

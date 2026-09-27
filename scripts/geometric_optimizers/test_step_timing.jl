@@ -7,8 +7,8 @@
 # clock means this suite fails for upstream's reasons, about code it does not own.
 #
 # What is local is the adapter: the seven schema-v4 fields, their order, the relation between each
-# total and its per-step value, the `0` and `NaN` sentinels, and the refusal to infer completed steps
-# from attempted ones.
+# total and its per-step value, the zeros of a zero-step result, and the refusal to infer completed
+# steps from attempted ones.
 #
 #   julia --project=scripts scripts/geometric_optimizers/test_step_timing.jl
 
@@ -20,12 +20,11 @@ using .RunRecords: IMAGE_RECORD_HEADER, MNIST_RUN_SCHEMA_VERSION, STEP_TIMING_CO
 include(joinpath(@__DIR__, "step_timing.jl"))
 
 @testset "the seven schema-v4 fields, in the order the header names them" begin
-    # `step_timing` returns a `NamedTuple` whose keys *are* the columns, which is what lets
-    # `step_timing_values` be `values` of it and lets `step_timing.jl` know nothing about
+    # `step_timing` returns a `NamedTuple` whose keys *are* the columns, which is what makes
+    # `values` of it a row in column order and lets `step_timing.jl` know nothing about
     # `headers.jl`. This is the one place the two have to meet.
     timing = step_timing(ExclusiveStepTimer(), 0)
     @test collect(string.(keys(timing))) == STEP_TIMING_COLUMNS
-    @test step_timing_values(timing) === values(timing)
 
     @test MNIST_RUN_SCHEMA_VERSION == 4
     # The trainer writes these seven under exactly these names and the validator reads them from the
@@ -47,8 +46,8 @@ end
 
     timing = step_timing(timer, 4)
     @test timing.timed_steps == 4
-    @test all(isfinite, step_timing_values(timing))
-    @test all(>=(0), step_timing_values(timing))
+    @test all(isfinite, values(timing))
+    @test all(>=(0), values(timing))
     for phase in ("gradient_ad", "optimizer_state_direction", "retraction_application")
         total = getproperty(timing, Symbol(phase, "_seconds_total"))
         per_step = getproperty(timing, Symbol(phase, "_seconds_per_step"))
@@ -59,7 +58,7 @@ end
 @testset "a zero-step result is zero and not a division by zero" begin
     timing = step_timing(ExclusiveStepTimer(), 0)
     @test timing.timed_steps == 0
-    @test all(iszero, step_timing_values(timing))
+    @test all(iszero, values(timing))
     @test_throws ArgumentError step_timing(ExclusiveStepTimer(), -1)
 end
 

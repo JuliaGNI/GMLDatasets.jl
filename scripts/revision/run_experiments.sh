@@ -112,11 +112,16 @@ fi
 
 # The pendulum SAE has no unconstrained Adam ablation: PSD layers must retain Stiefel weights for
 # the network to stay symplectic. `all` is therefore the four intrinsic methods, even though it is
-# five methods for the image stages.
-if [[ "$configurations" == "all" ]]; then
-    pendulum_configuration_array=(geometric-adam-cayley scalar-moment-adam gradient momentum)
-else
-    IFS=',' read -r -a pendulum_configuration_array <<< "$configurations"
+# five methods for the image stages. The keys come from the normalization the trainer and the
+# validator apply, so an alias names the same checkpoints, stages and records as its key, and a
+# configuration the pendulum stage cannot run is refused here rather than after the image stages.
+pendulum_configuration_array=()
+if [[ ",$stages," == *",pendulum,"* ]]; then
+    pendulum_configurations="$("$julia_bin" --startup-file=no --project=scripts -e '
+        include("scripts/revision/records.jl")
+        println(join(RunRecords.normalize_pendulum_configurations(ARGS[1]), ","))
+    ' "$configurations")" || exit 2
+    IFS=',' read -r -a pendulum_configuration_array <<< "$pendulum_configurations"
 fi
 
 if [[ -n "$resume_dir" ]]; then
@@ -155,11 +160,8 @@ stage_succeeded() {
     ' "$status_file"
 }
 
-# The one provenance capture, for whichever repository a bundle has to record. This used to be
-# written twice — here in bash and as `capture_source` in Julia — the same algorithm in two
-# languages, each carrying the same comment about `git diff --no-index` exiting 1, and only the Julia
-# one computing the SHA-256 and cross-checking the dirty flag against the patch. Two copies of a
-# provenance mechanism is the one kind of duplication that undermines the thing it exists to provide.
+# The one provenance capture, for whichever repository a bundle has to record: `capture_source` in
+# Julia, which also computes the patch's SHA-256 and cross-checks the dirty flag against the patch.
 #
 # It prints four `key=value` lines — `sha`, `dirty`, `patch_file`, `patch_sha256` — and writes
 # `<prefix>.patch` and `<prefix>.status` into the run directory.
@@ -298,7 +300,7 @@ fi
 export GML_ALLOW_ANY_GPU="$allow_any_gpu"
 export GML_ALLOW_NO_CUDA="$allow_no_cuda"
 export GML_REQUIRED_GPU="${GML_REQUIRED_GPU:-RTX 4090}"
-"$julia_bin" --project=scripts scripts/revision/check_environment.jl \
+"$julia_bin" --startup-file=no --project=scripts scripts/revision/check_environment.jl \
     > "$run_dir/environment.txt" 2>&1 || exit 1
 if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi -q > "$run_dir/nvidia-smi.txt" 2>&1 || exit 1
@@ -363,7 +365,7 @@ run_image_dataset() {
             MNIST_SEEDS="${seed_array[0]}" MNIST_N_EPOCHS=1 MNIST_ACCURACY_EVERY=1 \
             MNIST_REPORT="$prefix-warmup-report.txt" MNIST_LOSSES="$prefix-warmup-losses.csv" \
             MNIST_RECORDS="$prefix-warmup-runs.csv" MNIST_OUTPUT="$prefix-warmup.jld2" \
-            "$julia_bin" --project=scripts \
+            "$julia_bin" --startup-file=no --project=scripts \
             scripts/geometric_optimizers/mnist_cuda_repetitions.jl || return
         run_stage "${dataset}-warmup-record-validation" "${validator[@]}" --image "$dataset" \
             --artifact-prefix "$dataset-warmup" --seeds "${seed_array[0]}" \
@@ -373,7 +375,7 @@ run_image_dataset() {
     run_stage "$dataset" env "${common_environment[@]}" MNIST_REPETITIONS="$repetitions" \
         MNIST_SEEDS="$seeds" MNIST_N_EPOCHS="$epochs" MNIST_REPORT="$prefix-report.txt" \
         MNIST_LOSSES="$prefix-losses.csv" MNIST_RECORDS="$prefix-runs.csv" \
-        MNIST_OUTPUT="$prefix.jld2" "$julia_bin" --project=scripts \
+        MNIST_OUTPUT="$prefix.jld2" "$julia_bin" --startup-file=no --project=scripts \
         scripts/geometric_optimizers/mnist_cuda_repetitions.jl || return
     run_stage "$validation_stage" "${validation_command[@]}"
 }
@@ -410,7 +412,8 @@ if contains_stage pendulum; then
                 run_stage "pendulum-$configuration_key-warmup" env SAE_REQUIRE_CUDA=1 \
                     SAE_CONFIGURATION="$configuration_key" SAE_SEED="${seed_array[0]}" \
                     SAE_N_EPOCHS=1 SAE_OUTPUT="$warmup_checkpoint" \
-                    "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+                    "$julia_bin" --startup-file=no --project=scripts \
+                    scripts/pendulum/train_sae.jl || exit $?
             fi
         fi
         repetition=0
@@ -427,7 +430,8 @@ if contains_stage pendulum; then
                 SAE_SEED="$seed_value" SAE_REPETITION="$repetition" SAE_N_EPOCHS="$sae_epochs" \
                 SAE_OUTPUT="$checkpoint" SAE_RECORD="$records" \
                 SAE_LOSSES="$run_dir/pendulum-losses.csv" \
-                "$julia_bin" --project=scripts scripts/pendulum/train_sae.jl || exit $?
+                "$julia_bin" --startup-file=no --project=scripts \
+                scripts/pendulum/train_sae.jl || exit $?
         done
     done
     rm -f "$complete_jobs"

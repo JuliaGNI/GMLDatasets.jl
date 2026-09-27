@@ -22,5 +22,6 @@ end
 end
 
 @safetestset "Revision harness: retraction record schema                                     " begin
-    include(joinpath(@__DIR__, "..", "scripts", "revision", "test_retraction_record_schema.jl"))
+    include(joinpath(
+        @__DIR__, "..", "scripts", "revision", "test_retraction_record_schema.jl"))
 end

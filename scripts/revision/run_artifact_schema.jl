@@ -56,8 +56,9 @@ function validate_run_row(record, where; schema_version, dataset, configurations
     repetition = parse_integer(record, "repetition", where; minimum = 1)
     seed = parse_integer(record, "seed", where; minimum = 0)
     epochs = parse_integer(record, "epochs_completed", where; minimum = epochs_minimum)
-    parse_float(record, "final_loss", where)
-    parse_float(record, "best_loss", where)
+    # A non-finite loss is what `failed_validation` records, so only an `ok` row must be finite.
+    parse_float(record, "final_loss", where; finite = status == "ok")
+    parse_float(record, "best_loss", where; finite = status == "ok")
     ((key, repetition, seed), epochs)
 end
 

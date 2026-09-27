@@ -81,7 +81,8 @@ container without a copy.
 """
 leaf_solution(x) = (x isa Manifold || x isa AbstractVector) ? x : vec(x)
 
-function LeafComposite(ps::NetworkParameters, ∇F!, method::GeometricOptimizers.OptimizerMethod,
+function LeafComposite(
+        ps::NetworkParameters, ∇F!, method::GeometricOptimizers.OptimizerMethod,
         learning_rate::T; observer = NoStepObserver()) where {T}
     layout = parameterlayout(ps)
     # A `NetworkParameters` adds a `ParametersLayout` around the wrapped `NamedTuple` layout. Read

@@ -54,9 +54,10 @@ const REQUIRE_CUDA = parse(Bool, get(ENV, "SAE_REQUIRE_CUDA", "0"))
 """
     configuration(T)
 
-The configuration `SAE_CONFIGURATION` selects, as its shared metadata plus the optimizer method
-and the learning rate this script builds for it. `PENDULUM_CONFIGURATION_ORDER` is the four
-intrinsic configurations: an SAE cannot have an unconstrained Adam row and stay symplectic.
+The configuration `SAE_CONFIGURATION` selects, as its canonical key and shared metadata plus the
+optimizer method and the learning rate this script builds for it. The key is what every record
+carries, so an alias in `SAE_CONFIGURATION` never reaches one. `PENDULUM_CONFIGURATION_ORDER` is
+the four intrinsic configurations: an SAE cannot have an unconstrained Adam row and stay symplectic.
 """
 function configuration(T::Type{<:AbstractFloat})
     selected = normalize_pendulum_configurations(CONFIGURATION_KEY)
@@ -75,7 +76,7 @@ function configuration(T::Type{<:AbstractFloat})
         "momentum" => (learning_rate = T(LEARNING_RATE),
             method = GeometricOptimizers.MomentumMethod(T(MOMENTUM_COEFFICIENT)))
     )
-    merge(CONFIGURATIONS[key], methods[key])
+    merge((key = key,), CONFIGURATIONS[key], methods[key])
 end
 
 function write_record(
@@ -87,7 +88,7 @@ function write_record(
         Dict{String, Any}(
             "schema_version" => PENDULUM_RUN_SCHEMA_VERSION,
             "dataset" => "pendulum",
-            "configuration_key" => CONFIGURATION_KEY,
+            "configuration_key" => configuration.key,
             "configuration" => configuration.name,
             "optimizer_role" => configuration.role,
             "learning_rate" => configuration.learning_rate,
@@ -115,7 +116,7 @@ function write_losses(configuration, losses)
     isempty(LOSSES_PATH) && return nothing
     append_records(LOSSES_PATH, PENDULUM_LOSS_HEADER,
         (Dict{String, Any}(
-             "configuration_key" => CONFIGURATION_KEY,
+             "configuration_key" => configuration.key,
              "configuration" => configuration.name,
              "repetition" => REPETITION,
              "seed" => SEED,
@@ -166,7 +167,7 @@ HDF5.h5open(OUTPUT, "w") do file
     save(file, GeometricMachineLearning.map_to_cpu(network))
     file["loss"] = collect(losses)
     attributes = HDF5.attributes(file)
-    attributes["configuration_key"] = CONFIGURATION_KEY
+    attributes["configuration_key"] = selected.key
     attributes["configuration"] = selected.name
     attributes["optimizer_role"] = selected.role
     attributes["learning_rate"] = selected.learning_rate

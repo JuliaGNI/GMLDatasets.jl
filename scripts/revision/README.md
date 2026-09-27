@@ -135,9 +135,9 @@ A successful zero-step result has zero in all seven fields. An `exception` CSV r
 `timed_steps = 0` and `NaN` in all six seconds fields: no successful result or partial timing
 snapshot was retained, so these values mean “unavailable,” not a measured zero.
 
-The local synthetic CPU exercise used to validate this control flow and schema is test evidence
-only. It is neither a scientific experiment nor evidence about CPU or GPU performance; use only a
-gated experiment bundle for reported timings.
+A CPU smoke run exercises this control flow and schema and is test evidence only. It is neither a
+scientific experiment nor evidence about CPU or GPU performance; use only a gated experiment bundle
+for reported timings.
 
 ## Retraction benchmark records
 
@@ -270,8 +270,8 @@ Before packaging, the runner writes `run-configuration.txt`, `restart-command.tx
 `<prefix>.source`/`.patch`/`.status` triple for every repository it records — its own and the
 `GeometricOptimizers` checkout — and copies the root `Project.toml`, the scripts `Project.toml` and
 the resolved `Manifest.toml` into `environments/`. Those triples come from
-`capture_source.jl`, one implementation for both repositories, so both now carry the SHA-256 of
-their patch and the cross-check that a tree `git status` calls dirty produced a non-empty one. The archive is then
+`capture_source.jl`, one implementation for both repositories, so both carry the SHA-256 of their
+patch and the cross-check that a tree `git status` calls dirty produced a non-empty one. The archive is then
 compared **against the run directory itself**: every path under it must appear in the tar. That is
 what the check is, rather than a hand-maintained list of expected members — such a list is a second
 copy of this script's control flow and goes stale the first time a stage gains an output, while the

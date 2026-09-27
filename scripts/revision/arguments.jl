@@ -1,10 +1,8 @@
 # A command-line parser for the three scripts in this directory that take one.
 #
-# Each of them used to carry its own `while index <= length(args)` chain with one branch per
-# option — around fifty lines apiece, all of it the same shape. Here the option set *is* the
-# table of defaults: a `Bool` default makes a flag that takes no value, and anything else takes
-# one and is parsed to the type of its default. Keys are `:snake_case`; the option spelling is
-# the same word in `--kebab-case`.
+# The option set *is* the table of defaults: a `Bool` default makes a flag that takes no value, and
+# anything else takes one and is parsed to the type of its default. Keys are `:snake_case`; the
+# option spelling is the same word in `--kebab-case`.
 #
 # Domain constraints stay with the caller. This file only turns `ARGS` into a `NamedTuple`.
 

@@ -34,18 +34,17 @@ println("geometric_optimizers_version=", pkgversion(GeometricOptimizers))
 println("neural_network_parameters_version=", pkgversion(NeuralNetworkParameters))
 
 # Two properties of a *device-resident* manifold parameter set, which is what no version number
-# can carry. Both cost two calls on a 4 × 2 point and both once cost a run its pendulum stage
-# after the image stages had already succeeded — the image trainer keeps its parameters in a host
+# can carry. Each costs two calls on a 4 × 2 point, and a failure of either stops the pendulum
+# stage after the image stages have already run — the image trainer keeps its parameters in a host
 # container and copies to the device inside the objective, so nothing before the pendulum stage
 # builds a device-resident cache.
 #
-#  1. the optimizer cache and state can be built at all. `similar` of a horizontal lift used to
-#     allocate on the host, and because the four-argument cache constructors bind their three
-#     gradient blocks to one type that was a `MethodError` at optimizer construction rather than
-#     a wrong number (run 20260903T125418Z_smoke).
-#  2. the Riemannian gradient of a device-resident point lands on the device. The pullback hands
-#     `rgrad` an ambient gradient that stayed on the host, and `∇L' * Y.A` is then a CPU `gemm!`
-#     on a device pointer (runs 20260903T185459Z_smoke and 20260903T191704Z_smoke).
+#  1. the optimizer cache and state can be built at all. If `similar` of a horizontal lift
+#     allocates on the host, the four-argument cache constructors, which bind their three gradient
+#     blocks to one type, raise a `MethodError` at optimizer construction.
+#  2. the Riemannian gradient of a device-resident point lands on the device. If the pullback
+#     hands `rgrad` an ambient gradient on the host, `∇L' * Y.A` is a CPU `gemm!` on a device
+#     pointer.
 #
 # The second is the property the harness needs, not the mechanism that currently provides it: a
 # temporary shim in `GeometricOptimizers` moves the gradient across today, and when

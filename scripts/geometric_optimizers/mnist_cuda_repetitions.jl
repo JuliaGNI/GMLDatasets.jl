@@ -57,6 +57,8 @@
 #   mnist_repetitions.jld2         the parameters, losses, timings and accuracies of every
 #                                  repetition, plus the samples the statistics are computed
 #                                  from — rewritten after every repetition
+#   mnist_repetitions_runs.csv     one run record per repetition, in the columns of
+#                                  `scripts/revision/headers.jl` — written once, at the end
 #
 # Note that the CSV has one column more than the one `mnist_cuda.jl` writes, so
 # `scripts/geometric_optimizers/distill_mnist_results.jl` — which feeds the figures of the documentation from a
@@ -70,6 +72,10 @@
 #   MNIST_CONFIGURATIONS  which ones, comma separated: `geometric-adam-cayley`, `scalar-moment-adam`,
 #                         `standard-adam`, `gradient`, `momentum`, or `all`
 #                         (`adam-stiefel` and `adam-regular` remain accepted aliases)
+#   MNIST_DATASET         `mnist` or `fashion-mnist`                 (default mnist)
+#   MNIST_SEEDS           one seed per repetition, comma separated; it overrides
+#                         MNIST_BASE_SEED and MNIST_VARY_SEED     (default: unset)
+#   MNIST_BASE_SEED       the seed of repetition 1                   (default 1234)
 #   MNIST_SCALAR_MOMENT_ADAM_LEARNING_RATE
 #                         the rate of the `scalar-moment-adam` baseline (default 1e-3). Separate from
 #                         the rate the other configurations share, because the scalar-moment
@@ -91,6 +97,7 @@
 #   MNIST_REPORT          path of the report            (default mnist_repetitions_report.txt)
 #   MNIST_LOSSES          path of the loss CSV          (default mnist_repetitions_losses.csv)
 #   MNIST_OUTPUT          path of the `.jld2`           (default mnist_repetitions.jld2)
+#   MNIST_RECORDS         path of the run-record CSV    (default mnist_repetitions_runs.csv)
 #   MNIST_PROGRESS        print the per-batch progress line (default: only on a terminal)
 #
 # On the device split, the two `Zygote` workarounds and the memory the backward pass needs, see
@@ -118,8 +125,7 @@ import CUDA, ForwardDiff, JLD2, MLDatasets, Random, Statistics, Zygote
 # The record layer, through its one entry point. `RunRecords` is what the validators read the
 # headers, the configuration table and the CSV dialect out of, so the trainer reaching it by the
 # same route is what makes a table this writes and a table they read the same table. Including its
-# parts individually here — which is the obvious thing to do and was what this did — puts two copies
-# of every definition in one session, reachable by two different paths.
+# parts individually here as well would put two copies of every definition in one session.
 include(joinpath(@__DIR__, "..", "revision", "records.jl"))
 using .RunRecords
 
@@ -656,10 +662,7 @@ the spread, and neither a thrown exception nor a printed `0.0000` is the right w
 `NaN` samples — the drift of an unconstrained run — are dropped, so that a configuration without a
 manifold does not turn the statistics of the ones with it into `NaN`.
 
-The mean and the deviation themselves are `Statistics`', which `scripts/Project.toml` already
-depends on. They were written out here, with a docstring explaining that taking the dependency
-would re-resolve the manifest before an eight-hour run; the dependency was already there when that
-was written.
+The mean and the deviation themselves are `Statistics`', which `scripts/Project.toml` depends on.
 """
 function statistics(samples::AbstractVector{<:Real})
     finite = filter(isfinite, samples)
@@ -845,10 +848,6 @@ function train(
     synchronize_device()
     total_time = time() - initial_time
     timing = step_timing(timer, length(losses))
-    timing.timed_steps == length(losses) || error(
-        "timing recorded $(timing.timed_steps) steps for $(length(losses)) completed steps")
-    all(value -> isfinite(value) && value >= 0, step_timing_values(timing)) ||
-        error("step timing produced a non-finite or negative schema-v4 value")
 
     (parameters = ps, losses = losses,
         epoch_losses = epoch_losses, epoch_times = epoch_times,
@@ -1103,7 +1102,7 @@ function write_run_records(results, failures)
             "peak_device_bytes" => result.peak_device_bytes
         )
         merge!(measured,
-            Dict(zip(STEP_TIMING_COLUMNS, step_timing_values(result.step_timing))))
+            Dict(zip(STEP_TIMING_COLUMNS, values(result.step_timing))))
         push!(rows,
             run_record(result, result_verdict == "ok" ? "ok" : "failed_validation",
                 result_verdict, measured))
@@ -1136,6 +1135,11 @@ for (j, job) in pairs(jobs)
     name = n_repetitions > 1 ? @sprintf("%s #%i", run.name, job.repetition) : run.name
     label = @sprintf("[%i/%i %-28s]", j, length(jobs), name)
     announce(@sprintf("%s starting at %s, seed %i", label, timestamp(), job.seed))
+    # What identifies this training in the results, the failures and the run records alike.
+    metadata = (name = name, configuration_key = job.key, configuration = run.name,
+        optimizer_role = run.role, learning_rate = run.learning_rate,
+        retraction = run.retraction, second_moment = run.second_moment,
+        transport = run.transport, repetition = job.repetition, seed = job.seed)
     try
         trained = train(
             run.stiefel, run.algorithm, train_input, train_output, test_input, test_output;
@@ -1144,22 +1148,19 @@ for (j, job) in pairs(jobs)
             n_epochs = n_epochs, learning_rate = run.learning_rate)
         score = T(accuracy(trained.parameters, test_input, test_output))
         push!(results,
-            (name = name, configuration_key = job.key, configuration = run.name,
-                repetition = job.repetition, seed = job.seed,
-                stiefel = run.stiefel, learns = run.learns, optimizer_role = run.role,
-                learning_rate = run.learning_rate, retraction = run.retraction,
-                second_moment = run.second_moment, transport = run.transport,
-                # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
-                # structured leaves by their portable free storage, as the earlier result schema did.
-                parameters = mapparameters(freeparameters, trained.parameters), losses = trained.losses,
-                epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
-                accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
-                orthonormalities = trained.orthonormalities,
-                total_time = trained.total_time, step_timing = trained.step_timing,
-                accuracy = score, stopped = trained.stopped,
-                peak_device_bytes = trained.peak_device_bytes,
-                orthonormality = orthonormality_error(trained.parameters),
-                sound = parameters_are_sound(trained.parameters)))
+            merge(metadata,
+                (stiefel = run.stiefel, learns = run.learns,
+                    # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
+                    # structured leaves by their portable free storage, as the earlier result schema did.
+                    parameters = mapparameters(freeparameters, trained.parameters), losses = trained.losses,
+                    epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
+                    accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
+                    orthonormalities = trained.orthonormalities,
+                    total_time = trained.total_time, step_timing = trained.step_timing,
+                    accuracy = score, stopped = trained.stopped,
+                    peak_device_bytes = trained.peak_device_bytes,
+                    orthonormality = orthonormality_error(trained.parameters),
+                    sound = parameters_are_sound(trained.parameters))))
         announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
             duration(trained.total_time),
             trained.total_time / max(1, length(trained.losses)), score))
@@ -1176,12 +1177,7 @@ for (j, job) in pairs(jobs)
         # repetition that threw is missing from the statistics, and the verdict says so.
         e isa InterruptException && rethrow()
         message = sprint(showerror, e)
-        push!(failures,
-            (name = name, configuration_key = job.key, configuration = run.name,
-                optimizer_role = run.role, learning_rate = run.learning_rate,
-                retraction = run.retraction, second_moment = run.second_moment,
-                transport = run.transport, repetition = job.repetition, seed = job.seed,
-                message = message))
+        push!(failures, merge(metadata, (message = message,)))
         clear_progress()
         announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
         report(message)

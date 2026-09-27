@@ -1,10 +1,8 @@
 # The optimizer configurations of the comparison, by stable key.
 #
-# One table, because three copies of it used to exist — in the image trainer, in the pendulum
-# trainer and in the validator that checks the other two agree with it. The display name is what
+# One table for the image trainer, the pendulum trainer and the validators. The display name is what
 # every record and every report prints, so a second copy is a silently divergent results table.
-# The validators still compare a record's `configuration` against `CONFIGURATION_NAMES`; with one
-# table that check no longer guards against drift between scripts, but it still rejects a
+# The validators compare a record's `configuration` against `CONFIGURATION_NAMES`, which rejects a
 # hand-edited or concatenated CSV.
 #
 # What is *not* here is the optimizer object itself: the image trainer and the pendulum trainer

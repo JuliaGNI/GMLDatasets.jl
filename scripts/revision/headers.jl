@@ -1,9 +1,8 @@
 # The CSV headers and schema versions of the harness, in one place.
 #
 # The trainers write these tables and the validators read them, so a second copy of a column list
-# is a table whose two halves disagree without anyone noticing. `step_timing.jl` includes this
-# file for the timing columns, and `records.jl` includes it for all of them; the trainers reach it
-# through `step_timing.jl`.
+# is a table whose two halves disagree without anyone noticing. `records.jl` includes this file,
+# and the trainers and the validators reach it through that module.
 #
 # This file holds definitions only.
 

@@ -9,7 +9,7 @@
 # loading data or starting an experiment.
 #
 # It deliberately does **not** know the column names. `step_timing` returns a `NamedTuple` whose keys
-# are the seven schema-v4 columns *in order*, so `step_timing_values` is `values` of it and nothing
+# are the seven schema-v4 columns *in order*, so `values` of it is a row in column order and nothing
 # here has to be kept in step with `headers.jl` — which is where those names live, and where the
 # validators read them from. `test_step_timing.jl` asserts that the keys and the constant agree,
 # which is the one place the two have to meet.
@@ -73,6 +73,3 @@ function step_timing(timer::PhaseTimer, completed_steps::Integer)
         retraction_application_seconds_per_step = retraction_seconds / divisor
     )
 end
-
-"""The seven values in schema-v4 column order, which is the order `step_timing` builds them in."""
-step_timing_values(timing::NamedTuple) = values(timing)

@@ -12,11 +12,8 @@
 # what is local about the baseline — the coefficients the comparison runs it at, and which ‖·‖² its
 # second moment accumulates.
 #
-# **It exists so that there is one of it.** The two trainers used to carry an adapter each, 299 lines
-# between them, reaching through two different seams: one hand-wrote a per-leaf step loop around
-# `Optimizer`, the other added methods to four underscore-prefixed `GeometricMachineLearning`
-# internals. They encoded the same physics twice and could disagree without any test catching it,
-# because each had its own regression suite.
+# **It exists so that there is one of it:** both trainers build the baseline from this one call, so
+# the two cannot encode it differently.
 #
 # This file holds definitions only; both trainers `include` it.
 

@@ -98,6 +98,20 @@ end
             configurations, expected_epochs = 2, expected_backend = "cpu",
             allow_validation_failures = true).statuses["failed_validation"] == 1
 
+        # A diverged run is what `failed_validation` records, so its loss may be non-finite;
+        # an `ok` row with the same loss is rejected.
+        records[1]["final_loss"] = NaN
+        records[1]["best_loss"] = NaN
+        write_records(records_path, IMAGE_RECORD_HEADER, records)
+        @test validate_image_artifacts(records_path, losses_path; dataset = "mnist", seeds,
+            configurations, expected_epochs = 2, expected_backend = "cpu",
+            allow_validation_failures = true).statuses["failed_validation"] == 1
+        records[1]["status"] = "ok"
+        write_records(records_path, IMAGE_RECORD_HEADER, records)
+        @test_throws ArgumentError validate_image_artifacts(records_path, losses_path;
+            dataset = "mnist", seeds, configurations, expected_epochs = 2,
+            expected_backend = "cpu", allow_validation_failures = true)
+
         pendulum_configurations = ["geometric-adam-cayley", "scalar-moment-adam"]
         pendulum_records = Dict{String, Any}[]
         pendulum_losses = Dict{String, Any}[]

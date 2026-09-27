@@ -19,10 +19,9 @@ include("configurations.jl")
 include("retraction_record_schema.jl")
 include("run_artifact_schema.jl")
 
-# Everything the trainers, the validators and the runner reach for. The two trainers used to
-# `include` `headers.jl`, `configurations.jl` and `csv_records.jl` at top level while this module
-# included the same three into itself, which put two copies of every definition in one session,
-# reachable by two different paths. They go through here now, as the validators always did.
+# Everything the trainers, the validators and the runner reach for. This module is their one
+# route to these definitions: including one of its files directly as well would put a second copy
+# of every definition in that session.
 export CONFIGURATIONS, CONFIGURATION_NAMES, CONFIGURATION_ORDER,
        PENDULUM_CONFIGURATION_ORDER,
        IMAGE_LOSS_HEADER, IMAGE_RECORD_HEADER, PENDULUM_LOSS_HEADER,
@@ -33,11 +32,6 @@ export CONFIGURATIONS, CONFIGURATION_NAMES, CONFIGURATION_ORDER,
        normalize_pendulum_configurations,
        parse_csv_line, read_table, split_list, validate_image_artifacts,
        validate_pendulum_artifacts, validate_records, validate_run_artifacts,
-       validate_stage_table, write_records, write_retraction_records
-
-"""Write retraction benchmark rows in the order of [`RETRACTION_HEADER`](@ref)."""
-function write_retraction_records(path::AbstractString, records)
-    write_records(path, RETRACTION_HEADER, records)
-end
+       validate_stage_table, write_records
 
 end

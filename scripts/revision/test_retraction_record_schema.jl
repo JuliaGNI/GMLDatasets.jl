@@ -2,7 +2,7 @@ using Test
 using SHA: sha256
 
 include("records.jl")
-using .RunRecords: RETRACTION_HEADER, validate_records, write_retraction_records
+using .RunRecords: RETRACTION_HEADER, read_table, validate_records, write_records
 
 function fixture_row(;
         algorithm = "ScaledSquaring", repetition = 0, warmup = true, success = true,
@@ -48,23 +48,28 @@ end
             push!(records, fixture_row(; algorithm, repetition = 1, warmup = false, patch_sha))
         end
         path = joinpath(directory, "records.csv")
-        write_retraction_records(path, records)
+        write_records(path, RETRACTION_HEADER, records)
         summary = validate_records(path;
             required_paths = [
                 ("ScaledSquaring", "CPU"), ("NativePade", "CPU"), ("AugmentedPade", "CPU")])
         @test summary == (rows = 6, warmups = 3, steady_state = 3, failures = 0)
         @test split(readline(path), ',') == RETRACTION_HEADER
 
+        # An exception message can span lines and carry quotes; `csv_field` quotes both, so the
+        # reader has to take a row across lines.
+        failure_message = "intentional, \"quoted\" failure\nwith a second line"
         failure_records = [
             fixture_row(; patch_sha),
             fixture_row(; repetition = 1, warmup = false, success = false, patch_sha,
-                error_type = "ErrorException", error_message = "intentional, quoted failure")
+                error_type = "ErrorException", error_message = failure_message)
         ]
         failure_path = joinpath(directory, "failure.csv")
-        write_retraction_records(failure_path, failure_records)
+        write_records(failure_path, RETRACTION_HEADER, failure_records)
         failure_summary = validate_records(failure_path; allow_failures = true,
             require_failure = true)
         @test failure_summary.failures == 1
+        @test read_table(failure_path, RETRACTION_HEADER)[2]["error_message"] ==
+              failure_message
         @test_throws ArgumentError validate_records(failure_path;
             required_paths = [("ScaledSquaring", "CPU")], allow_failures = true)
         @test_throws ArgumentError validate_records(failure_path)

@@ -3,13 +3,8 @@
 # Capture one repository's exact state into a run bundle: its commit, whether the tree was dirty,
 # and a reproducible patch that includes untracked files.
 #
-# There used to be two implementations of this — `capture_source` here and `capture_repository()` in
-# `run_experiments.sh`, the same algorithm in two languages, each carrying the same comment about
-# `git diff --no-index` exiting 1. Two copies of a provenance mechanism is the one kind of
-# duplication that actively undermines the thing it exists to provide, and they were not even
-# equivalent: only this one computes the SHA-256 and cross-checks the dirty flag against the
-# captured patch. This CLI is what the runner calls for *both* repositories, so the bundle's
-# `gmldatasets` capture now gets those two checks as well.
+# This is the harness's one provenance capture. The runner calls it for both repositories a bundle
+# records, so both carry the patch's SHA-256 and the cross-check of the dirty flag against the patch.
 #
 #   julia --project=scripts scripts/revision/capture_source.jl \
 #       --repo /path/to/repo --prefix geometricoptimizers --out results/revision/<stamp>
@@ -40,7 +35,8 @@ function main(args = ARGS)
     isempty(options.repo) && throw(ArgumentError("--repo is required"))
     isempty(options.prefix) && throw(ArgumentError("--prefix is required"))
     isempty(options.out) && throw(ArgumentError("--out is required"))
-    isdir(options.repo) || throw(ArgumentError("repository does not exist: $(options.repo)"))
+    isdir(options.repo) ||
+        throw(ArgumentError("repository does not exist: $(options.repo)"))
     occursin(r"^[A-Za-z0-9._-]+$", options.prefix) ||
         throw(ArgumentError("--prefix may contain only letters, digits, dots, underscores and hyphens"))
 

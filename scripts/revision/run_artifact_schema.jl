@@ -178,6 +178,9 @@ function validate_pendulum_artifacts(
 
     for (offset, record) in enumerate(records)
         where = "$records_path:$(offset + 1)"
+        # A partial table is read to find the jobs a resume skips. A row that is not `ok` is a job
+        # the runner reruns, and the rerun replaces that row and its losses.
+        allow_partial && record["status"] != "ok" && continue
         identity, epochs = validate_run_row(
             record, where; schema_version = string(PENDULUM_RUN_SCHEMA_VERSION),
             dataset = "pendulum", configurations, statuses = ("ok", "failed_validation"),
@@ -219,7 +222,12 @@ function validate_pendulum_artifacts(
             throw(ArgumentError("$where has the wrong display name for $key"))
         identity = (key, parse_integer(record, "repetition", where; minimum = 1),
             parse_integer(record, "seed", where; minimum = 0))
-        identity in observed || throw(ArgumentError("$where has no matching run record"))
+        # The trainer writes the losses before the record, so loss rows with no `ok` record are
+        # what an interrupted or failed job leaves behind in a partial table.
+        if !(identity in observed)
+            allow_partial && continue
+            throw(ArgumentError("$where has no matching run record"))
+        end
         parse_float(record, "loss", where)
         record_index!(epochs_by_run, identity,
             parse_integer(record, "epoch", where; minimum = 1), "epoch", where)

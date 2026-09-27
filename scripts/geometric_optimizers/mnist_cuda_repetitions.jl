@@ -58,7 +58,8 @@
 #                                  repetition, plus the samples the statistics are computed
 #                                  from — rewritten after every repetition
 #   mnist_repetitions_runs.csv     one run record per repetition, in the columns of
-#                                  `scripts/revision/headers.jl` — written once, at the end
+#                                  `scripts/revision/headers.jl` — appended after every
+#                                  repetition, after the `.jld2`
 #
 # Note that the CSV has one column more than the one `mnist_cuda.jl` writes, so
 # `scripts/geometric_optimizers/distill_mnist_results.jl` — which feeds the figures of the documentation from a
@@ -99,6 +100,8 @@
 #   MNIST_OUTPUT          path of the `.jld2`           (default mnist_repetitions.jld2)
 #   MNIST_RECORDS         path of the run-record CSV    (default mnist_repetitions_runs.csv)
 #   MNIST_PROGRESS        print the per-batch progress line (default: only on a terminal)
+#   MNIST_RESUME          `1` keeps every repetition that has an `ok` run record for this data set
+#                         and epoch count, and trains only the others (default 0)
 #
 # On the device split, the two `Zygote` workarounds and the memory the backward pass needs, see
 # the header of `mnist_cuda.jl`: this script is that one with the run loop replaced, and it
@@ -157,11 +160,8 @@ const report_path = get(ENV, "MNIST_REPORT", "mnist_repetitions_report.txt")
 const output_path = get(ENV, "MNIST_OUTPUT", "mnist_repetitions.jld2")
 const losses_path = get(ENV, "MNIST_LOSSES", "mnist_repetitions_losses.csv")
 const records_path = get(ENV, "MNIST_RECORDS", "mnist_repetitions_runs.csv")
-const report_io = open(report_path, "w")
-
-const losses_io = open(losses_path, "w")
-println(losses_io, join(IMAGE_LOSS_HEADER, ','))
-flush(losses_io)
+const resuming = parse(Bool, get(ENV, "MNIST_RESUME", "0")) && isfile(records_path)
+const report_io = open(report_path, resuming ? "a" : "w")
 
 """
     report(line)
@@ -913,6 +913,36 @@ const jobs = [(key = key, configuration = configurations[key],
                   repetition = r, seed = repetition_seed(r))
               for key in selected for r in 1:n_repetitions]
 
+# ---------------------------------------------------------------------------- resume ---
+
+# A resumed run keeps a job that has an `ok` record for this data set and epoch count: its record
+# and loss rows stay, and its result is read back from `output_path`. Every other row is dropped,
+# so the remaining jobs are trained as in a new run. The record of a job is written after its
+# `.jld2` entry and its loss rows, so a kept record always has both.
+job_identity(job) = (job.key, job.repetition, job.seed)
+function row_identity(row)
+    (row["configuration_key"], parse(Int, row["repetition"]),
+        parse(Int, row["seed"]))
+end
+
+const kept_records = !resuming ? Dict{String, String}[] :
+                     filter(read_table(records_path, IMAGE_RECORD_HEADER; allow_empty = true)) do row
+    row["status"] == "ok" && row["dataset"] == dataset_name &&
+        row["epochs_completed"] == string(n_epochs) &&
+        row_identity(row) in map(job_identity, jobs)
+end
+const kept_jobs = Set(map(row_identity, kept_records))
+const kept_runs = Set((CONFIGURATION_NAMES[key], repetition)
+for (key, repetition, _) in kept_jobs)
+const kept_losses = !resuming ? Dict{String, String}[] :
+                    filter(read_table(losses_path, IMAGE_LOSS_HEADER; allow_empty = true)) do row
+    (row["configuration"], parse(Int, row["repetition"])) in kept_runs
+end
+
+write_records(records_path, IMAGE_RECORD_HEADER, kept_records)
+write_records(losses_path, IMAGE_LOSS_HEADER, kept_losses)
+const losses_io = open(losses_path, "a")
+
 # ------------------------------------------------------------------------------ data ---
 
 const script_start = time()
@@ -1062,7 +1092,7 @@ end
 One row of the schema-v4 run record table, as a dictionary keyed by `IMAGE_RECORD_HEADER`. `job`
 supplies the configuration metadata every row repeats and `measured` the numbers this row has.
 A dictionary rather than a positional tuple, because a failure row whose numbers are all `NaN`
-would otherwise be aligned with the header by counting `NaN`s; `write_records` rejects a row
+would otherwise be aligned with the header by counting `NaN`s; `append_record` rejects a row
 whose keys are not exactly the header.
 """
 function run_record(job, status, message, measured)
@@ -1085,109 +1115,6 @@ function run_record(job, status, message, measured)
         ),
         measured)
 end
-
-function write_run_records(results, failures)
-    rows = Dict{String, Any}[]
-    for result in results
-        epochs = length(result.epoch_losses)
-        result_verdict = verdict(result)
-        measured = Dict{String, Any}(
-            "epochs_completed" => epochs,
-            "final_loss" => isempty(result.epoch_losses) ? NaN : last(result.epoch_losses),
-            "best_loss" =>
-                isempty(result.epoch_losses) ? NaN : minimum(result.epoch_losses),
-            "test_accuracy" => result.accuracy,
-            "total_seconds" => result.total_time,
-            "seconds_per_epoch" => result.total_time / max(epochs, 1),
-            "peak_device_bytes" => result.peak_device_bytes
-        )
-        merge!(measured,
-            Dict(zip(STEP_TIMING_COLUMNS, values(result.step_timing))))
-        push!(rows,
-            run_record(result, result_verdict == "ok" ? "ok" : "failed_validation",
-                result_verdict, measured))
-    end
-
-    # A repetition that threw kept no result and no partial timing snapshot, so every number is
-    # `NaN`: "unavailable", not a measured zero. The two exceptions are `epochs_completed` and
-    # `timed_steps`, where zero is what actually happened.
-    unavailable = Dict{String, Any}(field => NaN
-    for field in ("final_loss", "best_loss", "test_accuracy", "total_seconds",
-        "seconds_per_epoch", STEP_TIMING_COLUMNS...))
-    for failure in failures
-        measured = merge(unavailable,
-            Dict{String, Any}("epochs_completed" => 0, "timed_steps" => 0,
-                "peak_device_bytes" => peak_used[]))
-        push!(rows, run_record(failure, "exception", first(split(failure.message, '\n')),
-            measured))
-    end
-    write_records(records_path, IMAGE_RECORD_HEADER, rows)
-end
-
-results = []
-failures = []
-
-for (j, job) in pairs(jobs)
-    run = job.configuration
-    # the repetition is part of the label, so that the epoch lines of the report say which
-    # training they belong to — with five repetitions of one configuration they are otherwise
-    # 2500 indistinguishable lines
-    name = n_repetitions > 1 ? @sprintf("%s #%i", run.name, job.repetition) : run.name
-    label = @sprintf("[%i/%i %-28s]", j, length(jobs), name)
-    announce(@sprintf("%s starting at %s, seed %i", label, timestamp(), job.seed))
-    # What identifies this training in the results, the failures and the run records alike.
-    metadata = (name = name, configuration_key = job.key, configuration = run.name,
-        optimizer_role = run.role, learning_rate = run.learning_rate,
-        retraction = run.retraction, second_moment = run.second_moment,
-        transport = run.transport, repetition = job.repetition, seed = job.seed)
-    try
-        trained = train(
-            run.stiefel, run.algorithm, train_input, train_output, test_input, test_output;
-            label = label, run_index = j, run_name = run.name,
-            repetition = job.repetition, seed = job.seed,
-            n_epochs = n_epochs, learning_rate = run.learning_rate)
-        score = T(accuracy(trained.parameters, test_input, test_output))
-        push!(results,
-            merge(metadata,
-                (stiefel = run.stiefel, learns = run.learns,
-                    # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
-                    # structured leaves by their portable free storage, as the earlier result schema did.
-                    parameters = mapparameters(freeparameters, trained.parameters), losses = trained.losses,
-                    epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
-                    accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
-                    orthonormalities = trained.orthonormalities,
-                    total_time = trained.total_time, step_timing = trained.step_timing,
-                    accuracy = score, stopped = trained.stopped,
-                    peak_device_bytes = trained.peak_device_bytes,
-                    orthonormality = orthonormality_error(trained.parameters),
-                    sound = parameters_are_sound(trained.parameters))))
-        announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
-            duration(trained.total_time),
-            trained.total_time / max(1, length(trained.losses)), score))
-        announce(@sprintf("%s step timing: AD %.6f, optimizer %.6f, retraction/application %.6f s/step (%i steps)",
-            label, trained.step_timing.gradient_ad_seconds_per_step,
-            trained.step_timing.optimizer_state_direction_seconds_per_step,
-            trained.step_timing.retraction_application_seconds_per_step,
-            trained.step_timing.timed_steps))
-        save_results(results)
-        announce(@sprintf("%s written to %s", label, output_path))
-    catch e
-        # An `InterruptException` is the one exception that means *stop*, not *skip*; anything
-        # else is this repetition's problem and the remaining ones still deserve the GPU. A
-        # repetition that threw is missing from the statistics, and the verdict says so.
-        e isa InterruptException && rethrow()
-        message = sprint(showerror, e)
-        push!(failures, merge(metadata, (message = message,)))
-        clear_progress()
-        announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
-        report(message)
-        report(sprint(Base.show_backtrace, catch_backtrace()))
-        @error "$name failed" exception = (e, catch_backtrace())
-    end
-    announce()
-end
-
-# --------------------------------------------------------------------------- verdict ---
 
 """
     verdict(result)
@@ -1236,6 +1163,148 @@ function verdict(result)
     end
     isempty(reasons) ? "ok" : "FAILED: " * join(reasons, "; ")
 end
+
+"""The run record of a repetition that finished, with its verdict as the status."""
+function result_record(result)
+    epochs = length(result.epoch_losses)
+    result_verdict = verdict(result)
+    measured = Dict{String, Any}(
+        "epochs_completed" => epochs,
+        "final_loss" => isempty(result.epoch_losses) ? NaN : last(result.epoch_losses),
+        "best_loss" =>
+            isempty(result.epoch_losses) ? NaN : minimum(result.epoch_losses),
+        "test_accuracy" => result.accuracy,
+        "total_seconds" => result.total_time,
+        "seconds_per_epoch" => result.total_time / max(epochs, 1),
+        "peak_device_bytes" => result.peak_device_bytes
+    )
+    merge!(measured,
+        Dict(zip(STEP_TIMING_COLUMNS, values(result.step_timing))))
+    run_record(result, result_verdict == "ok" ? "ok" : "failed_validation",
+        result_verdict, measured)
+end
+
+"""
+The run record of a repetition that threw. It kept no result and no partial timing snapshot, so
+every number is `NaN`: "unavailable", not a measured zero. The two exceptions are
+`epochs_completed` and `timed_steps`, where zero is what actually happened.
+"""
+function failure_record(failure)
+    measured = Dict{String, Any}(field => NaN
+    for field in ("final_loss", "best_loss", "test_accuracy", "total_seconds",
+        "seconds_per_epoch", STEP_TIMING_COLUMNS...))
+    merge!(measured,
+        Dict{String, Any}("epochs_completed" => 0, "timed_steps" => 0,
+            "peak_device_bytes" => peak_used[]))
+    run_record(failure, "exception", first(split(failure.message, '\n')), measured)
+end
+
+"""
+    kept_results()
+
+The results of the jobs a resumed run keeps, read back from `output_path` under the keys
+`save_results` writes. A kept record has the status `ok`, so its verdict was `ok`: the parameters
+were sound and the repetition did not stop early.
+"""
+function kept_results()
+    isempty(kept_jobs) && return Any[]
+    saved = JLD2.load(output_path)
+    found = [i
+             for i in 1:saved["n_results"]
+             if (saved["configuration_key$i"], saved["repetition$i"], saved["seed$i"]) in
+                kept_jobs]
+    length(found) == length(kept_jobs) ||
+        error("$output_path does not hold every job with an ok record in $records_path")
+    fields = (:name, :configuration_key, :configuration, :optimizer_role, :learning_rate,
+        :retraction, :second_moment, :transport, :repetition, :seed, :parameters, :losses,
+        :epoch_losses, :epoch_times, :accuracy_epochs, :accuracies, :orthonormalities,
+        :orthonormality, :total_time, :accuracy)
+    peak_bytes = Dict(row_identity(row) => parse(Int, row["peak_device_bytes"])
+    for row in kept_records)
+    function restore(i)
+        run = configurations[saved["configuration_key$i"]]
+        restored = NamedTuple{fields}(Tuple(saved["$field$i"] for field in fields))
+        merge(restored,
+            (stiefel = run.stiefel, learns = run.learns, stopped = "", sound = true,
+                step_timing = NamedTuple{Tuple(Symbol.(STEP_TIMING_COLUMNS))}(
+                    Tuple(saved["$column$i"] for column in STEP_TIMING_COLUMNS)),
+                peak_device_bytes = peak_bytes[(restored.configuration_key,
+                    restored.repetition, restored.seed)]))
+    end
+    Any[restore(i) for i in found]
+end
+
+results = kept_results()
+failures = []
+
+for (j, job) in pairs(jobs)
+    if job_identity(job) in kept_jobs
+        announce(@sprintf("[%i/%i] %s #%i, seed %i: kept from the earlier run",
+            j, length(jobs), job.configuration.name, job.repetition, job.seed))
+        continue
+    end
+    run = job.configuration
+    # the repetition is part of the label, so that the epoch lines of the report say which
+    # training they belong to — with five repetitions of one configuration they are otherwise
+    # 2500 indistinguishable lines
+    name = n_repetitions > 1 ? @sprintf("%s #%i", run.name, job.repetition) : run.name
+    label = @sprintf("[%i/%i %-28s]", j, length(jobs), name)
+    announce(@sprintf("%s starting at %s, seed %i", label, timestamp(), job.seed))
+    # What identifies this training in the results, the failures and the run records alike.
+    metadata = (name = name, configuration_key = job.key, configuration = run.name,
+        optimizer_role = run.role, learning_rate = run.learning_rate,
+        retraction = run.retraction, second_moment = run.second_moment,
+        transport = run.transport, repetition = job.repetition, seed = job.seed)
+    try
+        trained = train(
+            run.stiefel, run.algorithm, train_input, train_output, test_input, test_output;
+            label = label, run_index = j, run_name = run.name,
+            repetition = job.repetition, seed = job.seed,
+            n_epochs = n_epochs, learning_rate = run.learning_rate)
+        score = T(accuracy(trained.parameters, test_input, test_output))
+        push!(results,
+            merge(metadata,
+                (stiefel = run.stiefel, learns = run.learns,
+                    # Preserve the v0.7 parameter container and its keys in the checkpoint while replacing
+                    # structured leaves by their portable free storage, as the earlier result schema did.
+                    parameters = mapparameters(freeparameters, trained.parameters), losses = trained.losses,
+                    epoch_losses = trained.epoch_losses, epoch_times = trained.epoch_times,
+                    accuracy_epochs = trained.accuracy_epochs, accuracies = trained.accuracies,
+                    orthonormalities = trained.orthonormalities,
+                    total_time = trained.total_time, step_timing = trained.step_timing,
+                    accuracy = score, stopped = trained.stopped,
+                    peak_device_bytes = trained.peak_device_bytes,
+                    orthonormality = orthonormality_error(trained.parameters),
+                    sound = parameters_are_sound(trained.parameters))))
+        announce(@sprintf("%s done in %s (%.2f s/step), test accuracy %.4f", label,
+            duration(trained.total_time),
+            trained.total_time / max(1, length(trained.losses)), score))
+        announce(@sprintf("%s step timing: AD %.6f, optimizer %.6f, retraction/application %.6f s/step (%i steps)",
+            label, trained.step_timing.gradient_ad_seconds_per_step,
+            trained.step_timing.optimizer_state_direction_seconds_per_step,
+            trained.step_timing.retraction_application_seconds_per_step,
+            trained.step_timing.timed_steps))
+        save_results(results)
+        append_record(records_path, IMAGE_RECORD_HEADER, result_record(last(results)))
+        announce(@sprintf("%s written to %s", label, output_path))
+    catch e
+        # An `InterruptException` is the one exception that means *stop*, not *skip*; anything
+        # else is this repetition's problem and the remaining ones still deserve the GPU. A
+        # repetition that threw is missing from the statistics, and the verdict says so.
+        e isa InterruptException && rethrow()
+        message = sprint(showerror, e)
+        push!(failures, merge(metadata, (message = message,)))
+        append_record(records_path, IMAGE_RECORD_HEADER, failure_record(last(failures)))
+        clear_progress()
+        announce(@sprintf("%s FAILED: %s", label, first(split(message, '\n'))))
+        report(message)
+        report(sprint(Base.show_backtrace, catch_backtrace()))
+        @error "$name failed" exception = (e, catch_backtrace())
+    end
+    announce()
+end
+
+# --------------------------------------------------------------------------- verdict ---
 
 const verdicts = map(verdict, results)
 
@@ -1370,7 +1439,6 @@ if any(r -> !r.learns, results)
 end
 
 save_results(results)
-write_run_records(results, failures)
 announce()
 announce("parameters:   " * abspath(output_path))
 announce("loss curves:  " * abspath(losses_path))

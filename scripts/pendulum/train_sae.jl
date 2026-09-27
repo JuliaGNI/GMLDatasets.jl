@@ -184,6 +184,25 @@ HDF5.h5open(OUTPUT, "w") do file
     attributes["gc_seconds"] = timed.gctime
 end
 
+"""
+    remove_job_rows(path, header, configuration)
+
+Remove the rows of this configuration, repetition and seed from the table at `path`. They are what
+an earlier attempt of this job left: loss rows with no record, or a record that was not `ok`.
+"""
+function remove_job_rows(path, header, configuration)
+    (isempty(path) || !isfile(path)) && return nothing
+    job = (configuration.key, string(REPETITION), string(SEED))
+    rows = read_table(path, header; allow_empty = true)
+    kept = filter(row -> (row["configuration_key"], row["repetition"], row["seed"]) != job, rows)
+    length(kept) == length(rows) || write_records(path, header, kept)
+    nothing
+end
+
+remove_job_rows(LOSSES_PATH, PENDULUM_LOSS_HEADER, selected)
+remove_job_rows(RECORD_PATH, PENDULUM_RECORD_HEADER, selected)
+# The record is the last write: a job whose record is missing is rerun, and the rerun removes its
+# losses above.
 write_losses(selected, losses)
 write_record(selected, losses, timed.time, timed.bytes, timed.gctime, backend_name)
 

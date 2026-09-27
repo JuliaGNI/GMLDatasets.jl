@@ -300,6 +300,9 @@ fi
 export GML_ALLOW_ANY_GPU="$allow_any_gpu"
 export GML_ALLOW_NO_CUDA="$allow_no_cuda"
 export GML_REQUIRED_GPU="${GML_REQUIRED_GPU:-RTX 4090}"
+# DataDeps asks on stdin before its first download of MNIST or Fashion-MNIST, and a detached run
+# has no one to answer, so it would wait for ever. Starting the runner accepts the dataset terms.
+export DATADEPS_ALWAYS_ACCEPT="${DATADEPS_ALWAYS_ACCEPT:-true}"
 "$julia_bin" --startup-file=no --project=scripts scripts/revision/check_environment.jl \
     > "$run_dir/environment.txt" 2>&1 || exit 1
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -351,13 +354,14 @@ run_image_dataset() {
         --backend "$experiment_backend")
     [[ "$mode" == smoke ]] && validation_command+=(--allow-validation-failures)
 
-    # The trainer does not resume inside its own matrix, so a partial matrix is rerun whole.
+    # With `MNIST_RESUME=1` the trainer keeps every job that has an `ok` record and reruns the
+    # others, so an interrupted or failed matrix is completed rather than rerun whole.
     if stage_succeeded "$validation_stage" && [[ -s "$prefix.jld2" ]]; then
         if "${validation_command[@]}"; then
             echo "skipping previously validated $dataset outputs"
             return 0
         fi
-        echo "existing $dataset outputs failed validation; rerunning the complete dataset stage"
+        echo "existing $dataset outputs failed validation; rerunning the jobs without an ok record"
     fi
 
     if [[ "$mode" == full ]]; then
@@ -372,7 +376,8 @@ run_image_dataset() {
             --configurations "$configurations" --image-epochs 1 \
             --backend "$experiment_backend" --allow-validation-failures || return
     fi
-    run_stage "$dataset" env "${common_environment[@]}" MNIST_REPETITIONS="$repetitions" \
+    run_stage "$dataset" env "${common_environment[@]}" MNIST_RESUME=1 \
+        MNIST_REPETITIONS="$repetitions" \
         MNIST_SEEDS="$seeds" MNIST_N_EPOCHS="$epochs" MNIST_REPORT="$prefix-report.txt" \
         MNIST_LOSSES="$prefix-losses.csv" MNIST_RECORDS="$prefix-runs.csv" \
         MNIST_OUTPUT="$prefix.jld2" "$julia_bin" --startup-file=no --project=scripts \

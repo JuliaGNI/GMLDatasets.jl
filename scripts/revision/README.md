@@ -236,12 +236,19 @@ variable that is set — a prefix sweep, so an override added to a trainer later
 restart command without anyone having to remember it.
 
 A completed image-data stage is skipped only after its run and loss CSVs revalidate with exact
-configuration/seed coverage. An interrupted image-data matrix is rerun as a unit, because the
-trainer does not resume within that matrix. Retraction output is skipped only after its schema,
-required algorithm/backend paths, source identity, and patch checksum revalidate.
+configuration/seed coverage. Otherwise the trainer runs with `MNIST_RESUME=1`: it keeps every
+repetition with an `ok` record for the same data set and epoch count, together with its loss rows
+and its `.jld2` entry, and trains the others again. The trainer appends a record after each
+repetition, after its `.jld2` entry, so a record is the proof that a repetition is complete.
+Full mode stays strict: a `failed_validation` record fails the stage, and the resume trains that
+repetition again. Retraction output is skipped only after its schema, required algorithm/backend
+paths, source identity, and patch checksum revalidate.
 
 Pendulum skips only checkpoint/record pairs from a schema-valid partial record file, and the list
 of those pairs comes from `validate_run_artifacts.jl --list-complete` rather than from the shell.
+The partial read ignores a record that is not `ok` and loss rows with no `ok` record. Those are
+what an interrupted or failed job leaves, and the trainer removes them when it runs that job again.
+It writes the loss rows before the record, so the record is the proof that a job is complete.
 The runner cannot read `configuration_key`, `repetition` and `seed` out of `pendulum-runs.csv`
 itself: the display name between them is a quoted field containing a comma, so splitting the row on
 commas shifts every later column by one.

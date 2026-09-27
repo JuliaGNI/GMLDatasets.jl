@@ -179,6 +179,23 @@ end
             pendulum_path, pendulum_losses_path, directory; seeds,
             configurations = pendulum_configurations, expected_epochs = 2, expected_backend = "cpu")
 
+        # What an interrupted resume leaves: a record that failed validation, and loss rows of a
+        # job whose record was never written. A partial read skips both, because the runner reruns
+        # those jobs; a complete read still rejects them.
+        failed_record = merge(pendulum_records[2],
+            Dict("status" => "failed_validation", "final_loss" => NaN,
+                "message" => "non-finite reconstruction loss"))
+        write_records(pendulum_path, PENDULUM_RECORD_HEADER,
+            [pendulum_records[1], failed_record])
+        write_records(pendulum_losses_path, PENDULUM_LOSS_HEADER, pendulum_losses[1:5])
+        @test validate_pendulum_artifacts(
+            pendulum_path, pendulum_losses_path, directory; seeds,
+            configurations = pendulum_configurations, expected_epochs = 2, expected_backend = "cpu",
+            allow_partial = true).records == 2
+        @test_throws ArgumentError validate_pendulum_artifacts(
+            pendulum_path, pendulum_losses_path, directory; seeds,
+            configurations = pendulum_configurations, expected_epochs = 2, expected_backend = "cpu")
+
         stages_path = joinpath(directory, "stages.csv")
         stage_rows = [
             Dict("stage" => "mnist", "status" => "failed:1",

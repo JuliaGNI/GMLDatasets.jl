@@ -58,18 +58,19 @@ end
 test_onehotbatch([1, 2, 5, 0])
 @test onehotbatch([0]) == reshape([1, zeros(Int, 9)...], 10, 1, 1)
 
-@testset "MNIST repetition-trainer preprocessing contract" begin
+@testset "split_and_flatten and onehotbatch preprocessing contract" begin
     patch_length = 7
     n = 28 ÷ patch_length
     images = reshape(Float32.(1:(28 * 28 * 3)), 28, 28, 3)
 
-    # Reference implementation previously carried by `mnist_cuda_repetitions.jl`.
+    # An independent formulation of the patch ordering:
+    # (i, patch_row, j, patch_column, k) → (i, j, patch_row, patch_column, k).
     trainer_patches = reshape(
         permutedims(reshape(images, patch_length, n, patch_length, n, size(images, 3)),
             (1, 3, 2, 4, 5)),
         patch_length^2, n^2, size(images, 3))
     package_patches = split_and_flatten(
-        images; patch_length=patch_length, number_of_patches=n^2)
+        images; patch_length = patch_length, number_of_patches = n^2)
 
     @test size(package_patches) == (49, 16, 3)
     @test eltype(package_patches) === Float32

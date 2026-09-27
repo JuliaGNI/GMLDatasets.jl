@@ -8,6 +8,15 @@ breaking release).
 
 ## [Unreleased]
 
+### Added
+
+- **`onehotbatch(S, target)`**, which encodes the labels in a chosen element type. The one-argument
+  form is unchanged and is now a forwarder to it, so the encoding keeps the label type by default.
+  The output uses the same backend as `target`.
+
+- **A testset pinning the preprocessing contract of `split_and_flatten` and `onehotbatch`** —
+  ordering, shape, element type and backend — against independent reference implementations.
+
 ### Changed
 
 - **`[compat]` widens to the current releases of four dependencies**, as one change rather than four:

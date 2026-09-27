@@ -15,7 +15,7 @@ MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 [compat]
 AbstractNeuralNetworks = "0.7, 0.8"
 GeometricIntegrators = "0.18"
-GeometricMachineLearning = "0.6, 0.7"
+GeometricMachineLearning = "0.6, 0.7, 0.8"
 GeometricProblems = "0.8, 0.9"
 GeometricSolutions = "0.6"
 KernelAbstractions = "0.9"

@@ -5,10 +5,13 @@ end
 
 @doc raw"""
     onehotbatch(target)
+    onehotbatch(S, target)
 
 Performs a one-hot-batch encoding of a vector of integers: ``input\in\{0,1,\ldots,9\}^\ell``. 
 
 The output is a tensor of shape ``10\times1\times\ell``.
+By default its element type is the label type; pass a numeric type `S` to choose a different
+element type. In either form, the output uses the same compute backend as `target`.
 
 If the input is ``0``, this function produces:
 ```math
@@ -40,13 +43,15 @@ onehotbatch(target)
  0
 ```
 """
-function onehotbatch(target::AbstractVector{T}) where {T <: Integer}
+function onehotbatch(::Type{S}, target::AbstractVector{T}) where {S <: Number, T <: Integer}
     backend = networkbackend(target)
-    output = KernelAbstractions.zeros(backend, T, 10, length(target))
+    output = KernelAbstractions.zeros(backend, S, 10, length(target))
     assign_val! = assign_val_kernel!(backend)
     assign_val!(output, target, ndrange = length(target))
     reshape(output, 10, 1, length(target))
 end
+
+onehotbatch(target::AbstractVector{T}) where {T <: Integer} = onehotbatch(T, target)
 
 # """
 # Based on coordinates i,j this returns the batch index (for MNIST data set for now).

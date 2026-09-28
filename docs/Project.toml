@@ -14,6 +14,7 @@ GeometricMachineLearning = {rev = "main", url = "https://github.com/JuliaGNI/Geo
 
 [compat]
 Bibliography = "0.4.0"
+CairoMakie = "0.15.15"
 Documenter = "1"
 DocumenterCitations = "1"
 DocumenterInterLinks = "1"

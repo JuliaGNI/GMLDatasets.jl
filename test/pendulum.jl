@@ -87,6 +87,51 @@ end
     @test pendulum_energy(first(solution)) ≈ energy[:, 1]
 end
 
+@testset "Separatrix-relative sampling" begin
+    # `separatrix_momentum` is defined by the energy it produces: exactly mgl, the separatrix.
+    for θ in (0.5, 1.7, π, 4.0)
+        @test pendulum_energy([θ], [separatrix_momentum(θ, parameters)], parameters)[1] ≈
+              parameters.m * parameters.g * parameters.l
+    end
+    @test separatrix_momentum(0.0, parameters) == 0
+    @test separatrix_momentum(π, parameters) ≈
+          parameters.m * parameters.l * sqrt(4 * parameters.g * parameters.l)
+
+    # A fraction fixes the regime at every angle, which a Cartesian grid cannot do. The energy of
+    # the initial condition is mgl[f²(1 - cos θ) + cos θ], so |f| < 1 librates and |f| > 1 rotates
+    # whatever the angle, and f = ±1 is the separatrix.
+    fractions = [0.0, 3 / 4, -1.0, -1.1, -2.0]
+    solution = pendulum(; qmin=[1.0], qmax=[3.0], qsamples=[4],
+        momentum_fractions=fractions, parameters=parameters,
+        timespan=(0.0, 2.0), timestep=0.1)
+    @test length(solution) == 4 * length(fractions)
+
+    mgl = parameters.m * parameters.g * parameters.l
+    θs = range(1.0, 3.0; length=4)
+    expected = [mgl * (f^2 * (1 - cos(θ)) + cos(θ)) for θ in θs for f in fractions]
+    @test pendulum_energy(solution)[1, :] ≈ expected
+
+    # Which is the property the whole scheme exists for: the regime is the fraction's, not the
+    # angle's, and it is exact on the separatrix.
+    regime = [f^2 for θ in θs for f in fractions]
+    @test all(pendulum_energy(solution)[1, :][regime .< 1] .< mgl)
+    @test all(pendulum_energy(solution)[1, :][regime .> 1] .> mgl)
+    @test pendulum_energy(solution)[1, :][regime .== 1] ≈ fill(mgl, count(==(1), regime))
+
+    # `pmin`, `pmax` and `psamples` are ignored rather than silently mixed in.
+    other = pendulum(; qmin=[1.0], qmax=[3.0], qsamples=[4], pmin=[-9.0], pmax=[9.0],
+        psamples=[7], momentum_fractions=fractions, parameters=parameters,
+        timespan=(0.0, 2.0), timestep=0.1)
+    @test pendulum_energy(other)[1, :] ≈ expected
+
+    @test_throws ArgumentError pendulum(; qsamples=[4], momentum_fractions=Float64[])
+    @test_throws ArgumentError pendulum(; qsamples=[4], momentum_fractions=[NaN])
+    @test_throws ArgumentError pendulum(; qmin=[1.0], qmax=[3.0], qsamples=[1, 1],
+        momentum_fractions=[0.5])
+    # The default angle range starts at the unstable equilibrium, where a fraction is undefined.
+    @test_throws ArgumentError pendulum(; momentum_fractions=[0.5])
+end
+
 @testset "DataLoader and SymplecticAutoencoder" begin
     solution = pendulum(; qmin=[2.0], qmax=[4.0], pmin=[0.0], pmax=[0.5],
         qsamples=[3], psamples=[2], timespan=(0.0, 2.0), timestep=0.1)

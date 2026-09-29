@@ -9,6 +9,11 @@
 #
 #   bash scripts/pendulum/run_on_nvidia.sh
 #
+# NOT for long runs. Julia is run over ssh in the FOREGROUND, so a dropped connection -- the laptop
+# sleeping is enough -- kills the remote process with it. Use this for short runs, and for the sync
+# and the fetch; for anything long, ssh in and start it under `screen` on the workstation. See
+# section 3 of notes/RUN.md in the paper repository.
+#
 # Everything a run varies is an environment variable, so a sweep needs no file edits on the remote:
 #
 #   SAE_SEED=123 SAE_FRACS=one SAE_TSPAN=40 SAE_EPOCHS=12000 SAE_UPSCALE=20 \

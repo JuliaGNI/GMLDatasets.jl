@@ -52,32 +52,44 @@ import AbstractNeuralNetworks: save
 import GMLDatasets: angular_to_euclidean, pendulum, pendulum_energy
 import HDF5
 
+# The defaults are the configuration this experiment is specified at; the environment overrides
+# exist so that a sweep on a remote machine needs no file edits there. `SAE_FRACS=both` adds the
+# positive rotating fractions, which is the one knob whose result must not be read as an ordinary
+# accuracy number -- see the note on rotation directions above, and run `branch_report.jl`.
 const reduced_dim = 2
-const n_epochs = 12000
-const batch_size = 256
-const step_size = 1.0f-4
-const seed = 123
-const output = "pendulum_sae.h5"
+const n_epochs   = parse(Int,     get(ENV, "SAE_EPOCHS",  "12000"))
+const batch_size = parse(Int,     get(ENV, "SAE_BATCH",   "256"))
+const step_size  = parse(Float32, get(ENV, "SAE_ETA",     "1e-4"))
+const seed       = parse(Int,     get(ENV, "SAE_SEED",    "123"))
+const upscale    = parse(Int,     get(ENV, "SAE_UPSCALE", "20"))
+const outdir     = mkpath(get(ENV, "GML_OUTDIR", pwd()))
+const output     = joinpath(outdir, get(ENV, "SAE_OUT", "pendulum_sae.h5"))
 
 # Ten angles between the stable and the unstable equilibrium, times fifteen momentum fractions.
 # Negative fractions of modulus above one are the rotating trajectories; |f| = 1 is the separatrix.
 const angle_range = ([π - 5 / 2], [π - 3 / 20])
 const angle_samples = [10]
-const momentum_fractions =
+const one_direction =
     [0, 2 / 5, -2 / 5, 3 / 4, -3 / 4,             # librating, as before
      9 / 10, -9 / 10, 19 / 20, -19 / 20,          # librating, up against the separatrix
      -1,                                          # the separatrix itself
      -1.02, -1.05, -1.1, -1.2, -1.4, -1.6,        # the band the paper's grid left empty
      -2, -5 / 2, -3]                              # the rotating trajectories it did have
+const momentum_fractions = get(ENV, "SAE_FRACS", "one") == "both" ?
+    vcat(one_direction, [1, 1.02, 1.05, 1.1, 1.2, 1.4, 1.6, 2, 5 / 2, 3]) :
+    one_direction
 
 # Long enough for the slowest orbit in the grid — f = 19/20, period 14.8 — to close more than twice.
-const timespan = (0.0, 40.0)
+const timespan = (0.0, parse(Float64, get(ENV, "SAE_TSPAN", "40")))
 const timestep = 0.1
 
 # The initial weights are random; the data are not, so this is the only thing that needs seeding.
 Random.seed!(seed)
 
 backend, to_device = CUDA.functional() ? (CUDABackend(), cu) : (CPU(), identity)
+# Said here rather than at the end. A silent fallback to the host is a wasted day at this grid size,
+# and the point of saying it is to be able to kill the run in the first second instead of the last.
+println("Backend: ", CUDA.functional() ? "CUDA" : "CPU")
 
 solution = pendulum(; qmin = angle_range[1], qmax = angle_range[2], qsamples = angle_samples,
     momentum_fractions = momentum_fractions, timespan = timespan, timestep = timestep)
@@ -96,7 +108,7 @@ architecture = SymplecticAutoencoder(dl.input_dim, reduced_dim;
     n_encoder_layers = 10,
     n_decoder_layers = 20,
     n_decoder_output_layers = 10,
-    sympnet_upscale = 20)
+    sympnet_upscale = upscale)
 network = NeuralNetwork(architecture, backend, eltype(dl))
 
 optimizer = Optimizer(Adam(), network; step_size = step_size)

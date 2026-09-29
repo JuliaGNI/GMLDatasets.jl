@@ -35,7 +35,10 @@
 set -euo pipefail
 
 REMOTE="${REMOTE:-benbradmin@pc-benbr-2}"
-REMOTE_DIR="${REMOTE_DIR:-SciCade26/GMLDatasets}"   # relative to the remote home
+# Relative to the remote home, and the name `git clone` gives this repository, so a checkout made
+# by hand from section 1 of the paper's RUN.md and the one this script syncs to are the same
+# directory rather than two.
+REMOTE_DIR="${REMOTE_DIR:-GMLDatasets.jl}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SESSION="${SESSION:-sae}"
 

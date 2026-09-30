@@ -42,3 +42,12 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 # unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
 [sources]
 GMLDatasets = {path = ".."}
+
+# A floor, not a pin. `GeometricOptimizers` 0.7 builds `similar(::StiefelLieAlgHorMatrix)` on the
+# host whatever backend the argument is on, so on a GPU the Adam cache of every Stiefel layer mixes a
+# host block with device ones and `Optimizer(Adam(), network)` fails before the first epoch -- the
+# CPU never sees it. 0.8 allocates on the argument's backend, and `GeometricMachineLearning` 0.8 is
+# the first release that takes it.
+[compat]
+GeometricMachineLearning = "0.8"
+GeometricOptimizers = "0.8"

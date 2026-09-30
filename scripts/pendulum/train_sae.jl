@@ -51,6 +51,25 @@ using Random
 import AbstractNeuralNetworks: save
 import GMLDatasets: angular_to_euclidean, pendulum, pendulum_energy
 import HDF5
+import LinearAlgebra
+
+# CUDA 5.11 and GPUArrays 11.5 both define a triangular solve for device matrices, and for a solve
+# with a `CuMatrix` on both sides neither method is more specific: a `MethodError` for an ambiguous
+# call. `GlobalSection` of a `StiefelManifold` weight is where it is met, orthonormalizing with
+# `A / UpperTriangular(R)` when the optimizer is built, so the run fails before its first epoch.
+# Metal has no CUBLAS and the host no GPUArrays, which is why no run but a CUDA one ever saw it.
+# These two methods are more specific than both and forward to CUBLAS's `trsm!`, which is what
+# either of them would have done. Delete them once CUDA.jl resolves the ambiguity itself.
+LinearAlgebra.generic_mattridiv!(C::CuMatrix{T}, uploc, isunitc, tfun::Function, A::CuMatrix{T},
+        B::CuMatrix{T}) where {T <: CUDA.CUBLAS.CublasFloat} =
+    invoke(LinearAlgebra.generic_mattridiv!,
+        Tuple{CUDA.StridedCuMatrix{T}, Any, Any, Function, AbstractMatrix{T}, CUDA.StridedCuMatrix{T}},
+        C, uploc, isunitc, tfun, A, B)
+LinearAlgebra.generic_trimatdiv!(C::CuMatrix{T}, uploc, isunitc, tfun::Function, A::CuMatrix{T},
+        B::CuMatrix{T}) where {T <: CUDA.CUBLAS.CublasFloat} =
+    invoke(LinearAlgebra.generic_trimatdiv!,
+        Tuple{CUDA.StridedCuMatrix{T}, Any, Any, Function, CUDA.StridedCuMatrix{T}, AbstractMatrix{T}},
+        C, uploc, isunitc, tfun, A, B)
 
 # The defaults are the configuration this experiment is specified at; the environment overrides
 # exist so that a sweep on a remote machine needs no file edits there. `SAE_FRACS=both` adds the

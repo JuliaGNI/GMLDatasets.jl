@@ -179,7 +179,7 @@ say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"
 # The step's own log goes into the pipeline log on failure, so --status shows the actual error
 # rather than only the name of the step that had one. From the first ERROR line and not the tail:
 # a Julia stack trace ends in the outermost frames, and with this network's type parameters the
-# last twenty lines are four frames of `Chain{...}` and never the error itself. Lines are cut for
+# last twenty lines are four frames of Chain{...} and never the error itself. Lines are cut for
 # the same reason. The tail is the fallback for a failure that is not a Julia exception.
 fail () {
     echo "FAILED at \$1" > "\$GML_OUTDIR/STATUS"

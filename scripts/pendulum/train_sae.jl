@@ -109,7 +109,15 @@ architecture = SymplecticAutoencoder(dl.input_dim, reduced_dim;
     n_decoder_layers = 20,
     n_decoder_output_layers = 10,
     sympnet_upscale = upscale)
-network = NeuralNetwork(architecture, backend, eltype(dl))
+# Initialized on the host and then moved, rather than initialized on the device. Initialization is
+# the one place a host RNG meets device arrays, and `PSDLayer`'s orthonormal starting weight is a
+# Cholesky factorization of a device matrix there — code no CPU run ever exercises. The CUDA run
+# failed inside this initialization. On the host it is ordinary LAPACK, and the starting weights for
+# a given seed are the same whichever backend trains them. `mapstorage` rebuilds each leaf around
+# the moved storage, so the `StiefelManifold` weight stays one: `map_to_cpu` in the other direction.
+host_network = NeuralNetwork(architecture, CPU(), eltype(dl))
+network = NeuralNetwork(architecture, host_network.model,
+    GeometricMachineLearning.mapstorage(to_device, host_network.params), backend)
 
 optimizer = Optimizer(Adam(), network; step_size = step_size)
 losses = optimizer(network, dl, Batch(batch_size), n_epochs)

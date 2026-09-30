@@ -177,12 +177,17 @@ ${JULIA:+export JULIA="${JULIA}"}
 
 say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"; }
 # The step's own log goes into the pipeline log on failure, so --status shows the actual error
-# rather than only the name of the step that had one.
+# rather than only the name of the step that had one. From the first ERROR line and not the tail:
+# a Julia stack trace ends in the outermost frames, and with this network's type parameters the
+# last twenty lines are four frames of `Chain{...}` and never the error itself. Lines are cut for
+# the same reason. The tail is the fallback for a failure that is not a Julia exception.
 fail () {
     echo "FAILED at \$1" > "\$GML_OUTDIR/STATUS"
     say "FAILED at \$1"
     if [ -n "\${2:-}" ] && [ -f "\$GML_OUTDIR/\$2" ]; then
-        { echo "--- last 20 lines of \$2 ---"; tail -20 "\$GML_OUTDIR/\$2"; } \\
+        { echo "--- \$2, from its first ERROR (lines cut at 300 characters) ---"
+          { grep -m1 -A30 '^ERROR' "\$GML_OUTDIR/\$2" || tail -20 "\$GML_OUTDIR/\$2"; } \\
+              | cut -c1-300; } \\
             | tee -a "\$GML_OUTDIR/log_pipeline.txt"
     fi
     exit 1

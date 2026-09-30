@@ -34,7 +34,15 @@
 
 set -euo pipefail
 
-REMOTE="${REMOTE:-benbradmin@pc-benbr-2}"
+# An ssh host alias, NOT a hostname: this repository is public, so the machine's name and the
+# account on it live in ~/.ssh/config, which is not. One-time setup on a new laptop:
+#
+#   Host sae-gpu
+#       HostName <the workstation>
+#       User     <your account there>
+#
+# REMOTE=user@host still works for a one-off run that is not worth a config entry.
+REMOTE="${REMOTE:-sae-gpu}"
 # Relative to the remote home, and the name `git clone` gives this repository, so a checkout made
 # by hand from section 1 of the paper's RUN.md and the one this script syncs to are the same
 # directory rather than two.
@@ -56,12 +64,59 @@ RUN_STEP2="${RUN_STEP2:-1}"
 DEST="${GML_OUTDIR:-$REPO_ROOT/out}"
 MODE="${1:-start}"
 
+# `ssh -G` reports the effective config. An alias with no Host block resolves to itself, which is
+# the "you have not set this up yet" case and is worth catching before four connections try it.
+if [ "$REMOTE" = "sae-gpu" ] \
+   && [ "$(ssh -G sae-gpu 2>/dev/null | awk '/^hostname /{print $2}')" = "sae-gpu" ]; then
+    cat >&2 <<'MSG'
+No `Host sae-gpu` block in ~/.ssh/config, and no REMOTE set.
+
+The workstation's name is deliberately not in this file -- the repository is public. Add to
+~/.ssh/config:
+
+    Host sae-gpu
+        HostName <the workstation>
+        User     <your account there>
+
+or run this once with REMOTE=user@host.
+MSG
+    exit 2
+fi
+
+# One password for the whole invocation instead of one per connection. A start opens four -- the
+# mkdir, the rsync, the scp of the pipeline, the launch -- and without this each one authenticates
+# again. The first to run becomes the master; the rest ride its socket.
+#
+# Nothing here calls `ssh -O exit`: --attach replaces this process with exec, so its cleanup would
+# never run anyway, and a cleanup in one terminal would tear down a --attach riding the same socket
+# in another. ControlPersist expires it instead, a minute after the last client leaves.
+#
+# SSH_MUX=0 turns it off, for a remote whose sshd refuses multiplexing (MaxSessions 1).
+if [ "${SSH_MUX:-1}" = "1" ]; then
+    SSH_OPTS=(-o ControlMaster=auto
+              -o ControlPath="${TMPDIR:-/tmp}/sae-ssh-%r@%h-%p"
+              -o ControlPersist=60)
+else
+    SSH_OPTS=(-o ControlMaster=no)
+fi
+# rsync takes the remote shell as one string; none of the options above contain a space.
+RSH="ssh ${SSH_OPTS[*]}"
+
+# macOS 15 ships openrsync ("rsync version 2.6.9 compatible"), which has --progress but not
+# --info=progress2. Probe rather than branch on uname: a Homebrew rsync on the same laptop does
+# take it, and the remote's flavour does not enter into it -- these flags are read locally.
+if rsync --info=progress2 --version >/dev/null 2>&1; then
+    RSYNC_PROGRESS="--info=progress2"
+else
+    RSYNC_PROGRESS="--progress"
+fi
+
 # ---------------------------------------------------------------------------------------------
 # The subcommands that do not start anything
 # ---------------------------------------------------------------------------------------------
 case "$MODE" in
   --status)
-      ssh "$REMOTE" REMOTE_DIR="$REMOTE_DIR" SESSION="$SESSION" bash <<'ENDSSH'
+      ssh "${SSH_OPTS[@]}" "$REMOTE" REMOTE_DIR="$REMOTE_DIR" SESSION="$SESSION" bash <<'ENDSSH'
         cd "$HOME/$REMOTE_DIR" 2>/dev/null || { echo "no $REMOTE_DIR on the remote"; exit 1; }
         if [ -f out/STATUS ]; then echo "STATUS: $(cat out/STATUS)"; else echo "STATUS: never started"; fi
         echo "session: $(screen -ls 2>/dev/null | grep -c "\.${SESSION}[[:space:]]" || true) live"
@@ -72,27 +127,27 @@ ENDSSH
       exit 0 ;;
   --attach)
       echo "Attaching to '$SESSION' on $REMOTE. Ctrl-a d detaches and LEAVES IT RUNNING."
-      exec ssh -t "$REMOTE" "screen -d -r '$SESSION'" ;;
+      exec ssh -t "${SSH_OPTS[@]}" "$REMOTE" "screen -d -r '$SESSION'" ;;
   --stop)
-      ssh "$REMOTE" "screen -S '$SESSION' -X quit || true; echo stopped"
+      ssh "${SSH_OPTS[@]}" "$REMOTE" "screen -S '$SESSION' -X quit || true; echo stopped"
       exit 0 ;;
   --fetch)
       mkdir -p "$DEST"
-      rsync -az --info=progress2 "${REMOTE}:${REMOTE_DIR}/out/" "${DEST}/"
+      rsync -az -e "$RSH" "$RSYNC_PROGRESS" "${REMOTE}:${REMOTE_DIR}/out/" "${DEST}/"
       echo "==> out/ is in ${DEST}"
       echo "    Read log_branch_report.txt before anything else."
       exit 0 ;;
   start|--start|--foreground) ;;
-  *)  echo "unknown option: $MODE"; sed -n '7,14p' "$0"; exit 2 ;;
+  *)  echo "unknown option: $MODE"; sed -n '8,15p' "$0"; exit 2 ;;
 esac
 
 # ---------------------------------------------------------------------------------------------
 # Sync
 # ---------------------------------------------------------------------------------------------
 echo "==> Syncing $REPO_ROOT to ${REMOTE}:${REMOTE_DIR}"
-ssh "$REMOTE" "mkdir -p '${REMOTE_DIR}/out'"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p '${REMOTE_DIR}/out'"
 # Outputs are excluded in both directions: the remote keeps its own out/, which is what comes back.
-rsync -az --delete --info=progress2 \
+rsync -az --delete -e "$RSH" "$RSYNC_PROGRESS" \
     --exclude='.git' --exclude='docs/build*' --exclude='out' \
     --exclude='*.h5' --exclude='*.png' --exclude='plots' --exclude='Animations' \
     "${REPO_ROOT}/" "${REMOTE}:${REMOTE_DIR}/"
@@ -152,23 +207,23 @@ EOF
 
 # Catch a quoting mistake here rather than three hours into a run.
 bash -n "$PIPE" || { echo "generated pipeline does not parse; not launching"; exit 1; }
-scp -q "$PIPE" "${REMOTE}:${REMOTE_DIR}/out/run_pipeline.sh"
+scp -q "${SSH_OPTS[@]}" "$PIPE" "${REMOTE}:${REMOTE_DIR}/out/run_pipeline.sh"
 
 # ---------------------------------------------------------------------------------------------
 # Launch
 # ---------------------------------------------------------------------------------------------
 if [ "$MODE" = "--foreground" ]; then
     echo "==> Running in the foreground. A dropped connection kills this; use the default for long runs."
-    ssh -t "$REMOTE" "cd '$REMOTE_DIR' && bash out/run_pipeline.sh"
+    ssh -t "${SSH_OPTS[@]}" "$REMOTE" "cd '$REMOTE_DIR' && bash out/run_pipeline.sh"
     mkdir -p "$DEST"
-    rsync -az --info=progress2 "${REMOTE}:${REMOTE_DIR}/out/" "${DEST}/"
+    rsync -az -e "$RSH" "$RSYNC_PROGRESS" "${REMOTE}:${REMOTE_DIR}/out/" "${DEST}/"
     echo "==> out/ is in ${DEST}"
     exit 0
 fi
 
 # screen if it is there, tmux if it is not, and setsid+nohup if neither -- all three detach from
 # the ssh session, which is the only property that matters here.
-ssh "$REMOTE" REMOTE_DIR="$REMOTE_DIR" SESSION="$SESSION" bash <<'ENDSSH'
+ssh "${SSH_OPTS[@]}" "$REMOTE" REMOTE_DIR="$REMOTE_DIR" SESSION="$SESSION" bash <<'ENDSSH'
     set -euo pipefail
     cd "$HOME/$REMOTE_DIR"
     if screen -ls 2>/dev/null | grep -q "\.${SESSION}[[:space:]]"; then

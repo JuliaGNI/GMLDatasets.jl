@@ -198,14 +198,32 @@ for c in "\$HOME/.juliaup/bin/julia" "\$HOME/.local/bin/julia" /usr/local/bin/ju
     [ -x "\$c" ] && JULIA="\$c"
 done
 [ -n "\$JULIA" ] || { say "no julia on PATH or in ~/.juliaup/bin; set JULIA=/path/to/julia"; fail julia; }
-say "julia: \$JULIA (\$("\$JULIA" --version 2>&1))"
+
+# The manifest is the Mac's -- gitignored, but rsync does not read .gitignore -- and records the
+# Julia it was resolved with. Another minor version cannot instantiate it: the stdlibs differ
+# (Zstd_jll is one on 1.13 and a registry package on 1.12), and the failure surfaces as a precompile
+# error deep inside JLD2. So run that version, through juliaup's +channel if the default is another.
+JULIA_CMD=("\$JULIA")
+WANT="\$(sed -n 's/^julia_version = "\([0-9]*\.[0-9]*\).*/\1/p' scripts/Manifest.toml 2>/dev/null)"
+if [ -n "\$WANT" ]; then
+    have () { "\${JULIA_CMD[@]}" -e 'print(VERSION.major, ".", VERSION.minor)' 2>/dev/null; }
+    if [ "\$(have)" != "\$WANT" ] && [ -x "\$(dirname "\$JULIA")/juliaup" ]; then
+        "\$(dirname "\$JULIA")/juliaup" add "\$WANT" >/dev/null 2>&1 || true   # fails if already there
+        JULIA_CMD=("\$JULIA" "+\$WANT")
+    fi
+    [ "\$(have)" = "\$WANT" ] || {
+        say "scripts/Manifest.toml was resolved with julia \$WANT, and \$JULIA is not that and has no juliaup beside it"
+        fail julia
+    }
+fi
+say "julia: \${JULIA_CMD[*]} (\$("\${JULIA_CMD[@]}" --version 2>&1))"
 
 say "instantiate"
-"\$JULIA" --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' \\
+"\${JULIA_CMD[@]}" --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' \\
     > "\$GML_OUTDIR/log_instantiate.txt" 2>&1 || fail instantiate log_instantiate.txt
 
 say "train  (seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA})"
-"\$JULIA" --project=scripts scripts/pendulum/train_sae.jl \\
+"\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/train_sae.jl \\
     > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train log_train_sae.txt
 # The backend is the first line. Say it here too, so --status shows it without opening the log.
 say "  \$(head -1 "\$GML_OUTDIR/log_train_sae.txt")"
@@ -214,16 +232,16 @@ export SAE_WEIGHTS="\$GML_OUTDIR/${SAE_OUT}"
 
 if [ "${RUN_STEP2}" = "1" ]; then
     say "reduced dynamics"
-    "\$JULIA" --project=scripts scripts/pendulum/reduced_networks.jl \\
+    "\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/reduced_networks.jl \\
         > "\$GML_OUTDIR/log_reduced.txt" 2>&1 || fail reduced log_reduced.txt
 fi
 
 say "branch report"
-"\$JULIA" --project=scripts scripts/pendulum/branch_report.jl \\
+"\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/branch_report.jl \\
     > "\$GML_OUTDIR/log_branch_report.txt" 2>&1 || fail report log_branch_report.txt
 
 say "latent figure"
-"\$JULIA" --project=scripts scripts/pendulum/latent_plot.jl \\
+"\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/latent_plot.jl \\
     > "\$GML_OUTDIR/log_latent_plot.txt" 2>&1 || fail latent_plot log_latent_plot.txt
 
 echo "DONE" > "\$GML_OUTDIR/STATUS"

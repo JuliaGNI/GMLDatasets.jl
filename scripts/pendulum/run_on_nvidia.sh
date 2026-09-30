@@ -121,13 +121,15 @@ case "$MODE" in
         if [ -f out/STATUS ]; then echo "STATUS: $(cat out/STATUS)"; else echo "STATUS: never started"; fi
         echo "session: $(screen -ls 2>/dev/null | grep -c "\.${SESSION}[[:space:]]" || true) live"
         screen -ls 2>/dev/null | sed -n '2,$p' | sed 's/^/  /' || true
-        echo "--- last 15 lines of the newest log ---"
-        ls -t out/log_*.txt 2>/dev/null | head -1 | xargs -r tail -15
+        echo "--- last 30 lines of log_pipeline.txt ---"
+        tail -30 out/log_pipeline.txt 2>/dev/null || true
 ENDSSH
       exit 0 ;;
   --attach)
       echo "Attaching to '$SESSION' on $REMOTE. Ctrl-a d detaches and LEAVES IT RUNNING."
-      exec ssh -t "${SSH_OPTS[@]}" "$REMOTE" "screen -d -r '$SESSION'" ;;
+      exec ssh -t "${SSH_OPTS[@]}" "$REMOTE" \
+          "screen -d -r '$SESSION' || { echo 'The session has ended (finished or failed):'; \
+           cat '$REMOTE_DIR/out/STATUS'; tail -30 '$REMOTE_DIR/out/log_pipeline.txt'; }" ;;
   --stop)
       ssh "${SSH_OPTS[@]}" "$REMOTE" "screen -S '$SESSION' -X quit || true; echo stopped"
       exit 0 ;;
@@ -167,21 +169,44 @@ cd "\$HOME/${REMOTE_DIR}"
 
 export GML_OUTDIR="\$PWD/out"
 mkdir -p "\$GML_OUTDIR"
+: > "\$GML_OUTDIR/log_pipeline.txt"
 export SAE_SEED="${SAE_SEED}" SAE_FRACS="${SAE_FRACS}" SAE_TSPAN="${SAE_TSPAN}"
 export SAE_EPOCHS="${SAE_EPOCHS}" SAE_UPSCALE="${SAE_UPSCALE}" SAE_ETA="${SAE_ETA}"
 export SAE_BATCH="${SAE_BATCH}" SAE_OUT="${SAE_OUT}"
+${JULIA:+export JULIA="${JULIA}"}
 
 say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"; }
-fail () { echo "FAILED at \$1" > "\$GML_OUTDIR/STATUS"; say "FAILED at \$1"; exit 1; }
+# The step's own log goes into the pipeline log on failure, so --status shows the actual error
+# rather than only the name of the step that had one.
+fail () {
+    echo "FAILED at \$1" > "\$GML_OUTDIR/STATUS"
+    say "FAILED at \$1"
+    if [ -n "\${2:-}" ] && [ -f "\$GML_OUTDIR/\$2" ]; then
+        { echo "--- last 20 lines of \$2 ---"; tail -20 "\$GML_OUTDIR/\$2"; } \\
+            | tee -a "\$GML_OUTDIR/log_pipeline.txt"
+    fi
+    exit 1
+}
 
 echo "RUNNING" > "\$GML_OUTDIR/STATUS"
+
+# screen starts a non-interactive shell, which does not read ~/.bashrc -- where juliaup puts
+# itself on PATH. JULIA=/path/to/julia overrides the search.
+JULIA="\${JULIA:-\$(command -v julia || true)}"
+for c in "\$HOME/.juliaup/bin/julia" "\$HOME/.local/bin/julia" /usr/local/bin/julia; do
+    [ -n "\$JULIA" ] && break
+    [ -x "\$c" ] && JULIA="\$c"
+done
+[ -n "\$JULIA" ] || { say "no julia on PATH or in ~/.juliaup/bin; set JULIA=/path/to/julia"; fail julia; }
+say "julia: \$JULIA (\$("\$JULIA" --version 2>&1))"
+
 say "instantiate"
-julia --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' \\
-    > "\$GML_OUTDIR/log_instantiate.txt" 2>&1 || fail instantiate
+"\$JULIA" --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' \\
+    > "\$GML_OUTDIR/log_instantiate.txt" 2>&1 || fail instantiate log_instantiate.txt
 
 say "train  (seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA})"
-julia --project=scripts scripts/pendulum/train_sae.jl \\
-    > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train
+"\$JULIA" --project=scripts scripts/pendulum/train_sae.jl \\
+    > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train log_train_sae.txt
 # The backend is the first line. Say it here too, so --status shows it without opening the log.
 say "  \$(head -1 "\$GML_OUTDIR/log_train_sae.txt")"
 
@@ -189,17 +214,17 @@ export SAE_WEIGHTS="\$GML_OUTDIR/${SAE_OUT}"
 
 if [ "${RUN_STEP2}" = "1" ]; then
     say "reduced dynamics"
-    julia --project=scripts scripts/pendulum/reduced_networks.jl \\
-        > "\$GML_OUTDIR/log_reduced.txt" 2>&1 || fail reduced
+    "\$JULIA" --project=scripts scripts/pendulum/reduced_networks.jl \\
+        > "\$GML_OUTDIR/log_reduced.txt" 2>&1 || fail reduced log_reduced.txt
 fi
 
 say "branch report"
-julia --project=scripts scripts/pendulum/branch_report.jl \\
-    > "\$GML_OUTDIR/log_branch_report.txt" 2>&1 || fail report
+"\$JULIA" --project=scripts scripts/pendulum/branch_report.jl \\
+    > "\$GML_OUTDIR/log_branch_report.txt" 2>&1 || fail report log_branch_report.txt
 
 say "latent figure"
-julia --project=scripts scripts/pendulum/latent_plot.jl \\
-    > "\$GML_OUTDIR/log_latent_plot.txt" 2>&1 || fail latent_plot
+"\$JULIA" --project=scripts scripts/pendulum/latent_plot.jl \\
+    > "\$GML_OUTDIR/log_latent_plot.txt" 2>&1 || fail latent_plot log_latent_plot.txt
 
 echo "DONE" > "\$GML_OUTDIR/STATUS"
 say "DONE"
@@ -231,13 +256,13 @@ ssh "${SSH_OPTS[@]}" "$REMOTE" REMOTE_DIR="$REMOTE_DIR" SESSION="$SESSION" bash 
         exit 1
     fi
     if command -v screen >/dev/null 2>&1; then
-        screen -dmS "$SESSION" bash out/run_pipeline.sh
+        screen -dmS "$SESSION" bash -l out/run_pipeline.sh
         echo "launched under screen as '$SESSION'"
     elif command -v tmux >/dev/null 2>&1; then
-        tmux new-session -d -s "$SESSION" "bash out/run_pipeline.sh"
+        tmux new-session -d -s "$SESSION" "bash -l out/run_pipeline.sh"
         echo "screen is not installed; launched under tmux as '$SESSION'"
     else
-        setsid nohup bash out/run_pipeline.sh > out/log_nohup.txt 2>&1 < /dev/null &
+        setsid nohup bash -l out/run_pipeline.sh > out/log_nohup.txt 2>&1 < /dev/null &
         echo "neither screen nor tmux is installed; launched with setsid+nohup (no attach)"
     fi
 ENDSSH

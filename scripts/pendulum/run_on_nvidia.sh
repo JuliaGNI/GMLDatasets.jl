@@ -8,6 +8,7 @@
 # Usage, from the repository root:
 #
 #   bash scripts/pendulum/run_on_nvidia.sh            # sync, then start it detached
+#   bash scripts/pendulum/run_on_nvidia.sh --resume   # sync, reuse saved SAE, run remaining stages
 #   bash scripts/pendulum/run_on_nvidia.sh --status   # is it still going, and where is it
 #   bash scripts/pendulum/run_on_nvidia.sh --attach   # watch it live (Ctrl-a d to leave it running)
 #   bash scripts/pendulum/run_on_nvidia.sh --fetch    # bring out/ back when it says DONE
@@ -21,6 +22,8 @@
 #     bash scripts/pendulum/run_on_nvidia.sh
 #
 # Give each concurrent run its own SESSION and SAE_OUT, and its own GML_OUTDIR for the fetch.
+# --resume reuses out/$SAE_OUT on the remote and leaves the SAE training log intact.
+# Set SAE_OUT to the original filename if the run used a nondefault checkpoint name.
 #
 # SAE_FRACS=both puts rotating data on BOTH branches of the cylinder. Read the header of
 # train_sae.jl before reading the result of that: one of the two rotating families is then forced
@@ -60,6 +63,7 @@ SAE_ETA="${SAE_ETA:-1e-4}"
 SAE_BATCH="${SAE_BATCH:-256}"
 SAE_OUT="${SAE_OUT:-pendulum_sae.h5}"
 RUN_STEP2="${RUN_STEP2:-1}"
+RUN_TRAIN=1
 
 DEST="${GML_OUTDIR:-$REPO_ROOT/out}"
 MODE="${1:-start}"
@@ -137,10 +141,15 @@ ENDSSH
       mkdir -p "$DEST"
       rsync -az -e "$RSH" "$RSYNC_PROGRESS" "${REMOTE}:${REMOTE_DIR}/out/" "${DEST}/"
       echo "==> out/ is in ${DEST}"
-      echo "    Read log_branch_report.txt before anything else."
+      if [ -f "$DEST/log_branch_report.txt" ]; then
+          echo "    Read log_branch_report.txt before interpreting the results."
+      else
+          echo "    No branch report was fetched; check STATUS and log_pipeline.txt."
+      fi
       exit 0 ;;
   start|--start|--foreground) ;;
-  *)  echo "unknown option: $MODE"; sed -n '8,15p' "$0"; exit 2 ;;
+  --resume) RUN_TRAIN=0 ;;
+  *)  echo "unknown option: $MODE"; sed -n '8,17p' "$0"; exit 2 ;;
 esac
 
 # ---------------------------------------------------------------------------------------------
@@ -227,13 +236,17 @@ say "instantiate"
 "\${JULIA_CMD[@]}" --project=scripts -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()' \\
     > "\$GML_OUTDIR/log_instantiate.txt" 2>&1 || fail instantiate log_instantiate.txt
 
-say "train  (seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA})"
-"\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/train_sae.jl \\
-    > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train log_train_sae.txt
-# The backend is the first line. Say it here too, so --status shows it without opening the log.
-say "  \$(head -1 "\$GML_OUTDIR/log_train_sae.txt")"
-
 export SAE_WEIGHTS="\$GML_OUTDIR/${SAE_OUT}"
+if [ "${RUN_TRAIN}" = "1" ]; then
+    say "train  (seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA})"
+    "\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/train_sae.jl \\
+        > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train log_train_sae.txt
+    # Progress output can precede the buffered backend line in the redirected log.
+    say "  \$(grep -m1 '^Backend:' "\$GML_OUTDIR/log_train_sae.txt")"
+else
+    [ -s "\$SAE_WEIGHTS" ] || { say "no saved SAE weights at \$SAE_WEIGHTS"; fail resume; }
+    say "reuse SAE weights: \$SAE_WEIGHTS (skipping training)"
+fi
 
 if [ "${RUN_STEP2}" = "1" ]; then
     say "reduced dynamics"

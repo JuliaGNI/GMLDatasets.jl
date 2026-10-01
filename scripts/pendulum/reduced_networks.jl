@@ -157,10 +157,11 @@ for (i, d) in enumerate(train_ref)
     p_red[:, :, i] = z[2:2, :]
 end
 
-dl_reduced = DataLoader((q=q_red, p=p_red))
-println("Reduced DataLoader: input_dim=$(dl_reduced.input_dim) [CPU, Float32]")
+# Encoding runs on the CPU; training data must share the reduced networks' backend.
+dl_reduced = DataLoader((q=to_device(q_red), p=to_device(p_red)))
+println("Reduced DataLoader: input_dim=$(dl_reduced.input_dim) [$(gpu_ok ? "CUDA" : "CPU"), Float32]")
 
-# ---- Train SympNet and ResNet on CPU ----------------------------------------
+# ---- Train SympNet and ResNet on the selected backend -----------------------
 
 const n_epochs = 11000
 const batch    = Batch(128)
@@ -181,12 +182,17 @@ println("ResNet: $(parameterlength(nn2)) params, final loss=$(round(loss2[end]; 
 
 # ---- Save reduced network weights -------------------------------------------
 
-GeometricMachineLearning.save(sympnet_path, nn1)
-GeometricMachineLearning.save(resnet_path,  nn2)
+GeometricMachineLearning.save(sympnet_path, GeometricMachineLearning.map_to_cpu(nn1))
+GeometricMachineLearning.save(resnet_path,  GeometricMachineLearning.map_to_cpu(nn2))
 println("SympNet weights saved → $sympnet_path")
 println("ResNet  weights saved → $resnet_path")
 
 # ---- Predict: encode IC → iterate → decode ----------------------------------
+
+# The SAE and plotting data live on the CPU. Reload with CPU storage and backend
+# before iteration, and verify that the saved weights can be used for inference.
+nn1_cpu = load(NeuralNetwork, sympnet_path, sympnet_arch)
+nn2_cpu = load(NeuralNetwork, resnet_path, resnet_arch)
 
 function predict_reduced(nn_red, d)
     z₀   = enc(Float32.(vcat(d.q_eucl[:, 1], d.p_eucl[:, 1])))
@@ -203,7 +209,7 @@ end
 
 let fig = Figure(size=(800, 400))
     ax = Axis(fig[1, 1], xlabel="Epoch", ylabel="Loss",
-        title="Reduced Network Training (2D, CPU)")
+        title="Reduced Network Training (2D, $(gpu_ok ? "CUDA" : "CPU"))")
     lines!(ax, loss1;
         label=L"SympNet; $n_\mathrm{params}$=%$(parameterlength(nn1))",
         color=:orange, linewidth=2)
@@ -221,8 +227,8 @@ for d in eval_ref
     t_vec = d.t
     h_ref = hamiltonian_euclidean(d.q_eucl, d.p_eucl)
 
-    θ1, θ̇1, h1 = predict_reduced(nn1, d)
-    θ2, θ̇2, h2 = predict_reduced(nn2, d)
+    θ1, θ̇1, h1 = predict_reduced(nn1_cpu, d)
+    θ2, θ̇2, h2 = predict_reduced(nn2_cpu, d)
 
     println("Saving plots for $label ...")
 

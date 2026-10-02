@@ -1,0 +1,59 @@
+# The script suites of the revision harness, which `CI.yml` cannot run.
+#
+# `CI.yml` is byte-identical in every repository under Packages/ and Experiments/ by policy —
+# `verify-workflows.jl` asserts it — and its own header prescribes the escape hatch a repository
+# with an extra job takes: its own extra workflow file, rather than a local edit there. This is that
+# file.
+#
+# Two of the harness's suites need `GeometricOptimizers` and run against `scripts/Project.toml`,
+# which is a different environment from the package's: it takes `GeometricMachineLearning` and
+# `GeometricOptimizers` from `main` and does not track a `Manifest.toml`. The other two need nothing
+# but `SHA` and Base and run from `test/runtests.jl` instead, inside the package suite.
+#
+# NOT A REQUIRED CHECK. The environment resolves two moving branches on purpose, so this job can go
+# red for a change made upstream rather than for one made here — which is information worth having
+# before a run is launched, and not a reason to block a merge.
+
+name: Scripts
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        paths:
+            - "scripts/**"
+            - ".github/workflows/Scripts.yml"
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+    scripts:
+        name: Revision harness scripts
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        permissions:
+            actions: write
+            contents: read
+        steps:
+            - uses: actions/checkout@v7
+            - uses: julia-actions/setup-julia@v3
+              with:
+                  version: "1"
+            - uses: julia-actions/cache@v3
+            - name: Instantiate the scripts environment
+              # `Pkg.update` and not `Pkg.instantiate`: to `resolve` a `rev = "main"` source is a
+              # fixed pin, so it calls a stale commit satisfiable and would leave this job testing
+              # against something other than `main`. See scripts/revision/README.md.
+              run: julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
+            - name: The optimizer-step timing adapter
+              run: julia --project=scripts --startup-file=no scripts/geometric_optimizers/test_step_timing.jl
+            - name: The per-leaf composite step loop
+              run: julia --project=scripts --startup-file=no scripts/geometric_optimizers/test_leaf_composite.jl
+            - name: The runner and the screen launcher parse
+              run: |
+                  bash -n scripts/revision/run_experiments.sh
+                  bash -n scripts/revision/run_in_screen.sh

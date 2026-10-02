@@ -13,6 +13,7 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GMLDatasets = "676c5310-75a3-4edf-a7af-a2dbff91674b"
+GeometricIntegrators = "dcce2d33-59f6-5b8d-9047-0defad88ae06"
 GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
 GeometricOptimizers = "fc236c15-5557-4942-aa65-b650f329279e"
 GeometricProblems = "18cb22b4-ad41-5c80-9c5f-710df63fbdc9"
@@ -22,6 +23,7 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+PoincareInvariants = "26663084-47d3-540f-bd97-40ca743aafa4"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -29,8 +31,23 @@ SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
+# `GeometricIntegrators` and `PoincareInvariants` arrived with the pendulum and harmonic-oscillator
+# generators moved in from the symplectic-autoencoder talk. The first integrates the training and
+# reference trajectories; the second is only needed by the scripts that compare a latent loop's first
+# Poincare invariant with the analytic action, and `pendulum/branch_report.jl` deliberately does not
+# use it -- for a closed planar curve that invariant is the enclosed area, which is a shoelace sum.
+#
 # `GMLDatasets` is not registered, so it is reached by path. `GeometricMachineLearning` used to be
 # here too, pinned to `main`, because the container work these scripts are written against was
 # unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
 [sources]
 GMLDatasets = {path = ".."}
+
+# A floor, not a pin. `GeometricOptimizers` 0.7 builds `similar(::StiefelLieAlgHorMatrix)` on the
+# host whatever backend the argument is on, so on a GPU the Adam cache of every Stiefel layer mixes a
+# host block with device ones and `Optimizer(Adam(), network)` fails before the first epoch -- the
+# CPU never sees it. 0.8 allocates on the argument's backend, and `GeometricMachineLearning` 0.8 is
+# the first release that takes it.
+[compat]
+GeometricMachineLearning = "0.8"
+GeometricOptimizers = "0.8"

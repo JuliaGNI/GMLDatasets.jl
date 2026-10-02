@@ -95,10 +95,11 @@ println("  " * "─"^88)
 @printf("  symplecticity defect: max %.1e at N = %d\n\n", maximum(sy), NQUAD)
 
 let fig = Figure(size=(1220, 480), fontsize=25)
+    # No axis titles: the paper's caption says what each panel shows (left: angular coordinates,
+    # right: the learned latent space).
     ax1 = Axis(fig[1,1]; xlabel=L"\theta \;\; \mathrm{(rad)}", ylabel=L"p_\theta",
-        title="Angular coordinates",
         xticks=([0,π/2,π,3π/2,2π],[L"0",L"\pi/2",L"\pi",L"3\pi/2",L"2\pi"]))
-    ax2 = Axis(fig[1,2]; xlabel=L"z_q", ylabel=L"z_p", title="Learned latent space")
+    ax2 = Axis(fig[1,2]; xlabel=L"z_q", ylabel=L"z_p")
     for ax in (ax1,ax2)
         ax.xgridcolor=(:black,0.06); ax.ygridcolor=(:black,0.06)
         ax.topspinevisible=false; ax.rightspinevisible=false

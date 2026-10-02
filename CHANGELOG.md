@@ -19,6 +19,24 @@ breaking release).
 
 ### Changed
 
+- **The test suite follows the shared test convention.** `test/runtests.jl` defines `GROUPS` and
+  lists one `@safetestset` per test file: `core` holds `quality/aqua.jl`, `mnist_utils.jl`,
+  `docstrings.jl` and `pendulum.jl`, and `slow` holds `quality/doctests.jl`. Empty `ARGS` runs both
+  groups. The three existing test files keep their paths and their content.
+
+  The test dependencies move from `[extras]` and `[targets]` of `Project.toml` into a new
+  `test/Project.toml`. `NeuralNetworkParameters`, `Random`, `SafeTestsets`, `Test` and `Zygote`
+  take their bounds with them unchanged, so the root `[compat]` loses those five entries. The
+  package's own dependencies that the tests load (`AbstractNeuralNetworks`,
+  `GeometricMachineLearning`, `GeometricProblems`) have no entry there, because the root bounds
+  apply, and the new `Aqua` and `Documenter` have none either.
+
+  The new `test/quality/aqua.jl` runs `Aqua.test_all`. Two checks are marked broken, each with its
+  issue: `piracies`, for the `DataLoader` constructor for labelled images (#29), and
+  `persistent_tasks`, which Aqua 0.8.18 cannot run because the dependency `InternedStrings` has no
+  `Project.toml` (#30, an upstream fault). The new `test/quality/doctests.jl` runs
+  `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET file is added.
+
 - **`[compat]` widens to the current releases of four dependencies**, as one change rather than four:
   `AbstractNeuralNetworks = "0.7, 0.8"`, `GeometricMachineLearning = "0.6, 0.7"`,
   `GeometricProblems = "0.8, 0.9"` and `NeuralNetworkParameters = "0.2.2, 0.3"`. These arrived as four

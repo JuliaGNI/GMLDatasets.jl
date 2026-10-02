@@ -28,4 +28,5 @@
 - **evidence:** the `[Unreleased]` bullet "`[compat]` widens …" says
   `GeometricMachineLearning = "0.6, 0.7"`; `Project.toml:18` has `GeometricMachineLearning = "0.6, 0.7, 0.8"`.
 - **kind:** found late
-- **found:** 2026-09-14 (commit 28c86f2)
+- **found:** #19 (2026-09-27, commit d92e3d5), which widened the bound in `Project.toml` and left
+  the CHANGELOG line from #18 unchanged

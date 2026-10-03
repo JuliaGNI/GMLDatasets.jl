@@ -19,10 +19,26 @@ breaking release).
 
 ### Changed
 
+- **The preprocessing figure of the MNIST tutorial is drawn with CairoMakie during the docs
+  build**, in pure Julia. A `@setup` block of the tutorial includes
+  `docs/src/mnist/mnist_visualization.jl` and saves one PNG per Documenter theme. The figure keeps
+  the layout of the TikZ original: the digit with its patch grid, the 16 patches, the flattened
+  patches, the flattened image with the red grid, and the transformer block with its arrows and
+  labels. No LaTeX runs, and no image is committed.
+
+  The tutorial wraps each themed image, this figure and the training-loss plot, in Documenter's
+  `docs-light-only` or `docs-dark-only` container, so the page shows one image per theme. Before,
+  it showed both images of each pair in either theme. The new `test/quality/mnist_figure.jl`, in
+  the `core` group, checks both from the tutorial's source.
+
+  `.github/workflows/Documenter.yml` is the canonical workflow again: the steps that installed TeX
+  and ran `make` on the figure are gone.
+
 - **The test suite follows the shared test convention.** `test/runtests.jl` defines `GROUPS` and
   lists one `@safetestset` per test file: `core` holds `quality/aqua.jl`, `mnist_utils.jl`,
-  `docstrings.jl` and `pendulum.jl`, and `slow` holds `quality/doctests.jl`. Empty `ARGS` runs both
-  groups. The three existing test files keep their paths and their content.
+  `docstrings.jl`, `pendulum.jl` and `quality/mnist_figure.jl`, and `slow` holds
+  `quality/doctests.jl`. Empty `ARGS` runs both groups. The three existing test files keep their
+  paths and their content.
 
   The test dependencies move from `[extras]` and `[targets]` of `Project.toml` into a new
   `test/Project.toml`. `NeuralNetworkParameters`, `Random`, `SafeTestsets`, `Test` and `Zygote`
@@ -54,13 +70,6 @@ breaking release).
   pass with the wrapped `NamedTuple` rather than the container, so `loss_dl` is called with one while
   differentiating and the old `Union{Tuple, NetworkParameters}` was a `MethodError`.
 
-- **The documentation workflow builds the TikZ figure before Documenter runs.** The MNIST tutorial's
-  patch-splitting figure is TikZ, and Documenter's cross-reference check needs the `.png` files to
-  exist. The job installs `texlive-xetex`, `texlive-pictures` and `poppler-utils`, then runs
-  `make all -C docs/src/mnist` after `julia-buildpkg` — after, because the Makefile's `images` target
-  runs in the root environment that `buildpkg` has just instantiated. This is now the fourth
-  repository that legitimately keeps its own `Documenter.yml`, and the file's header says so.
-
 - **`[compat]` raises four floors to the lowest versions that resolve**, a compat-only change with
   no change in behaviour: `GeometricIntegrators = "0.18.2"`, `GeometricSolutions = "0.6.5"`,
   `KernelAbstractions = "0.9.15"` and `MLDatasets = "0.7.13"`, from `0.18`, `0.6`, `0.9` and `0.7`.
@@ -69,6 +78,10 @@ breaking release).
   graph cannot select. The upper bounds are unchanged.
 
 ### Removed
+
+- **The TikZ sources of the MNIST figure**: `docs/src/mnist/Makefile`, `final_image.tex`,
+  `mnist_visualization.tex` and `mnist_visualization_dark.tex`, and the `.gitignore` rules for
+  their intermediate files.
 
 - **`.github/workflows/TagBot.yml`.** This package is **not registered in General**, so TagBot had
   nothing to do: it exists to create a GitHub release once a registry pull request merges, and no

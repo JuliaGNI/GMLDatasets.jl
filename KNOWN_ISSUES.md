@@ -24,7 +24,7 @@
 
 ### K3 · The CHANGELOG states a narrower `GeometricMachineLearning` bound than `Project.toml` has
 
-- **location:** `CHANGELOG.md:41`
+- **location:** `CHANGELOG.md:57`
 - **evidence:** the `[Unreleased]` bullet "`[compat]` widens …" says
   `GeometricMachineLearning = "0.6, 0.7"`; `Project.toml:18` has `GeometricMachineLearning = "0.6, 0.7, 0.8"`.
 - **kind:** found late

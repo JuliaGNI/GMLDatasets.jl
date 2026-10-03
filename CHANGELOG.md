@@ -37,7 +37,8 @@ breaking release).
 - **The test suite follows the shared test convention.** `test/runtests.jl` defines `GROUPS` and
   lists one `@safetestset` per test file: `core` holds `quality/aqua.jl`, `mnist_utils.jl`,
   `docstrings.jl`, `pendulum.jl` and `quality/mnist_figure.jl`, and `slow` holds
-  `quality/doctests.jl`. Empty `ARGS` runs both groups. The three existing test files keep their paths and their content.
+  `quality/doctests.jl`. Empty `ARGS` runs both groups. The three existing test files keep their
+  paths and their content.
 
   The test dependencies move from `[extras]` and `[targets]` of `Project.toml` into a new
   `test/Project.toml`. `NeuralNetworkParameters`, `Random`, `SafeTestsets`, `Test` and `Zygote`

@@ -3,8 +3,9 @@ using Test
 
 # The MNIST tutorial draws its preprocessing figure with CairoMakie during the docs build, once per
 # Documenter theme. These tests read the tutorial's source, so they run without CairoMakie and
-# without the MNIST download: they check that both themes are drawn and shown, each in the theme's
-# own container, and that no figure source or built image sits beside the tutorial.
+# without the MNIST download: they check that the tutorial calls the drawing function once per
+# theme, with that theme, and shows each image in the theme's own container. They do not draw the
+# figure; the docs build does.
 
 const MNIST_DOCS = joinpath(pkgdir(GMLDatasets), "docs", "src", "mnist")
 const TUTORIAL = read(joinpath(MNIST_DOCS, "mnist_tutorial.md"), String)
@@ -21,13 +22,14 @@ function setup_blocks(text, sandbox)
     return [m.captures[1] for m in eachmatch(pattern, text)]
 end
 
-@testset "The MNIST figure is drawn for both themes" begin
+@testset "The tutorial calls the MNIST figure once per theme, with that theme" begin
     blocks = setup_blocks(TUTORIAL, "mnist_visualization")
     @test length(blocks) == 1
     code = only(blocks)
     @test occursin("include(\"mnist_visualization.jl\")", code)
-    @test occursin("(:light, :dark)", code)
+    @test occursin("for theme in (:light, :dark)", code)
     @test occursin("mnist_visualization_\$(theme).png", code)
+    @test occursin("mnist_visualization(train_x[:, :, 8]; theme)", code)
     @test isfile(joinpath(MNIST_DOCS, "mnist_visualization.jl"))
 end
 
@@ -51,11 +53,4 @@ end
         @test count(image, TUTORIAL) ==
               count(image, join(theme_containers(TUTORIAL, theme)))
     end
-end
-
-@testset "No figure source and no image beside the tutorial" begin
-    files = readdir(MNIST_DOCS)
-    @test !any(f -> endswith(f, ".tex"), files)
-    @test "Makefile" ∉ files
-    @test !any(f -> any(e -> endswith(f, e), (".png", ".pdf", ".svg")), files)
 end

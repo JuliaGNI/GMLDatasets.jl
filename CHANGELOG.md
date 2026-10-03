@@ -36,8 +36,8 @@ breaking release).
 
 - **The test suite follows the shared test convention.** `test/runtests.jl` defines `GROUPS` and
   lists one `@safetestset` per test file: `core` holds `quality/aqua.jl`, `mnist_utils.jl`,
-  `docstrings.jl` and `pendulum.jl`, and `slow` holds `quality/doctests.jl`. Empty `ARGS` runs both
-  groups. The three existing test files keep their paths and their content.
+  `docstrings.jl`, `pendulum.jl` and `quality/mnist_figure.jl`, and `slow` holds
+  `quality/doctests.jl`. Empty `ARGS` runs both groups. The three existing test files keep their paths and their content.
 
   The test dependencies move from `[extras]` and `[targets]` of `Project.toml` into a new
   `test/Project.toml`. `NeuralNetworkParameters`, `Random`, `SafeTestsets`, `Test` and `Zygote`
@@ -68,13 +68,6 @@ breaking release).
   `GeometricMachineLearning` 0.7, `NeuralNetworkParameters`' `ZygoteRules.pullback` seeds the reverse
   pass with the wrapped `NamedTuple` rather than the container, so `loss_dl` is called with one while
   differentiating and the old `Union{Tuple, NetworkParameters}` was a `MethodError`.
-
-- **The documentation workflow builds the TikZ figure before Documenter runs.** The MNIST tutorial's
-  patch-splitting figure is TikZ, and Documenter's cross-reference check needs the `.png` files to
-  exist. The job installs `texlive-xetex`, `texlive-pictures` and `poppler-utils`, then runs
-  `make all -C docs/src/mnist` after `julia-buildpkg` — after, because the Makefile's `images` target
-  runs in the root environment that `buildpkg` has just instantiated. This is now the fourth
-  repository that legitimately keeps its own `Documenter.yml`, and the file's header says so.
 
 ### Removed
 

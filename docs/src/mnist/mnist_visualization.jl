@@ -17,7 +17,7 @@ const MNIST_FIGURE_COLORS = (
     purple = RGBf(148 / 255, 103 / 255, 189 / 255)
 )
 
-# `color` mixed with white, as TikZ's `color!percent`.
+# `color` mixed with white: `percent` per cent of `color`, the rest white.
 tint(color, percent) = percent / 100 * color + (1 - percent / 100) * RGBf(1, 1, 1)
 
 # A rectangle with rounded corners, as the vertices of a polygon.
@@ -51,7 +51,7 @@ function box_border(from, center, halfwidth, halfheight)
     return Point2f(Point2f(center) + s * d)
 end
 
-# A module of the transformer block: a rounded box with a label, as in the TikZ original.
+# A module of the transformer block: a rounded box with a label.
 function module_box!(ax, center, label; fill, stroke, height)
     halfwidth, halfheight = 32.3, height / 2
     poly!(ax,
@@ -64,12 +64,13 @@ function module_box!(ax, center, label; fill, stroke, height)
 end
 
 """
-    mnist_visualization(image; theme, patch_length = 7)
+    mnist_visualization(image; theme)
 
-Draw the preprocessing figure of the MNIST tutorial for `image`, a square matrix of grey values in
-``[0, 1]``, in the Documenter theme `theme`, `:light` or `:dark`.
+Draw the preprocessing figure of the MNIST tutorial for `image`, a 28 × 28 matrix of grey values
+in ``[0, 1]``, in the Documenter theme `theme`, `:light` or `:dark`. The image is split into
+16 patches of 7 × 7 pixels.
 """
-function mnist_visualization(image::AbstractMatrix; theme::Symbol, patch_length::Integer = 7)
+function mnist_visualization(image::AbstractMatrix; theme::Symbol)
     theme in (:light, :dark) ||
         throw(ArgumentError("theme must be :light or :dark, not $theme"))
     colors = MNIST_FIGURE_COLORS
@@ -77,14 +78,15 @@ function mnist_visualization(image::AbstractMatrix; theme::Symbol, patch_length:
     percent = theme == :dark ? 70 : 40
 
     n = size(image, 1)
+    patch_length = 7
     patches_per_side = n ÷ patch_length
     number_of_patches = patches_per_side^2
     flattened = split_and_flatten(image; patch_length, number_of_patches)
     heatmap_options = (colormap = :oslo, colorrange = (0, 1))
 
-    # The lengths of the TikZ original, in points.
+    # The lengths of the figure, in points.
     cm = 28.45
-    sep = 3.33                       # TikZ's default inner sep around a node
+    sep = 3.33                       # the gap around a drawn element
     original_width = 60.0
     patch_width = 15.0
     column_width = patch_width / patch_length
@@ -141,22 +143,25 @@ function mnist_visualization(image::AbstractMatrix; theme::Symbol, patch_length:
             color = colors.orange, linewidth = 0.4)
     end
 
-    # The flattened image, with one red column per patch.
+    # The flattened image, with one red column per patch. The grid lines are thin against the
+    # columns, which are 2.3 points wide, so that the image stays visible between them.
     final_left = centers[end][1] + column_width / 2 + 2sep + 1cm
     final_width = number_of_patches * final_cell
     final_height = patch_length^2 * final_cell
     final_center = Point2f(final_left + final_width / 2, centers[end][2])
     final_bottom = final_center[2] - final_height / 2
+    grid_width = 0.25
     heatmap!(ax, edges(final_left, final_cell, number_of_patches),
         edges(final_bottom, final_cell, patch_length^2), flattened'; heatmap_options...)
     for k in 0:number_of_patches
         x = final_left + k * final_cell
         lines!(ax, [x, x], [final_bottom, final_bottom + final_height]; color = colors.red,
-            linewidth = 1.6)
+            linewidth = grid_width)
     end
     for y in (final_bottom, final_bottom + final_height)
-        lines!(ax, [final_left - 0.8, final_left + final_width + 0.8], [y, y];
-            color = colors.red, linewidth = 1.6)
+        lines!(
+            ax, [final_left - grid_width / 2, final_left + final_width + grid_width / 2],
+            [y, y]; color = colors.red, linewidth = grid_width)
     end
 
     # The double arrow from the last flattened patch to the flattened image.
@@ -212,10 +217,8 @@ function mnist_visualization(image::AbstractMatrix; theme::Symbol, patch_length:
     # The box around the transformer layer, repeated 16 times.
     encoder = (xmin = x - attention.halfwidth - sep, xmax = right_of_add + sep,
         ymin = attention_residual[2] - sep, ymax = top(add)[2] + sep)
-    lines!(ax,
-        [rounded_rectangle(encoder.xmin, encoder.ymin, encoder.xmax, encoder.ymax);
-         rounded_rectangle(encoder.xmin, encoder.ymin, encoder.xmax, encoder.ymax)[1:1]];
-        color = fg, linewidth = 1.6)
+    poly!(ax, rounded_rectangle(encoder.xmin, encoder.ymin, encoder.xmax, encoder.ymax);
+        color = :transparent, strokecolor = fg, strokewidth = 1.6)
     text!(ax, encoder.xmin - sep, (encoder.ymin + encoder.ymax) / 2; text = "16×",
         align = (:right, :center), color = fg, fontsize = 10)
 

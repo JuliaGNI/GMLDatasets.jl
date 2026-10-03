@@ -18,7 +18,7 @@ end
 
 # The code of every `@setup` block of the named sandbox.
 function setup_blocks(text, sandbox)
-    pattern = Regex("```@setup $(sandbox)\\n(.*?)```", "s")
+    pattern = Regex("```@setup $(sandbox)\\r?\\n(.*?)```", "s")
     return [m.captures[1] for m in eachmatch(pattern, text)]
 end
 

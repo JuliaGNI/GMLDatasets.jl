@@ -7,6 +7,7 @@ if "core" in GROUPS
     @safetestset "MNIST utilities and the classification DataLoader" include("mnist_utils.jl")
     @safetestset "Docstrings" include("docstrings.jl")
     @safetestset "Pendulum dataset" include("pendulum.jl")
+    @safetestset "MNIST tutorial figure" include("quality/mnist_figure.jl")
 end
 if "slow" in GROUPS
     @safetestset "Doctests" include("quality/doctests.jl")

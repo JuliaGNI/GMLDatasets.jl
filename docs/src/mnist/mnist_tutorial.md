@@ -29,9 +29,33 @@ dl = mnist_data_loader(:train; patch_length = patch_length, transform = cu)
 
 This is visualized below:
 
+```@setup mnist_visualization
+# `mnist_visualization.jl` sits beside this page and defines `mnist_visualization`, which draws
+# the figure with CairoMakie. One image is saved per Documenter theme, and the containers below
+# show the one of the active theme.
+using CairoMakie
+using GMLDatasets: mnist
+include("mnist_visualization.jl")
 
+train_x, _ = mnist(:train)
+for theme in (:light, :dark)
+    save("mnist_visualization_$(theme).png", mnist_visualization(train_x[:, :, 8]; theme);
+        px_per_unit = 2)
+end
+```
+
+```@raw html
+<div class="docs-light-only">
+```
 ![Visualization of how the data are preprocessed. An image is first split and then flattened.](mnist_visualization_light.png)
+```@raw html
+</div>
+<div class="docs-dark-only">
+```
 ![Visualization of how the data are preprocessed. An image is first split and then flattened.](mnist_visualization_dark.png)
+```@raw html
+</div>
+```
 
 [`split_and_flatten`](@ref) splits each image into a number of *patches* according to the keyword arguments `patch_length` and `number_of_patches`. We load the test data the same way:
 
@@ -178,8 +202,18 @@ make_error_plot(; theme = :dark) # hide
 make_error_plot(; theme = :light) # hide
 ```
 
+```@raw html
+<div class="docs-light-only">
+```
 ![Comparison between the standard Adam optimizer (blue), the Adam optimizer with weights on the Stiefel manifold (purple), the gradient optimizer with weights on the Stiefel manifold (purple) and the momentum optimizer with weights on the Stiefel manifold (orange).](mnist_training_loss_light.png)
+```@raw html
+</div>
+<div class="docs-dark-only">
+```
 ![Comparison between the standard Adam optimizer (blue), the Adam optimizer with weights on the Stiefel manifold (purple), the gradient optimizer with weights on the Stiefel manifold (purple) and the momentum optimizer with weights on the Stiefel manifold (orange).](mnist_training_loss_dark.png)
+```@raw html
+</div>
+```
 
 !!! note
     We see that the loss value for the Adam optimizer without parameters on the Stiefel manifold is stuck at around 1.34 which means that it *always predicts the same value*. So in 1 out of ten cases we have error 0 and in 9 out of ten cases we have error ``\sqrt{2}``, giving

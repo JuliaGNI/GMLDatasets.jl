@@ -70,6 +70,13 @@ breaking release).
   pass with the wrapped `NamedTuple` rather than the container, so `loss_dl` is called with one while
   differentiating and the old `Union{Tuple, NetworkParameters}` was a `MethodError`.
 
+- **`[compat]` raises four floors to the lowest versions that resolve**, a compat-only change with
+  no change in behaviour: `GeometricIntegrators = "0.18.2"`, `GeometricSolutions = "0.6.5"`,
+  `KernelAbstractions = "0.9.15"` and `MLDatasets = "0.7.13"`, from `0.18`, `0.6`, `0.9` and `0.7`.
+  Under the CI Downgrade job, which forces every dependency to its lower bound, these four resolved
+  to the newer versions above instead, so the old floors advertised versions that the dependency
+  graph cannot select. The upper bounds are unchanged.
+
 ### Removed
 
 - **The TikZ sources of the MNIST figure**: `docs/src/mnist/Makefile`, `final_image.tex`,

@@ -15,7 +15,8 @@
 # (its momenta are the fractions {0, ±2/5, ±3/4, −1, −2, −3} of the separatrix momentum, so every
 # |f| > 1 is negative). A number aggregated over both branches is meaningless: on a two-directional
 # grid one of them is reproduced to a few percent and the other is ~93% off, and that is not a
-# training deficiency. See notes/separatrix_action.tex, "The branch the data never visits".
+# training deficiency: an embedding of both rotating families into one plane has to nest one inside
+# the other, so that family's enclosed areas stay bounded while its actions grow.
 #
 # Why the structural columns. If the encoder embeds the cylinder then its image is an open annulus,
 # its complement has one bounded hole K, and every rotating image encloses K. Then:

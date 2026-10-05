@@ -47,7 +47,7 @@ set -euo pipefail
 # REMOTE=user@host still works for a one-off run that is not worth a config entry.
 REMOTE="${REMOTE:-sae-gpu}"
 # Relative to the remote home, and the name `git clone` gives this repository, so a checkout made
-# by hand from section 1 of the paper's RUN.md and the one this script syncs to are the same
+# by hand and the one this script syncs to are the same
 # directory rather than two.
 REMOTE_DIR="${REMOTE_DIR:-GMLDatasets.jl}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

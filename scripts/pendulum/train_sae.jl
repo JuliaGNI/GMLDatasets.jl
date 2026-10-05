@@ -21,7 +21,7 @@
 #               and so puts training levels at H_L = 0.981 and H_R = 1.008.
 #
 # The second grid is not an improvement of the first, and that is why it is not the default. By the
-# complete-orbit error threshold of the note (notes/separatrix_action.tex, sec:threshold), an encoder
+# complete-orbit error threshold, an encoder
 # that embeds the librating region, the separatrix and one rotating family misses the action on the
 # orbit at H_L or the one at H_R by at least (J_L - J_R)/(J_L + J_R): 15% on the paper's grid, 32% on
 # the separatrix grid, at any capacity and any training length. A run on the separatrix grid

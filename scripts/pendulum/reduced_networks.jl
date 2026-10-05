@@ -47,6 +47,7 @@ if want_gpu
     end
 end
 const gpu_ok  = want_gpu && isdefined(@__MODULE__, :CUDA) && CUDA.functional()
+gpu_ok && include(joinpath(@__DIR__, "cuda_compat.jl"))
 const backend = gpu_ok ? CUDA.CUDABackend() : CPU()
 to_device(A)  = gpu_ok ? CUDA.CuArray(A) : A
 println("Backend: ", gpu_ok ? "CUDA" : "CPU")

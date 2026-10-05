@@ -45,6 +45,7 @@
 # holds the weights and loss curve, allowing plots and further analysis without retraining.
 
 using CUDA
+include(joinpath(@__DIR__, "cuda_compat.jl"))
 using GeometricMachineLearning
 using Random
 

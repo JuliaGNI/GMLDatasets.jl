@@ -125,15 +125,15 @@ case "$MODE" in
         if [ -f out/STATUS ]; then echo "STATUS: $(cat out/STATUS)"; else echo "STATUS: never started"; fi
         echo "session: $(screen -ls 2>/dev/null | grep -c "\.${SESSION}[[:space:]]" || true) live"
         screen -ls 2>/dev/null | sed -n '2,$p' | sed 's/^/  /' || true
-        echo "--- last 30 lines of log_pipeline.txt ---"
-        tail -30 out/log_pipeline.txt 2>/dev/null || true
+        echo "--- last 50 lines of log_pipeline.txt ---"
+        tail -50 out/log_pipeline.txt 2>/dev/null || true
 ENDSSH
       exit 0 ;;
   --attach)
       echo "Attaching to '$SESSION' on $REMOTE. Ctrl-a d detaches and LEAVES IT RUNNING."
       exec ssh -t "${SSH_OPTS[@]}" "$REMOTE" \
           "screen -d -r '$SESSION' || { echo 'The session has ended (finished or failed):'; \
-           cat '$REMOTE_DIR/out/STATUS'; tail -30 '$REMOTE_DIR/out/log_pipeline.txt'; }" ;;
+           cat '$REMOTE_DIR/out/STATUS'; tail -50 '$REMOTE_DIR/out/log_pipeline.txt'; }" ;;
   --stop)
       ssh "${SSH_OPTS[@]}" "$REMOTE" "screen -S '$SESSION' -X quit || true; echo stopped"
       exit 0 ;;
@@ -189,13 +189,15 @@ say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"
 # rather than only the name of the step that had one. From the first ERROR line and not the tail:
 # a Julia stack trace ends in the outermost frames, and with this network's type parameters the
 # last twenty lines are four frames of Chain{...} and never the error itself. Lines are cut for
-# the same reason. The tail is the fallback for a failure that is not a Julia exception.
+# the same reason. Match ERROR anywhere on the line: terminal colour codes or progress output can
+# precede it. Status and attach retain 50 lines so they include this entire 31-line error excerpt.
+# The tail is the fallback for a failure that is not a Julia exception.
 fail () {
     echo "FAILED at \$1" > "\$GML_OUTDIR/STATUS"
     say "FAILED at \$1"
     if [ -n "\${2:-}" ] && [ -f "\$GML_OUTDIR/\$2" ]; then
         { echo "--- \$2, from its first ERROR (lines cut at 300 characters) ---"
-          { grep -m1 -A30 '^ERROR' "\$GML_OUTDIR/\$2" || tail -20 "\$GML_OUTDIR/\$2"; } \\
+          { grep -m1 -A30 'ERROR' "\$GML_OUTDIR/\$2" || tail -20 "\$GML_OUTDIR/\$2"; } \\
               | cut -c1-300; } \\
             | tee -a "\$GML_OUTDIR/log_pipeline.txt"
     fi

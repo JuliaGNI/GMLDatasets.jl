@@ -17,8 +17,8 @@
 #
 # Everything a run varies is an environment variable, so a sweep needs no file edits on the remote:
 #
-#   SAE_SEED=123 SAE_FRACS=one SAE_TSPAN=40 SAE_EPOCHS=12000 SAE_UPSCALE=20 \
-#     SAE_ETA=1e-4 SAE_OUT=pendulum_sae.h5 SESSION=sae \
+#   SAE_GRID=paper SAE_SEED=123 SAE_FRACS=one SAE_TSPAN=40 SAE_EPOCHS=3000 SAE_UPSCALE=20 \
+#     SAE_ETA=1e-3 SAE_BATCH=2048 SAE_OUT=pendulum_sae.h5 SESSION=sae \
 #     bash scripts/pendulum/run_on_nvidia.sh
 #
 # Give each concurrent run its own SESSION and SAE_OUT, and its own GML_OUTDIR for the fetch.
@@ -53,14 +53,19 @@ REMOTE_DIR="${REMOTE_DIR:-GMLDatasets.jl}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SESSION="${SESSION:-sae}"
 
-# Forwarded to the scripts on the remote; see train_sae.jl.
+# Forwarded to the scripts on the remote, with train_sae.jl's defaults; see its header.
+SAE_GRID="${SAE_GRID:-paper}"
 SAE_SEED="${SAE_SEED:-123}"
 SAE_FRACS="${SAE_FRACS:-one}"
 SAE_TSPAN="${SAE_TSPAN:-40}"
-SAE_EPOCHS="${SAE_EPOCHS:-12000}"
+SAE_EPOCHS="${SAE_EPOCHS:-3000}"
 SAE_UPSCALE="${SAE_UPSCALE:-20}"
-SAE_ETA="${SAE_ETA:-1e-4}"
-SAE_BATCH="${SAE_BATCH:-256}"
+SAE_ETA="${SAE_ETA:-1e-3}"
+SAE_BATCH="${SAE_BATCH:-2048}"
+SAE_CHECK_EVERY="${SAE_CHECK_EVERY:-100}"
+SAE_NSAMP="${SAE_NSAMP:-1600}"
+SAE_PATIENCE="${SAE_PATIENCE:-500}"
+SAE_MIN_GAIN="${SAE_MIN_GAIN:-0.01}"
 SAE_OUT="${SAE_OUT:-pendulum_sae.h5}"
 RUN_STEP2="${RUN_STEP2:-1}"
 RUN_TRAIN=1
@@ -181,7 +186,8 @@ mkdir -p "\$GML_OUTDIR"
 : > "\$GML_OUTDIR/log_pipeline.txt"
 export SAE_SEED="${SAE_SEED}" SAE_FRACS="${SAE_FRACS}" SAE_TSPAN="${SAE_TSPAN}"
 export SAE_EPOCHS="${SAE_EPOCHS}" SAE_UPSCALE="${SAE_UPSCALE}" SAE_ETA="${SAE_ETA}"
-export SAE_BATCH="${SAE_BATCH}" SAE_OUT="${SAE_OUT}"
+export SAE_BATCH="${SAE_BATCH}" SAE_OUT="${SAE_OUT}" SAE_GRID="${SAE_GRID}"
+export SAE_CHECK_EVERY="${SAE_CHECK_EVERY}" SAE_NSAMP="${SAE_NSAMP}" SAE_PATIENCE="${SAE_PATIENCE}" SAE_MIN_GAIN="${SAE_MIN_GAIN}"
 ${JULIA:+export JULIA="${JULIA}"}
 
 say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"; }
@@ -240,7 +246,7 @@ say "instantiate"
 
 export SAE_WEIGHTS="\$GML_OUTDIR/${SAE_OUT}"
 if [ "${RUN_TRAIN}" = "1" ]; then
-    say "train  (seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA})"
+    say "train  (grid=${SAE_GRID} seed=${SAE_SEED} fracs=${SAE_FRACS} tspan=${SAE_TSPAN} epochs=${SAE_EPOCHS} upscale=${SAE_UPSCALE} eta=${SAE_ETA} batch=${SAE_BATCH})"
     "\${JULIA_CMD[@]}" --project=scripts scripts/pendulum/train_sae.jl \\
         > "\$GML_OUTDIR/log_train_sae.txt" 2>&1 || fail train log_train_sae.txt
     # Progress output can precede the buffered backend line in the redirected log.

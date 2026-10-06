@@ -44,9 +44,11 @@ const H_sep    = 1.0
 const NPLOT    = 1500
 const NQUAD    = 16_000
 
-const arch = SymplecticAutoencoder(4, 2; n_encoder_blocks=2, n_decoder_blocks=2,
-    n_encoder_layers=10, n_decoder_layers=20, n_decoder_output_layers=10, sympnet_upscale=20)
-const nn  = load(NeuralNetwork, sae_path, arch)
+# Either autoencoder; the file says which (architectures.jl). For a standard autoencoder the
+# decoder is not symplectic, and the last column of the table, the relative difference between the
+# latent area and the action of the decoded curve, is no longer small.
+include(joinpath(@__DIR__, "architectures.jl"))
+const nn  = load_pendulum_network(sae_path)
 const enc = encoder(nn)
 const dec = decoder(nn)
 

@@ -43,8 +43,8 @@
 #
 # Environment:
 #   SAE_WEIGHTS   <GML_OUTDIR>/pendulum_sae.h5   the file to evaluate
-#   SAE_UPSCALE   20               must match the run being evaluated, or `load` fails -- or, worse,
-#                                  succeeds on the wrong shapes
+#   (the architecture, symplectic or standard, and its sizes are read from the file's attributes;
+#    files without them hold the symplectic autoencoder at sympnet_upscale = 20)
 #   SAE_NSAMP     1600             points per level set
 #
 # Needs GeometricMachineLearning 0.6 or newer and HDF5. It does NOT need PoincareInvariants,
@@ -58,10 +58,9 @@ const weights = get(ENV, "SAE_WEIGHTS",
     joinpath(get(ENV, "GML_OUTDIR", pwd()), "pendulum_sae.h5"))
 const NSAMP   = parse(Int, get(ENV, "SAE_NSAMP", "1600"))
 
-const arch = SymplecticAutoencoder(4, 2; n_encoder_blocks=2, n_decoder_blocks=2,
-    n_encoder_layers=10, n_decoder_layers=20, n_decoder_output_layers=10,
-    sympnet_upscale=parse(Int, get(ENV, "SAE_UPSCALE", "20")))
-const nn  = load(NeuralNetwork, weights, arch)
+# Either autoencoder; the file says which (architectures.jl).
+include(joinpath(@__DIR__, "architectures.jl"))
+const nn  = load_pendulum_network(weights)
 const enc = encoder(nn)
 const dec = decoder(nn)
 emb(θ, p) = embed(enc, θ, p)
@@ -83,8 +82,7 @@ Am, Ap = signed_area(gm), signed_area(gp)
 
 println("─"^100)
 @printf("weights  %s\n", weights)
-@printf("arch     sympnet_upscale = %s, %d parameters\n",
-        get(ENV, "SAE_UPSCALE", "20"), parameterlength(nn))
+@printf("arch     %s, %d parameters\n", nameof(typeof(nn.architecture)), parameterlength(nn.model))
 println("─"^100)
 @printf("gamma_-  signed area %+9.4f        gamma_+  signed area %+9.4f\n", Am, Ap)
 @printf("  librating limit  |gm| - |gp| = %8.4f   against a true 16\n", abs(Am) - abs(Ap))

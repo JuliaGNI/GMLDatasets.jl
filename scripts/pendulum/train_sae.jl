@@ -3,6 +3,11 @@
 # Run from the repository root:
 #
 #   julia --project=scripts scripts/pendulum/train_sae.jl
+#   AE_ARCH=standard julia --project=scripts scripts/pendulum/train_sae.jl
+#
+# AE_ARCH=standard trains a `StandardAutoencoder` of Dense layers instead, at about the same number of
+# parameters, on the same data with the same loss, optimizer and checkpoint selection, to compare the
+# two latent spaces (see architectures.jl). It writes pendulum_ae.h5 unless SAE_OUT says otherwise.
 #
 # `pendulum` integrates a grid of initial conditions and `angular_to_euclidean` lifts them into ℝ⁴,
 # where the bob traces the tangent bundle of a circle — a two-dimensional submanifold sitting in four
@@ -90,14 +95,19 @@ LinearAlgebra.generic_trimatdiv!(C::CuMatrix{T}, uploc, isunitc, tfun::Function,
 # last, which is the epoch whose weights that run kept. Batch 2048 at step 1e-3 reaches a lower loss per epoch and
 # runs about three times faster per epoch on the CPU of an M4 Max. A test run on the paper's grid with
 # -5/2 in place of -1 passed the embedding checks after 1100 epochs.
-const reduced_dim = 2
+include(joinpath(@__DIR__, "architectures.jl"))
+
+const arch_kind  = get(ENV, "AE_ARCH", "symplectic")
 const n_epochs   = parse(Int,     get(ENV, "SAE_EPOCHS",  "3000"))
 const batch_size = parse(Int,     get(ENV, "SAE_BATCH",   "2048"))
 const step_size  = parse(Float32, get(ENV, "SAE_ETA",     "1e-3"))
 const seed       = parse(Int,     get(ENV, "SAE_SEED",    "123"))
 const upscale    = parse(Int,     get(ENV, "SAE_UPSCALE", "20"))
 const outdir     = mkpath(get(ENV, "GML_OUTDIR", pwd()))
-const output     = joinpath(outdir, get(ENV, "SAE_OUT", "pendulum_sae.h5"))
+const width      = parse(Int,     get(ENV, "AE_WIDTH",    "31"))
+const layers     = parse(Int,     get(ENV, "AE_LAYERS",   "3"))
+const output     = joinpath(outdir, get(ENV, "SAE_OUT",
+    arch_kind == "standard" ? "pendulum_ae.h5" : "pendulum_sae.h5"))
 const check_every     = parse(Int,     get(ENV, "SAE_CHECK_EVERY", "100"))
 const check_nsamp     = parse(Int,     get(ENV, "SAE_NSAMP",       "1600"))
 const patience        = parse(Int,     get(ENV, "SAE_PATIENCE",    "500"))
@@ -143,15 +153,10 @@ println("grid $grid: $(length(solution)) trajectories, H ∈ [",
 data = to_device(Float32.(angular_to_euclidean(solution)))
 dl = DataLoader(data; autoencoder = true, suppress_info = true)
 
-# `SymplecticAutoencoder` caps the number of blocks at `full_dim - reduced_dim`, which is 2 here, so
-# the depth has to come from the layers inside each block rather than from more blocks.
-architecture = SymplecticAutoencoder(dl.input_dim, reduced_dim;
-    n_encoder_blocks = 2,
-    n_decoder_blocks = 2,
-    n_encoder_layers = 10,
-    n_decoder_layers = 20,
-    n_decoder_output_layers = 10,
-    sympnet_upscale = upscale)
+# Both networks are defined in architectures.jl. `SymplecticAutoencoder` caps the number of blocks at
+# `full_dim - reduced_dim`, which is 2 here, so its depth comes from the layers inside each block.
+@assert dl.input_dim == full_dim
+architecture = pendulum_architecture(arch_kind; upscale, width, layers)
 # Initialized on the host and then moved, rather than initialized on the device. Initialization is
 # the one place a host RNG meets device arrays, and `PSDLayer`'s orthonormal starting weight is a
 # Cholesky factorization of a device matrix there — code no CPU run ever exercises. The CUDA run
@@ -197,7 +202,11 @@ function write_weights(path, nn, losses, history, selected)
         attrs["selected_epoch"] = selected
         attrs["checks_passed"] = selected > 0 ? 1 : 0
         attrs["reduced_dim"] = reduced_dim
+        attrs["architecture"] = arch_kind
         attrs["sympnet_upscale"] = upscale
+        attrs["width"] = width
+        attrs["layers"] = layers
+        attrs["n_parameters"] = parameterlength(nn.model)
         attrs["batch_size"] = batch_size
         attrs["step_size"] = step_size
         attrs["grid"] = grid

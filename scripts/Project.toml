@@ -42,6 +42,9 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 # unreleased; 0.6.1 carries it, so the environment resolves it from the registry like everything else.
 [sources]
 GMLDatasets = {path = ".."}
+# `StandardAutoencoder`, for the comparison with the symplectic autoencoder, is not released yet
+# (JuliaGNI/GeometricMachineLearning.jl#336). Drop this line once a release has it.
+GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl", rev = "add/standard-autoencoder"}
 
 # A floor, not a pin. `GeometricOptimizers` 0.7 builds `similar(::StiefelLieAlgHorMatrix)` on the
 # host whatever backend the argument is on, so on a GPU the Adam cache of every Stiefel layer mixes a

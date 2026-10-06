@@ -105,17 +105,33 @@ let fig = Figure(size=(1220, 480), fontsize=25)
         ax.topspinevisible=false; ax.rightspinevisible=false
     end
     cr = (minimum(H_levels), maximum(H_levels))
-    let (θs,pθs,_) = level_set(H_sep - 1e-9)      # separatrix: the H→1 limit of the librating family
-        lines!(ax1, θs, pθs; color=(:black,0.6), linewidth=2.4, linestyle=:dash)
-        Z = encode(θs,pθs)
-        lines!(ax2, [z[1] for z in Z], [z[2] for z in Z]; color=(:black,0.6), linewidth=2.4, linestyle=:dash)
-    end
     for H in H_levels
         θs,pθs,_ = level_set(H)
-        lines!(ax1, θs, pθs; color=H, colormap=:viridis, colorrange=cr, linewidth=2.6)
+        lines!(ax1, θs, pθs; color=H, colormap=:viridis, colorrange=cr, linewidth=2.2)
         Z = encode(θs,pθs)
-        lines!(ax2, [z[1] for z in Z], [z[2] for z in Z]; color=H, colormap=:viridis, colorrange=cr, linewidth=2.6)
+        lines!(ax2, [z[1] for z in Z], [z[2] for z in Z]; color=H, colormap=:viridis, colorrange=cr, linewidth=2.2)
     end
+    # The separatrix goes on top of the level sets, which otherwise hide it: the rotating images
+    # run along γ₋ almost all the way round. Each branch is drawn on its own, ℓ₋ (pθ < 0) solid and
+    # ℓ₊ (pθ > 0) dashed, over a white halo, and with them the point P where they meet: twice in
+    # angular coordinates (θ = 0 and θ = 2π), once in the latent plane.
+    sep = :red3
+    sepbranch(lo, hi) = (k = sqrt((1 + H_sep - 1e-12)/2); s = range(lo, hi; length=NPLOT);
+        (π .+ 2 .* asin.(clamp.(k .* sin.(s), -1, 1)), 2 .* k .* cos.(s)))
+    for ((θs, pθs), ls) in ((sepbranch(π/2, 3π/2), :solid), (sepbranch(-π/2, π/2), :dash))
+        Z = encode(θs, pθs)
+        for (ax, x, y) in ((ax1, θs, pθs), (ax2, [z[1] for z in Z], [z[2] for z in Z]))
+            lines!(ax, x, y; color=:white, linewidth=7.5)
+            lines!(ax, x, y; color=sep, linewidth=3.6, linestyle=ls)
+        end
+    end
+    P = enc(lift(0.0, 0.0))
+    scatter!(ax1, [0, 2π], [0, 0]; color=:black, strokecolor=:white, strokewidth=2.5, markersize=19)
+    scatter!(ax2, [P[1]], [P[2]]; color=:black, strokecolor=:white, strokewidth=2.5, markersize=19)
+    text!(ax1, [0, 2π], [0, 0]; text=[L"P", L"P"], align=[(:right, :center), (:left, :center)],
+          offset=[(-12, 0), (12, 0)], fontsize=25)
+    xlims!(ax1, -0.65, 2π + 0.65)
+    text!(ax2, P[1], P[2]; text=L"P", align=(:left, :center), offset=(12, 0), fontsize=25)
     Colorbar(fig[1,3]; colormap=:viridis, colorrange=cr, label=L"H",
              ticks=[-0.4,0.0,0.5,1.0,1.4], labelsize=25)
     colgap!(fig.layout,1,55); colgap!(fig.layout,2,12)

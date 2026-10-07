@@ -1,0 +1,17 @@
+# GeometricOptimizers with the training step and its observer (JuliaGNI/GeometricOptimizers.jl#147,
+# stacked on #121). Only what `training_step.jl` needs, so that this resolves while the scripts
+# environment waits for GeometricOptimizers 0.9; see the comment above `[sources]` there.
+[deps]
+GeometricOptimizers = "fc236c15-5557-4942-aa65-b650f329279e"
+NeuralNetworkParameters = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+GeometricOptimizers = {url = "https://github.com/JuliaGNI/GeometricOptimizers.jl.git", rev = "training-step-observer"}
+
+[compat]
+NeuralNetworkParameters = "0.4.2"
+SimpleSolvers = "0.14"

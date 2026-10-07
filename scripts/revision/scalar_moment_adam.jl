@@ -20,10 +20,11 @@
 import GeometricOptimizers
 
 """
-    scalar_moment_adam_method(T; beta1, beta2, epsilon, ambient_norm)
+    scalar_moment_adam_method(; beta1, beta2, epsilon, ambient_norm)
 
-The `scalar-moment-adam` method for parameters of element type `T`: `ScalarMomentAdam` on the
-manifold leaves, ordinary `Adam` on the rest, with the same coefficients on both.
+The `scalar-moment-adam` method: `ScalarMomentAdam` on the manifold leaves, ordinary `Adam` on the
+rest, with the same coefficients on both. Like every method of `GeometricOptimizers` it carries no
+element type; the optimizer converts each leaf's method to the element type of that leaf.
 
 `ambient_norm` chooses which ‖·‖² the scalar second moment accumulates — `true` is the faithful
 [li2020efficient] Algorithm 2 ambient norm, `false` the `GeometricOptimizers` quotient-space norm and
@@ -35,12 +36,12 @@ and the rate is the line search's, and the two leaf kinds scale the same number 
 scalar-moment direction has magnitude ≈ 1 in total where `Adam`'s has ≈ 1 per component — which is
 why this baseline is tuned at its own rate and why that rate is the caller's to pass.
 """
-function scalar_moment_adam_method(::Type{T}; beta1 = 9.0e-1, beta2 = 9.9e-1,
-        epsilon = 1.0e-8, ambient_norm::Bool = false) where {T <: AbstractFloat}
+function scalar_moment_adam_method(; beta1 = 9.0e-1, beta2 = 9.9e-1,
+        epsilon = 1.0e-8, ambient_norm::Bool = false)
     GeometricOptimizers.CompositeMethod(;
-        manifold = GeometricOptimizers.ScalarMomentAdam(T;
-            β₁ = T(beta1), β₂ = T(beta2), δ = T(epsilon), ambient_norm = ambient_norm),
-        array = GeometricOptimizers.Adam(T; β₁ = T(beta1), β₂ = T(beta2), δ = T(epsilon)))
+        manifold = GeometricOptimizers.ScalarMomentAdam(;
+            β₁ = beta1, β₂ = beta2, δ = epsilon, ambient_norm = ambient_norm),
+        array = GeometricOptimizers.Adam(; β₁ = beta1, β₂ = beta2, δ = epsilon))
 end
 
 """The `second_moment` a run record quotes for the baseline, which is the mode it actually ran."""

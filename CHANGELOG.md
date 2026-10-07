@@ -37,10 +37,24 @@ breaking release).
   and both networks here are mixed trees, so it has to be assembled around the released method.
   That assembly is `GeometricOptimizers.CompositeMethod`, upstream, and
   `scripts/revision/scalar_moment_adam.jl` is the whole of what is local about it: the coefficients,
-  and which ‖·‖² the second moment accumulates. What each trainer still owns is its *step loop*,
-  because the two drive different ones — this repository's image trainer drives
-  `GeometricOptimizers` directly (`scripts/geometric_optimizers/leaf_composite.jl`) and the pendulum
-  trainer goes through `GeometricMachineLearning`'s training loop.
+  and which ‖·‖² the second moment accumulates. Both trainers step it with one
+  `GeometricOptimizers.TrainingOptimizer`, which keeps a cache and a state per leaf for a
+  composite: the image trainer directly (`scripts/geometric_optimizers/training_step.jl`), the
+  pendulum trainer through `GeometricMachineLearning`'s training loop.
+
+  **The image trainer takes the training step of `GeometricOptimizers`**, `optimization_step!` of a
+  `TrainingOptimizer`, with the gradient of the current minibatch passed in, instead of driving
+  `solver_step!` and the state `update!` itself. The old step evaluated the objective once per step
+  for its `NaN` guard, a forward pass charged to none of the timing categories, and retracted the
+  state's section a second time after the step. It also built each step from the gradient
+  `solver_step!` had refreshed at the end of the previous step — at the current point, but on the
+  previous minibatch — because the state update left the point and the section matching; the
+  per-leaf composite loop invalidated the caches against exactly this, the whole-tree path did
+  not. The new step evaluates one gradient per step, on its own minibatch, and
+  `scripts/geometric_optimizers/test_training_step.jl` pins that for all four configurations it
+  steps, together with one interval of each timing category per step. `leaf_composite.jl` and its
+  test are gone: the composite is one `TrainingOptimizer` now. The methods carry no element type
+  (`Adam()`, not `Adam(T)`); the optimizer converts them, with the same coefficients as before.
   The pendulum trainer defaults to 1000 epochs, configurable via `SAE_N_EPOCHS`.
 
   **The retraction benchmark is not here.** It is `scripts/retraction_records.jl` in

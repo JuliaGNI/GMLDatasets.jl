@@ -55,8 +55,7 @@ if functional
     let Q = Matrix(qr!(randn(Float32, 4, 2)).Q)[:, 1:2], Y = StiefelManifold(CUDA.cu(Q)),
         ps = NetworkParameters((weight = Y,))
 
-        GeometricOptimizers.OptimizerCache(Adam(Float32), ps)
-        GeometricOptimizers.OptimizerState(Adam(Float32), ps)
+        GeometricOptimizers.TrainingOptimizer(ps; algorithm = Adam())
         println("geometric_optimizers_device_cache=true")
 
         rgrad(Y, randn(Float32, 4, 2)) isa CUDA.CuArray || error(

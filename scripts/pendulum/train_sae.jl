@@ -66,15 +66,15 @@ function configuration(T::Type{<:AbstractFloat})
     key = only(selected)
     methods = Dict(
         "geometric-adam-cayley" => (learning_rate = T(LEARNING_RATE),
-            method = GeometricOptimizers.Adam(T;
-                β₁ = T(ADAM_BETA1), β₂ = T(ADAM_BETA2), δ = T(ADAM_EPSILON))),
+            method = GeometricOptimizers.Adam(;
+                β₁ = ADAM_BETA1, β₂ = ADAM_BETA2, δ = ADAM_EPSILON)),
         "scalar-moment-adam" => (learning_rate = T(SCALAR_MOMENT_LEARNING_RATE),
-            method = scalar_moment_adam_method(T;
+            method = scalar_moment_adam_method(;
                 beta1 = ADAM_BETA1, beta2 = ADAM_BETA2, epsilon = ADAM_EPSILON)),
         "gradient" => (learning_rate = T(LEARNING_RATE),
             method = GeometricOptimizers.GradientMethod()),
         "momentum" => (learning_rate = T(LEARNING_RATE),
-            method = GeometricOptimizers.MomentumMethod(T(MOMENTUM_COEFFICIENT)))
+            method = GeometricOptimizers.MomentumMethod(; α = MOMENTUM_COEFFICIENT))
     )
     merge((key = key,), CONFIGURATIONS[key], methods[key])
 end

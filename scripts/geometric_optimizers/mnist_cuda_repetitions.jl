@@ -26,8 +26,8 @@
 # By default it repeats geometric Adam with Stiefel weights and the package-default Cayley
 # retraction, which is the configuration the paper's result rests on. This is not Cayley ADAM:
 # the `scalar-moment-adam` configuration runs `ScalarMomentAdam` from Li et al. (2020) through the
-# shared `CompositeMethod` of `scripts/revision/scalar_moment_adam.jl`, stepped per leaf by
-# `leaf_composite.jl`.
+# shared `CompositeMethod` of `scripts/revision/scalar_moment_adam.jl`, which the one
+# `TrainingOptimizer` of `training_step.jl` steps with a cache and a state per leaf.
 # `MNIST_CONFIGURATIONS` selects other configurations. For `gradient` and `momentum` the default
 # (a seed per repetition) measures the spread over *initializations*, which is a meaningful
 # number but a different one; with `MNIST_VARY_SEED=0` those two would reproduce their run and
@@ -108,8 +108,6 @@
 # carries the same code for everything below the loop.
 
 using GeometricOptimizers
-using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!,
-                           observe_optimizer_phase
 using GMLDatasets: split_and_flatten, onehotbatch
 # `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
 # package that owns a parameter set and does its flattening. This script used to reach the old one
@@ -119,7 +117,6 @@ using GMLDatasets: split_and_flatten, onehotbatch
 using NeuralNetworkParameters: NetworkParameters, flatten, flatten!, freeparameters,
                                mapparameters,
                                parameterlayout, parameterrange, flatlength
-using SimpleSolvers: Static
 using LinearAlgebra: norm, I, Adjoint, Transpose
 using NNlib: batched_mul, batched_transpose, softmax, BatchedAdjOrTrans
 using Printf: @printf, @sprintf
@@ -135,11 +132,11 @@ using .RunRecords
 # The timer is definitions-only and is shared with its focused deterministic regression.
 include("step_timing.jl")
 
-# The `scalar-moment-adam` method, which both trainers build from the same file, and the per-leaf
-# step loop this script takes over its flat container. The regression test includes both as well, so
-# it exercises the code the run uses.
+# The `scalar-moment-adam` method, which both trainers build from the same file, and the optimizer
+# step this script takes once per minibatch. The regression test includes the step as well, so it
+# exercises the code the run uses.
 include(joinpath(@__DIR__, "..", "revision", "scalar_moment_adam.jl"))
-include("leaf_composite.jl")
+include("training_step.jl")
 
 # --------------------------------------------------------------------------- device ---
 
@@ -550,8 +547,8 @@ end
 
 # --------------------------------------------------------------- objective & gradient ---
 
-# The `Optimizer` calls the objective on the parameter container and `∇F!` on the
-# *flattened* parameters, both of which live on the host. The current batch is on the device.
+# The loss is evaluated on the parameter container and `∇F!` on the *flattened* parameters, both of
+# which live on the host. The current batch is on the device.
 const current_batch = Ref{Tuple{AbstractArray{T, 3}, AbstractMatrix{T}}}()
 
 function F(ps::NetworkParameters)
@@ -702,14 +699,13 @@ This is `train` of `mnist_cuda.jl` with the seed as a keyword argument instead o
 which is the whole difference between the two scripts below the run loop — and with the
 repetition written into the loss CSV.
 
-`algorithm` is a method of `GeometricOptimizers`. All but one are stepped as one whole-tree
-`Optimizer`/`OptimizerState` per repetition; a `CompositeMethod` — which is what the
-`scalar-moment-adam` baseline is, because `ScalarMomentAdam` takes a single `StiefelManifold` and
-this is a mixed tree — is stepped through `LeafComposite`, one `Optimizer`/`OptimizerState` per leaf
-of `ps` in parameter-layout order, sharing the one whole-tree `∇F!` of the step. Everything else in
-this function — the seed, the batches, the loss series, the evaluation cadence, the stopping rule —
-is the same either way, so the repetitions stay comparable except for the one thing that differs on
-purpose, the optimizer.
+`algorithm` is a method of `GeometricOptimizers`, stepped by one `TrainingOptimizer` over the
+whole parameter set per repetition (see `training_step.jl`). That includes the `CompositeMethod` of
+the `scalar-moment-adam` baseline, which `ScalarMomentAdam` needs because it takes a single
+`StiefelManifold` and this is a mixed tree: the optimizer keeps a cache and a state per leaf for it.
+Everything else in this function — the seed, the batches, the loss series, the evaluation cadence,
+the stopping rule — is the same for every configuration, so the repetitions stay comparable except
+for the one thing that differs on purpose, the optimizer.
 
 One line per epoch goes into the report as the epoch finishes, so the file describes a run
 that is still in progress just as well as a finished one. `label` is what those lines are
@@ -735,12 +731,10 @@ function train(
     # can need quoting — the display names contain commas. Quote it once here rather than writing
     # the quotes by hand inside a loop that runs once per optimizer step.
     quoted_run_name = csv_field(run_name)
-    per_leaf = algorithm isa GeometricOptimizers.CompositeMethod
 
-    # Note that the learning rate is supplied through the line search: the *methods* only determine
-    # the direction. `Static(learning_rate)` is what `Optimizer` defaults to for these methods
-    # anyway; it is written out so that the rate is visible right here, and the per-leaf composite
-    # takes the same rate by the same route, through each leaf's own line search.
+    # Note that the learning rate is supplied as the step size: the *methods* only determine the
+    # direction. `TrainingStep` passes it as `Static(learning_rate)`, for the composite too, whose
+    # leaves all take the one rate.
     #
     # Rebuilding after the unrecorded warm-up below restores the exact seeded parameters, global
     # sections, optimizer caches, and data-order RNG that a run without warm-up would have had.
@@ -748,39 +742,18 @@ function train(
         Random.seed!(seed)
         repetition_rng = Random.Xoshiro(seed)
         parameters = initial_parameters(repetition_rng, stiefel)
-        if per_leaf
-            local_leaves = LeafComposite(
-                parameters, ∇F!, algorithm, learning_rate; observer = timer)
-            return repetition_rng, parameters, local_leaves, nothing, nothing
-        end
-        local_optimizer = Optimizer(parameters, F; (∇F!) = ∇F!, algorithm = algorithm,
-            linesearch = Static(learning_rate), observer = timer)
-        local_state = OptimizerState(algorithm, parameters)
-        initialize_state!(local_state)
-        repetition_rng, parameters, nothing, local_optimizer, local_state
-    end
-
-    function optimizer_step!(parameters, leaves, optimizer, state)
-        if per_leaf
-            composite_step!(leaves, parameters)
-        else
-            observe_optimizer_phase(timer, :optimizer_state_direction) do
-                increase_iteration_number!(state)
-                solver_step!(parameters, state, optimizer)
-                GeometricOptimizers.update!(state, optimizer, parameters)
-            end
-        end
-        nothing
+        step = TrainingStep(parameters, ∇F!, algorithm, learning_rate; observer = timer)
+        repetition_rng, parameters, step
     end
 
     # Compile and launch the exact optimizer path once, then discard both the sample and all state
     # it touched. The measured run starts only after an identically seeded reconstruction and a
     # timer reset, so compilation and warm-up cannot leak into a steady-state component total.
-    rng, ps, leaves, optimizer, state = fresh_training_state()
-    optimizer_step!(ps, leaves, optimizer, state)
+    rng, ps, step = fresh_training_state()
+    training_step!(ps, step)
     synchronize_device()
     reset_step_timing!(timer)
-    rng, ps, leaves, optimizer, state = fresh_training_state()
+    rng, ps, step = fresh_training_state()
 
     losses = T[]
     epoch_losses = T[]
@@ -804,7 +777,7 @@ function train(
             # the batch is gathered on the host and uploaded; at 6.4 MB per batch this is
             # negligible next to the forward and backward passes
             current_batch[] = (to_device(input[:, :, batch]), to_device(output[:, batch]))
-            optimizer_step!(ps, leaves, optimizer, state)
+            training_step!(ps, step)
             loss = F(ps)
             push!(losses, loss)
             epoch_loss += loss / n_batches
@@ -869,27 +842,26 @@ end
 # `mnist_cuda.jl` for why, and why a flat loss there is the experiment working rather than a
 # defect).
 #
-# `Adam` takes the *element type* of the parameters, not a learning rate, and it is not
-# converted the way `MomentumMethod` is, so `Adam(T)` is what dispatches to the `Float32`
-# cache. `scalar_moment_adam_method` is the shared `CompositeMethod` of
+# The methods carry no element type: the `TrainingOptimizer` converts them to the element type of
+# the parameters, `Float32` here. `scalar_moment_adam_method` is the shared `CompositeMethod` of
 # `scripts/revision/scalar_moment_adam.jl` — `ScalarMomentAdam` on the Stiefel leaves, ordinary
 # `Adam` on the Euclidean ones — which the pendulum trainer builds from the same call. Its
 # `second_moment` is the one entry that overrides the shared table, because which ‖·‖² the scalar
 # moment accumulates is an environment setting.
 const trainer_settings = Dict(
-    "geometric-adam-cayley" => (stiefel = true, learns = true, algorithm = Adam(T),
+    "geometric-adam-cayley" => (stiefel = true, learns = true, algorithm = Adam(),
         learning_rate = learning_rate),
     "scalar-moment-adam" => (stiefel = true, learns = true,
-        algorithm = scalar_moment_adam_method(T;
+        algorithm = scalar_moment_adam_method(;
             ambient_norm = scalar_moment_adam_ambient_norm),
         learning_rate = scalar_moment_adam_learning_rate,
         second_moment = scalar_moment_description(scalar_moment_adam_ambient_norm)),
-    "standard-adam" => (stiefel = false, learns = false, algorithm = Adam(T),
+    "standard-adam" => (stiefel = false, learns = false, algorithm = Adam(),
         learning_rate = learning_rate),
     "gradient" => (stiefel = true, learns = true, algorithm = GradientMethod(),
         learning_rate = learning_rate),
     "momentum" =>
-        (stiefel = true, learns = true, algorithm = MomentumMethod(momentum_coefficient),
+        (stiefel = true, learns = true, algorithm = MomentumMethod(; α = momentum_coefficient),
             learning_rate = learning_rate)
 )
 

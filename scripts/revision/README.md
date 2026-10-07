@@ -12,17 +12,23 @@ Resolve and instantiate the scripts environment before disconnecting from the ne
 julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
 ```
 
-`scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from `main`,
-because the harness needs four things that are not in a release: the optimizer step observer and
-`PhaseTimer` of [`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78);
-the backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
+`scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from GitHub
+branches rather than from the registry, because the harness needs things that are not in a
+release: the optimizer step observer and `PhaseTimer` of
+[`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78); the
+backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
 [#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and
-[#85](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/85); `CompositeMethod` and the seams
-that go with it, which is how the `scalar-moment-adam` baseline is assembled over a mixed parameter
-tree; and `scripts/retraction_records.jl`, the retraction benchmark, which lives beside the
-algorithms it measures. Use `Pkg.update` rather than `Pkg.instantiate` or `Pkg.resolve`: to
-`resolve` a `rev = "main"` source is a fixed pin, so it reports a stale commit as satisfiable and
-leaves the environment silently behind `main`.
+[#85](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/85); the training step
+`TrainingOptimizer` ([#124](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/124)), the
+`CompositeMethod` the `scalar-moment-adam` baseline is assembled with
+([#121](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/121)) and the observer on the
+training step ([#147](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/147)); and
+`scripts/retraction_records.jl`, the retraction benchmark, which lives beside the algorithms it
+measures ([#122](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/122)). The comment above
+`[sources]` in `scripts/Project.toml` names each branch and when it goes back to `main`. Use
+`Pkg.update` rather than `Pkg.instantiate` or `Pkg.resolve`: to `resolve` a `rev` source is a fixed
+pin, so it reports a stale commit as satisfiable and leaves the environment silently behind the
+branch.
 
 `Manifest.toml` is **not** tracked. A manifest pinning two moving branch commits goes stale the day
 after it is committed; every run bundle instead carries the manifest that run actually resolved,
@@ -89,22 +95,20 @@ exclusive categories. It synchronizes the active CUDA device immediately before 
 exit timestamp; the same boundary calls are no-ops on CPU. When phases nest, the enclosing timer is
 paused, so the categories never overlap:
 
-- **Gradient/AD** begins immediately before the flat gradient callback and ends when it returns. It
-  includes the reverse pass and its output write, but not the subsequent Riemannian tangent
-  projection. The per-leaf composite observes its one shared whole-tree gradient and suppresses
-  gradient events for leaf callbacks that only copy slices of that frozen gradient.
-- **Optimizer-state/direction** begins before `increase_iteration_number!` and ends after
-  `solver_step!` and the following state `update!`. Its exclusive intervals include state, cache,
-  moment, direction, line-search-control, and tangent-projection work. For the per-leaf composite,
-  they also include parameter flattening, cache invalidation, leaf gradient-slice copies, and the
-  sequential leaf bookkeeping. Nested gradient, objective, and retraction/application intervals
-  are excluded.
-- **Retraction/application** begins immediately before and ends immediately after each observed
-  trial or accepted retraction/application operation. It includes the associated section updates
-  and solution/parameter application copies, but excludes any nested gradient interval.
+- **Gradient/AD** begins before the parameters are flattened for the gradient callback and ends
+  when the flat gradient has been read back into the parameter-shaped buffer. It includes the
+  reverse pass, its output write and those two host copies, but not the subsequent Riemannian
+  tangent projection, which is the optimizer's.
+- **Optimizer-state/direction** is `optimization_step!` of the `TrainingOptimizer`
+  (`scripts/geometric_optimizers/training_step.jl`): the tangent projection, the moments and the
+  direction, the step size, and the bookkeeping of a composite's leaves. The nested
+  retraction/application intervals are excluded.
+- **Retraction/application** is the phase the `TrainingOptimizer` reports: the retraction, the
+  section update, the copies of the retracted point onto the parameters, and the state update after
+  it. A composite reports one interval per leaf.
 
-Objective and merit evaluations inside an optimizer step are observed only to pause an enclosing
-category. Their time is deliberately not emitted. Batch selection and upload, the post-step loss,
+The step evaluates no objective: the gradient is the one of the current minibatch, passed in, and
+the step size is fixed. Batch selection and upload, the post-step loss,
 accuracy and drift evaluation, reporting, and other orchestration also lie outside the three
 categories. Consequently, their totals are disjoint optimizer-step components and are not expected
 to add up to `total_seconds`.

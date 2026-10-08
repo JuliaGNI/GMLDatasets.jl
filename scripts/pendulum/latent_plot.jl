@@ -97,8 +97,8 @@ println("  " * "─"^88)
 @printf("  symplecticity defect: max %.1e at N = %d\n\n", maximum(sy), NQUAD)
 
 let fig = Figure(size=(1220, 480), fontsize=25)
-    # No axis titles: the paper's caption says what each panel shows (left: angular coordinates,
-    # right: the learned latent space).
+    # No axis titles: the caption says what each panel shows; the panels carry only the letters
+    # (a) (angular coordinates) and (b) (the encoded level sets), below them.
     ax1 = Axis(fig[1,1]; xlabel=L"\theta \;\; \mathrm{(rad)}", ylabel=L"p_\theta",
         xticks=([0,π/2,π,3π/2,2π],[L"0",L"\pi/2",L"\pi",L"3\pi/2",L"2\pi"]))
     ax2 = Axis(fig[1,2]; xlabel=L"z_q", ylabel=L"z_p")
@@ -115,8 +115,9 @@ let fig = Figure(size=(1220, 480), fontsize=25)
     end
     # The separatrix goes on top of the level sets, which otherwise hide it: the rotating images
     # run along γ₋ almost all the way round. Each branch is drawn on its own, ℓ₋ (pθ < 0) solid and
-    # ℓ₊ (pθ > 0) dashed, over a white halo, and with them the point P where they meet: twice in
-    # angular coordinates (θ = 0 and θ = 2π), once in the latent plane.
+    # ℓ₊ (pθ > 0) dashed, over a white halo, and with them the point where they meet, the unstable
+    # equilibrium: twice in angular coordinates (θ = 0 and θ = 2π, unlabelled), once in the latent
+    # plane, where its encoded image is labelled P̄ (the bar marks images under the encoder).
     sep = :red3
     sepbranch(lo, hi) = (k = sqrt((1 + H_sep - 1e-12)/2); s = range(lo, hi; length=NPLOT);
         (π .+ 2 .* asin.(clamp.(k .* sin.(s), -1, 1)), 2 .* k .* cos.(s)))
@@ -130,10 +131,10 @@ let fig = Figure(size=(1220, 480), fontsize=25)
     P = enc(lift(0.0, 0.0))
     scatter!(ax1, [0, 2π], [0, 0]; color=:black, strokecolor=:white, strokewidth=2.5, markersize=19)
     scatter!(ax2, [P[1]], [P[2]]; color=:black, strokecolor=:white, strokewidth=2.5, markersize=19)
-    text!(ax1, [0, 2π], [0, 0]; text=[L"P", L"P"], align=[(:right, :center), (:left, :center)],
-          offset=[(-12, 0), (12, 0)], fontsize=25)
     xlims!(ax1, -0.65, 2π + 0.65)
-    text!(ax2, P[1], P[2]; text=L"P", align=(:left, :center), offset=(12, 0), fontsize=25)
+    text!(ax2, P[1], P[2]; text=L"\bar{P}", align=(:left, :center), offset=(12, 0), fontsize=25)
+    Label(fig[2,1], "(a)"; fontsize=25, tellwidth=false)
+    Label(fig[2,2], "(b)"; fontsize=25, tellwidth=false)
     Colorbar(fig[1,3]; colormap=:viridis, colorrange=cr, label=L"H",
              ticks=[-0.4,0.0,0.5,1.0,1.4], labelsize=25)
     colgap!(fig.layout,1,55); colgap!(fig.layout,2,12)

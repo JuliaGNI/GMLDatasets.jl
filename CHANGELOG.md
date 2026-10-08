@@ -19,6 +19,9 @@ breaking release).
 
 ### Changed
 
+- **CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of `Julia min`, and a test
+  job saves the Julia cache only when it succeeds.**
+
 - **The preprocessing figure of the MNIST tutorial is drawn with CairoMakie during the docs
   build**, in pure Julia. A `@setup` block of the tutorial includes
   `docs/src/mnist/mnist_visualization.jl` and saves one PNG per Documenter theme. The figure keeps

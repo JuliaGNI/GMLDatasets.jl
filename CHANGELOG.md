@@ -19,6 +19,12 @@ breaking release).
 
 ### Changed
 
+- **`test/docstrings.jl` moves to `test/integration/docstrings.jl`**, because the test convention
+  keeps a test file at the top level of `test/` only where it mirrors `src/<name>.jl`, and there is
+  no `src/docstrings.jl`. The file tests the docstring examples of `onehotbatch` and
+  `split_and_flatten`, both in `src/mnist_utils.jl`, but `test/mnist_utils.jl` already holds the
+  tests of that file. Its content and its `@safetestset` label are unchanged.
+
 - **CI uploads coverage from the `Julia 1 - ubuntu-latest` job instead of `Julia min`, and a test
   job saves the Julia cache only when it succeeds.**
 

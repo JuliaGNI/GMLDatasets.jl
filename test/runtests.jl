@@ -9,6 +9,6 @@ if "core" in GROUPS
     @safetestset "Pendulum dataset" include("pendulum.jl")
     @safetestset "MNIST tutorial figure" include("quality/mnist_figure.jl")
 end
-if "slow" in GROUPS
+if "doctests" in GROUPS
     @safetestset "Doctests" include("quality/doctests.jl")
 end

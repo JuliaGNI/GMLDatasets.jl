@@ -10,7 +10,7 @@
 #   plots/ho_scaling_energy_error.png
 #
 # Moved here from the symplectic-autoencoder talk's working directory
-# (SciCade26/simulation_results_for_talk/harmonic_oscillator_scaling.jl), where it sat beside the figure it makes.
+# (its `harmonic_oscillator_scaling.jl`), where it sat beside the figure it makes.
 # A figure is a claim and a generator nobody's CI runs rots against the API it was written
 # for -- which this one had: see the note at the end of this header.
 
@@ -22,7 +22,7 @@ using CairoMakie
 using Random: seed!
 
 # Outputs go to GML_OUTDIR, or to the working directory. Never beside the script: a figure is a
-# build product and the generator is the artefact, which is the whole reason these live here now.
+# build product and the generator is the artifact, which is the whole reason these live here now.
 const outdir  = get(ENV, "GML_OUTDIR", pwd())
 const plotdir = mkpath(joinpath(outdir, "plots"))
 const prms = default_parameters()

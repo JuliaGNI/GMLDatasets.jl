@@ -20,19 +20,20 @@
 #
 # Two grids, chosen by SAE_GRID:
 #
-#   paper       (default) the fractions {0, ±2/5, ±3/4, -1, -2, -3} of the paper's figure: the
-#               outermost librating level is H_L = 0.913 and the innermost rotating one H_R = 1.597.
+#   base        (default) the *base grid*, the fractions {0, ±2/5, ±3/4, -1, -2, -3} of the paper's
+#               figure: the outermost librating level is H_L = 0.913 and the innermost rotating one
+#               H_R = 1.597. SAE_GRID=paper, its former name, is still accepted.
 #   separatrix  JuliaGNI/GMLDatasets.jl#28's grid, which adds ±9/10, ±19/20 and -1.02 ... -1.6, -5/2
 #               and so puts training levels at H_L = 0.981 and H_R = 1.008.
 #
 # The second grid is not an improvement of the first, and that is why it is not the default. By the
 # complete-orbit error threshold, an encoder
 # that embeds the librating region, the separatrix and one rotating family misses the action on the
-# orbit at H_L or the one at H_R by at least (J_L - J_R)/(J_L + J_R): 15% on the paper's grid, 32% on
+# orbit at H_L or the one at H_R by at least (J_L - J_R)/(J_L + J_R): 15% on the base grid, 32% on
 # the separatrix grid, at any capacity and any training length. A run on the separatrix grid
 # (12000 epochs, JuliaGNI/GMLDatasets.jl#31) fitted the near-separatrix rotating orbits to 3% and
 # stopped being an embedding on the librating side; its weights fail every librating check of
-# branch_report.jl. The paper's grid leaves a 15% floor that the current weights, at 55%, are far
+# branch_report.jl. The base grid leaves a 15% floor that the current weights, at 55%, are far
 # from, so that is the grid on which better training can still show.
 #
 # Both grids integrate over (0, 40). A librating orbit's period is 4K(√((1+H)/2)), which diverges at
@@ -93,7 +94,7 @@ LinearAlgebra.generic_trimatdiv!(C::CuMatrix{T}, uploc, isunitc, tfun::Function,
 # loop). In the 12000-epoch run on the separatrix grid, at batch 256 and step 1e-4, the loss averaged
 # over 100 epochs fell from 0.160 at epoch 3000 to 0.135 near epoch 7350 and rose to 0.155 by the
 # last, which is the epoch whose weights that run kept. Batch 2048 at step 1e-3 reaches a lower loss per epoch and
-# runs about three times faster per epoch on the CPU of an M4 Max. A test run on the paper's grid with
+# runs about three times faster per epoch on the CPU of an M4 Max. A test run on the base grid with
 # -5/2 in place of -1 passed the embedding checks after 1100 epochs.
 include(joinpath(@__DIR__, "architectures.jl"))
 
@@ -118,16 +119,16 @@ const min_improvement = parse(Float64, get(ENV, "SAE_MIN_GAIN",    "0.01"))
 # separatrix.
 const angle_range = ([π - 5 / 2], [π - 3 / 20])
 const angle_samples = [10]
-const grid = get(ENV, "SAE_GRID", "paper")
-const one_direction = grid == "paper" ?
+const grid = get(ENV, "SAE_GRID", "base")
+const one_direction = grid in ("base", "paper") ?
     [0, 2 / 5, -2 / 5, 3 / 4, -3 / 4, -1, -2, -3] :
     grid == "separatrix" ?
-    [0, 2 / 5, -2 / 5, 3 / 4, -3 / 4,             # the paper's librating fractions
+    [0, 2 / 5, -2 / 5, 3 / 4, -3 / 4,             # the base grid's librating fractions
      9 / 10, -9 / 10, 19 / 20, -19 / 20,          # librating, up against the separatrix
      -1,                                          # the separatrix itself
      -1.02, -1.05, -1.1, -1.2, -1.4, -1.6,        # rotating, up against the separatrix
      -2, -5 / 2, -3] :
-    error("SAE_GRID must be `paper` or `separatrix`, not `$grid`")
+    error("SAE_GRID must be `base` or `separatrix`, not `$grid`")
 const momentum_fractions = get(ENV, "SAE_FRACS", "one") == "both" ?
     vcat(one_direction, -one_direction[one_direction .< -1]) :
     one_direction

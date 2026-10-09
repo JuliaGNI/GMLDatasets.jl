@@ -17,7 +17,7 @@
 #
 # Everything a run varies is an environment variable, so a sweep needs no file edits on the remote:
 #
-#   SAE_GRID=paper SAE_SEED=123 SAE_FRACS=one SAE_TSPAN=40 SAE_EPOCHS=3000 SAE_UPSCALE=20 \
+#   SAE_GRID=base SAE_SEED=123 SAE_FRACS=one SAE_TSPAN=40 SAE_EPOCHS=3000 SAE_UPSCALE=20 \
 #     SAE_ETA=1e-3 SAE_BATCH=2048 SAE_OUT=pendulum_sae.h5 SESSION=sae \
 #     bash scripts/pendulum/run_on_nvidia.sh
 #
@@ -31,7 +31,7 @@
 # cannot be fixed by capacity. The report is what tells that apart from a poor fit.
 #
 # Moved here from the symplectic-autoencoder talk's working directory
-# (SciCade26/simulation_results_for_talk/run_on_nvidia.sh), where it synced and ran two scripts that
+# (its `run_on_nvidia.sh`), where it synced and ran two scripts that
 # both hardcoded CPU() and never synced the one CUDA script -- so every "GPU run" was a CPU run on
 # another machine. Both scripts pick the device themselves now and say which in their first line.
 
@@ -54,7 +54,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SESSION="${SESSION:-sae}"
 
 # Forwarded to the scripts on the remote, with train_sae.jl's defaults; see its header.
-SAE_GRID="${SAE_GRID:-paper}"
+SAE_GRID="${SAE_GRID:-base}"
 SAE_SEED="${SAE_SEED:-123}"
 SAE_FRACS="${SAE_FRACS:-one}"
 SAE_TSPAN="${SAE_TSPAN:-40}"
@@ -195,7 +195,7 @@ say () { echo "[\$(date '+%F %T')] \$*" | tee -a "\$GML_OUTDIR/log_pipeline.txt"
 # rather than only the name of the step that had one. From the first ERROR line and not the tail:
 # a Julia stack trace ends in the outermost frames, and with this network's type parameters the
 # last twenty lines are four frames of Chain{...} and never the error itself. Lines are cut for
-# the same reason. Match ERROR anywhere on the line: terminal colour codes or progress output can
+# the same reason. Match ERROR anywhere on the line: terminal color codes or progress output can
 # precede it. Status and attach retain 50 lines so they include this entire 31-line error excerpt.
 # The tail is the fallback for a failure that is not a Julia exception.
 fail () {

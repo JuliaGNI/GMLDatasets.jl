@@ -13,7 +13,7 @@
 #   Animations/energy_conservation_pendulum/pendulum_####.png
 #
 # Moved here from the symplectic-autoencoder talk's working directory
-# (SciCade26/simulation_results_for_talk/pendulum_energy_conservation_anim.jl), where it sat beside the figure it makes.
+# (its `pendulum_energy_conservation_anim.jl`), where it sat beside the figure it makes.
 # A figure is a claim and a generator nobody's CI runs rots against the API it was written
 # for -- which this one had: see the note at the end of this header.
 
@@ -27,7 +27,7 @@ using Random: seed!
 seed!(123)
 
 # Outputs go to GML_OUTDIR, or to the working directory. Never beside the script: a figure is a
-# build product and the generator is the artefact, which is the whole reason these live here now.
+# build product and the generator is the artifact, which is the whole reason these live here now.
 const outdir  = get(ENV, "GML_OUTDIR", pwd())
 const plotdir = mkpath(joinpath(outdir, "plots"))
 const animdir      = joinpath(outdir, "Animations", "energy_conservation_pendulum")

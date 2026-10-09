@@ -17,7 +17,7 @@
 #   sympnet_weights.h5, resnet_weights.h5
 #
 # Moved here from the symplectic-autoencoder talk's working directory
-# (SciCade26/simulation_results_for_talk/pendulum_4d_train_reduced_and_plot.jl), where it sat beside the figure it makes.
+# (its `pendulum_4d_train_reduced_and_plot.jl`), where it sat beside the figure it makes.
 # A figure is a claim and a generator nobody's CI runs rots against the API it was written
 # for -- which this one had: see the note at the end of this header.
 #
@@ -56,7 +56,7 @@ const timestep      = 0.1
 const tspan         = (0.0, 50.0)
 const train_tspan   = (0.0, 100.0)
 # Outputs go to GML_OUTDIR, or to the working directory. Never beside the script: a figure is a
-# build product and the generator is the artefact, which is the whole reason these live here now.
+# build product and the generator is the artifact, which is the whole reason these live here now.
 const outdir  = get(ENV, "GML_OUTDIR", pwd())
 const plotdir = mkpath(joinpath(outdir, "plots"))
 const sae_path      = get(ENV, "SAE_WEIGHTS", joinpath(outdir, "pendulum_sae.h5"))

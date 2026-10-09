@@ -11,10 +11,10 @@
 #   gap         |latent - action| / action
 #   recon       relative L2 reconstruction error ‖AA⁺x - x‖ / ‖x‖ on the level set
 #
-# The data set is the paper's grid, not `train_sae.jl`'s: ten angles in [π - 5/2, π - 3/20], the
-# eight momentum fractions {0, ±2/5, ±3/4, -1, -2, -3} of the separatrix momentum, integrated to
-# t = 10 with Δt = 1/10. That is the grid the paper's SAE numbers were measured on; `SAE_FRACS`,
-# `SAE_TSPAN` do not apply here.
+# The data set is the base grid as the paper's run integrated it, not as `train_sae.jl` does: ten
+# angles in [π - 5/2, π - 3/20], the eight momentum fractions {0, ±2/5, ±3/4, -1, -2, -3} of the
+# separatrix momentum, integrated to t = 10 with Δt = 1/10. That is the grid the paper's SAE numbers
+# were measured on; `SAE_FRACS`, `SAE_TSPAN` do not apply here.
 #
 # Run from the repository root:
 #
@@ -28,7 +28,7 @@ import GMLDatasets: angular_to_euclidean, pendulum, pendulum_energy
 
 const l = 1.0
 
-# ---- the paper's training data ------------------------------------------------------------------
+# ---- the base grid, as the paper's run integrated it ---------------------------------------------
 solution = pendulum(; qmin = [π - 5 / 2], qmax = [π - 3 / 20], qsamples = [10],
     momentum_fractions = [0, 2 / 5, -2 / 5, 3 / 4, -3 / 4, -1, -2, -3],
     timespan = (0.0, 10.0), timestep = 0.1)

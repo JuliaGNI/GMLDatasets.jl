@@ -11,7 +11,7 @@
 #   simple      whether the image is a Jordan curve
 #
 # Why per branch. Above the separatrix each energy carries two orbits, p_θ > 0 and p_θ < 0, and they
-# are separate loops around the cylinder. The paper's training grid contains only the p_θ < 0 one
+# are separate loops around the cylinder. The base grid contains only the p_θ < 0 one
 # (its momenta are the fractions {0, ±2/5, ±3/4, −1, −2, −3} of the separatrix momentum, so every
 # |f| > 1 is negative). A number aggregated over both branches is meaningless: on a two-directional
 # grid one of them is reproduced to a few percent and the other is ~93% off, and that is not a
@@ -39,7 +39,7 @@
 #   SAE_WEIGHTS=/path/to/weights.h5 julia --project=scripts scripts/pendulum/branch_report.jl
 #
 # Moved here from the symplectic-autoencoder talk's working directory
-# (SciCade26/simulation_results_for_talk/branch_report.jl).
+# (its `branch_report.jl`).
 #
 # Environment:
 #   SAE_WEIGHTS   <GML_OUTDIR>/pendulum_sae.h5   the file to evaluate
@@ -113,9 +113,9 @@ end
 
 lib = report("LIBRATING  (bounds a disk on the cylinder, so every chart must report the same action)",
              HLIB, H -> librating(H, NSAMP))
-low = report("ROTATING, p_theta < 0  (the branch the paper's grid contains)",
+low = report("ROTATING, p_theta < 0  (the branch the base grid contains)",
              HROT, H -> rotating(H, NSAMP; sgn=-1))
-upp = report("ROTATING, p_theta > 0  (absent from the paper's grid; present if SAE_FRACS=both)",
+upp = report("ROTATING, p_theta > 0  (absent from the base grid; present if SAE_FRACS=both)",
              HROT, H -> rotating(H, NSAMP; sgn=+1))
 
 verdict(name, d) = begin

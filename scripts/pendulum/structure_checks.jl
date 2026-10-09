@@ -16,8 +16,8 @@ embed(enc, θ, p) = (Z = [enc(lift(a, b)) for (a, b) in zip(θ, p)];
     hcat([z[1] for z in Z], [z[2] for z in Z]))
 
 # Level sets analytically, not integrated: the encoder is a pointwise map, so the latent curve is
-# exactly the image of the level set, with no integrator error and no wrap-around artefact. The
-# librating parametrisation sin(φ/2) = k sin s, φ = θ - π, k² = (1+H)/2 removes the sqrt singularity
+# exactly the image of the level set, with no integrator error and no wrap-around artifact. The
+# librating parametrization sin(φ/2) = k sin s, φ = θ - π, k² = (1+H)/2 removes the sqrt singularity
 # at the turning points.
 librating(H, n) = (s = 2π .* range(0, 1; length = n + 1)[1:(end - 1)]; k = sqrt((1 + H) / 2);
     (π .+ 2 .* asin.(clamp.(k .* sin.(s), -1, 1)), 2 .* k .* cos.(s)))
@@ -124,7 +124,7 @@ failures(d) = isempty([v for v in values(d) if v !== nothing]) ? "ok" :
 checks_line(r) = @sprintf("%s  gamma- %+8.4f  gamma+ %+8.4f  librating limit %7.4f | librating: %s | p<0: %s",
     r.ok ? "PASS" : "fail", r.Am, r.Ap, abs(r.Am) - abs(r.Ap), failures(r.lib), failures(r.low))
 
-"The angular action ∮ p_θ dθ, analytic, by the level set's own parametrisation."
+"The angular action ∮ p_θ dθ, analytic, by the level set's own parametrization."
 function angular(H, n = 16_000)
     s = 2π .* range(0, 1; length = n + 1)[1:(end - 1)]
     if H < 1

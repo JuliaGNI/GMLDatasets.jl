@@ -1,0 +1,137 @@
+# branch_report.jl — the evaluation table every pendulum SAE run should be read through
+#
+# Takes any weights file and reports, per regime AND per branch of the cylinder:
+#
+#   J_angular   the true action, analytic
+#   J_latent    the latent loop's enclosed area, which is exactly ∮ p·dq of the decoded loop
+#               because the decoder is symplectic and globally defined on the plane
+#   gap         |J_latent - J_angular| / J_angular
+#   recon       relative reconstruction error of that level set, on its exact orbit sampled
+#               uniformly in time (reconstruction_error.jl)
+#   nested      whether this level's image lies inside the level before it, or contains it, in the
+#               same direction as the family's first pair (side by side is not nested)
+#   simple      whether the image is a Jordan curve
+#
+# Why per branch. Above the separatrix each energy carries two orbits, p_θ > 0 and p_θ < 0, and they
+# are separate loops around the cylinder. The base grid contains only the p_θ < 0 one
+# (its momenta are the fractions {0, ±2/5, ±3/4, −1, −2, −3} of the separatrix momentum, so every
+# |f| > 1 is negative). A number aggregated over both branches is meaningless: on a two-directional
+# grid one of them is reproduced to a few percent and the other is ~93% off, and that is not a
+# training deficiency: an embedding of both rotating families into one plane has to nest one inside
+# the other, so that family's enclosed areas stay bounded while its actions grow.
+#
+# Why the structural columns. If the encoder embeds the cylinder then its image is an open annulus,
+# its complement has one bounded hole K, and every rotating image encloses K. Then:
+#
+#   * each image is a Jordan curve                            (injective continuous image of a circle)
+#   * consecutive images are nested                           (disjoint orbits have disjoint images)
+#   * enclosed areas keep one sign along the family, with magnitude bounded below by area(K)
+#
+# Exactly one of the two rotating families nests outward and grows; the other nests inward towards K
+# and SHRINKS. Shrinking is therefore not a failure -- it is required of whichever family the chart
+# puts on the inside. Only the three checks above are violations, and each is a certificate, by
+# contraposition, that the map is not an embedding there. They need no ground-truth action and cost
+# one forward pass per level set, which is what makes them worth running on every evaluation: a
+# reconstruction error tells you the fit is poor, these tell you the chart has stopped being a chart.
+#
+# Run from the repository root:
+#
+#   julia --project=scripts scripts/pendulum/branch_report.jl
+#
+#   SAE_WEIGHTS=/path/to/weights.h5 julia --project=scripts scripts/pendulum/branch_report.jl
+#
+# Moved here from the symplectic-autoencoder talk's working directory
+# (its `branch_report.jl`).
+#
+# Environment:
+#   SAE_WEIGHTS   <GML_OUTDIR>/pendulum_sae.h5   the file to evaluate
+#   (the architecture, symplectic or standard, and its sizes are read from the file's attributes;
+#    files without them hold the symplectic autoencoder at sympnet_upscale = 20)
+#   SAE_NSAMP     1600             points per level set
+#
+# Needs GeometricMachineLearning 0.6 or newer, HDF5 and GeometricIntegrators (for the orbits of the
+# reconstruction error). It does NOT need PoincareInvariants or CairoMakie: the invariant of a closed
+# planar curve is its enclosed area, which is a shoelace sum.
+
+using GeometricMachineLearning, HDF5, Printf
+include(joinpath(@__DIR__, "structure_checks.jl"))
+
+const weights = get(ENV, "SAE_WEIGHTS",
+    joinpath(get(ENV, "GML_OUTDIR", pwd()), "pendulum_sae.h5"))
+const NSAMP   = parse(Int, get(ENV, "SAE_NSAMP", "1600"))
+
+# Either autoencoder; the file says which (architectures.jl).
+include(joinpath(@__DIR__, "architectures.jl"))
+include(joinpath(@__DIR__, "reconstruction_error.jl"))
+const nn  = load_pendulum_network(weights)
+const enc = encoder(nn)
+const dec = decoder(nn)
+emb(θ, p) = embed(enc, θ, p)
+
+# --- the separatrix, which every limit is read against -------------------------------------------
+gm = emb(sepbranch(π/2,  3π/2, NSAMP)...)
+gp = emb(sepbranch(3π/2, 5π/2, NSAMP)...)
+Am, Ap = signed_area(gm), signed_area(gp)
+
+println("─"^100)
+@printf("weights  %s\n", weights)
+@printf("arch     %s, %d parameters\n", nameof(typeof(nn.architecture)), parameterlength(nn.model))
+println("─"^100)
+@printf("gamma_-  signed area %+9.4f        gamma_+  signed area %+9.4f\n", Am, Ap)
+@printf("  librating limit  |gm| - |gp| = %8.4f   against a true 16\n", abs(Am) - abs(Ap))
+@printf("  rotating limits  p<0 -> %8.4f   p>0 -> %8.4f   against a true 8 on both\n",
+        abs(Am), abs(Ap))
+println("  Opposite signs are the structural claim: the librating loop leaves gamma_+ out and the")
+println("  rotating loop takes it in. Same sign means the layout has changed -- read the note before")
+println("  reading anything below.")
+
+"Print a family's table: the checks of `family_checks` with the action, its gap and the fit."
+function report(title, Hs, curve; sgn = -1)
+    println()
+    println(title)
+    println("     H    J_angular    J_latent      gap     recon    simple   nested in the level below")
+    println("  " * "─"^94)
+    rows, firstbad = family_checks(enc, Hs, curve)
+    i = findfirst(r -> r.nest in (:inward, :outward), rows); dir = i === nothing ? :none : rows[i].nest
+    for (; H, θ, p, A, sc, frac, nest) in rows
+        Ja = angular(H)
+        @printf("%7.3f %10.4f  %+10.4f  %7.1f%%  %6.1f%%     %-4s    %s\n",
+                H, Ja, A, 100abs(abs(A)-Ja)/Ja, 100reconstruction_error(enc, dec, H; sgn).rel,
+                sc == 0 ? "yes" : "NO",
+                isnan(frac) ? "--" :
+                    (nest == dir ? @sprintf("yes (%3.0f%% inside, %s)", 100frac, nest) :
+                                   @sprintf("NO  (%3.0f%% inside, %s)", 100frac, nest)))
+    end
+    firstbad
+end
+
+lib = report("LIBRATING  (bounds a disk on the cylinder, so every chart must report the same action)",
+             HLIB, H -> librating(H, NSAMP))
+low = report("ROTATING, p_theta < 0  (the branch the base grid contains)",
+             HROT, H -> rotating(H, NSAMP; sgn=-1))
+upp = report("ROTATING, p_theta > 0  (absent from the base grid; present if SAE_FRACS=both)",
+             HROT, H -> rotating(H, NSAMP; sgn=+1); sgn = +1)
+
+verdict(name, d) = begin
+    bad = [(k, v) for (k, v) in d if v !== nothing]
+    if isempty(bad)
+        @printf("  %-22s sign-constant, nested and simple at every level -- consistent with an embedding\n", name)
+    else
+        @printf("  %-22s NOT an embedding: %s\n", name,
+                join([@sprintf("%s fails from H = %.3f", k, v) for (k, v) in sort(bad, by=x->x[2])], ", "))
+    end
+end
+println()
+println("─"^100)
+println("structural verdict")
+verdict("librating", lib); verdict("rotating p<0", low); verdict("rotating p>0", upp)
+println()
+println("  `sign` is the enclosed area changing sign within a family, which a Jordan curve traversed")
+println("  once cannot do. A family that SHRINKS is not a violation: one of the two rotating")
+println("  families is required to nest inward. Read the three checks, not the direction.")
+println()
+println("  And on whichever family nests inward, the enclosed area is bounded by the inner")
+println("  separatrix loop while the action grows like 2 pi sqrt(2H). Its reconstruction is")
+println("  therefore bounded away from the truth for any network that embeds the cylinder, at any")
+println("  capacity and on any data -- so a gap there is not something to spend GPU hours on.")
+println("─"^100)

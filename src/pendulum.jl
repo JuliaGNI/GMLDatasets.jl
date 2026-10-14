@@ -1,5 +1,6 @@
 import GeometricProblems.Pendulum as Pendulum
 
+using GeometricEquations: HODEEnsemble
 using GeometricIntegrators: Gauss, integrate
 using GeometricSolutions: EnsembleSolution, GeometricSolution
 
@@ -30,6 +31,29 @@ because the pendulum has one degree of freedom. The defaults are the grid `Geome
 uses — a hundred trajectories covering both libration and rotation — over a longer `timespan` than
 its default, so that there is enough of each trajectory to learn from.
 
+`momentum_fractions` replaces that grid with a separatrix-relative one, which is what a data set
+straddling the separatrix wants. Passing a vector of numbers `f` takes the same `qsamples` angles
+and gives each of them the momenta ``p_\theta = f\,p_\mathrm{sep}(\theta)``, where
+[`separatrix_momentum`](@ref) is the momentum that puts the pendulum exactly on the separatrix at
+that angle. The energy of such an initial condition is
+
+```math
+H = mg\ell\left[f^2(1 - \cos\theta) + \cos\theta\right] ,
+```
+
+so ``|f| < 1`` librates, ``|f| = 1`` is the separatrix itself and ``|f| > 1`` rotates, *whatever the
+angle*, and the sign of ``f`` picks the direction of rotation. A Cartesian ``(\theta, p_\theta)``
+grid cannot express that: a fixed ``p_\theta`` crosses the separatrix as ``\theta`` varies, so a
+rectangle in ``(\theta, p_\theta)`` always mixes the two regimes and never controls how close to
+the separatrix the data comes. With fractions, how densely the crossing is covered is chosen
+directly — fractions just above one in modulus fill the band of rotating orbits nearest the
+separatrix, which is the region a single Cartesian grid leaves empty.
+
+`pmin`, `pmax` and `psamples` are unused when `momentum_fractions` is given. The fraction is
+undefined where ``p_\mathrm{sep}`` vanishes, that is at the unstable equilibrium ``\theta \equiv 0``
+modulo ``2\pi``, and an angle grid that contains one of those points is rejected rather than
+silently collapsed onto the fixed point.
+
 `parameters` is the ``(\ell, m, g)`` named tuple, `integrator` any `GeometricIntegrators` method.
 The default is Gauss collocation with two stages, which is symplectic, so the energy of each
 trajectory oscillates within a bounded band around its initial value over the whole run rather than
@@ -45,7 +69,7 @@ using GeometricMachineLearning
 dl = DataLoader(angular_to_euclidean(pendulum()); autoencoder = true)
 ```
 
-See also [`pendulum_energy`](@ref).
+See also [`separatrix_momentum`](@ref) and [`pendulum_energy`](@ref).
 """
 function pendulum(;
         qmin = [0.0],
@@ -54,13 +78,65 @@ function pendulum(;
         pmax = [2.0],
         qsamples = [10],
         psamples = [10],
+        momentum_fractions = nothing,
         parameters = Pendulum.default_parameters(),
         timespan = (0.0, 10.0),
         timestep = 0.1,
         integrator = Gauss(2))
-    problem = Pendulum.hodeensemble(qmin, qmax, pmin, pmax, qsamples, psamples;
-        parameters = parameters, timespan = timespan, timestep = timestep)
+    problem = if isnothing(momentum_fractions)
+        Pendulum.hodeensemble(qmin, qmax, pmin, pmax, qsamples, psamples;
+            parameters = parameters, timespan = timespan, timestep = timestep)
+    else
+        _separatrix_relative_ensemble(qmin, qmax, qsamples, momentum_fractions,
+            parameters, timespan, timestep)
+    end
     integrate(problem, integrator)
+end
+
+@doc raw"""
+    separatrix_momentum(θ, parameters = GeometricProblems.Pendulum.default_parameters())
+
+The momentum that puts the pendulum exactly on the separatrix at angle ``\theta``:
+
+```math
+p_\mathrm{sep}(\theta) = m\ell\sqrt{2g\ell\,(1 - \cos\theta)} ,
+```
+
+the positive root of ``H(\theta, p_\theta) = mg\ell``. It vanishes at the unstable equilibrium
+``\theta \equiv 0`` modulo ``2\pi``, where the separatrix meets itself, and is largest at
+``\theta = \pi``.
+
+This is the scale `pendulum`'s `momentum_fractions` measures against.
+"""
+function separatrix_momentum(θ, parameters::NamedTuple = Pendulum.default_parameters())
+    parameters.m * parameters.l *
+        sqrt(2 * parameters.g * parameters.l * (1 - cos(θ)))
+end
+
+# The curved counterpart of `GeometricProblems`' `_pode_samples`. `hodeensemble` only builds
+# Cartesian grids, so the ensemble is assembled here from the same pieces it uses: the pendulum's
+# vector fields and Hamiltonian, and one initial condition per (angle, fraction) pair.
+function _separatrix_relative_ensemble(qmin, qmax, qsamples, fractions,
+        parameters, timespan, timestep)
+    length(qmin) == length(qmax) == length(qsamples) == 1 || throw(ArgumentError(
+        "the pendulum has one degree of freedom, so qmin, qmax and qsamples must have one " *
+        "element each, got $(length(qmin)), $(length(qmax)) and $(length(qsamples))"))
+    isempty(fractions) &&
+        throw(ArgumentError("momentum_fractions must contain at least one fraction"))
+    all(isfinite, fractions) || throw(ArgumentError(
+        "momentum_fractions must be finite, got $fractions"))
+
+    θs = range(qmin[1], qmax[1]; length = qsamples[1])
+    psep = separatrix_momentum.(θs, Ref(parameters))
+    any(iszero, psep) && throw(ArgumentError(
+        "the separatrix momentum vanishes at the unstable equilibrium, so a momentum fraction " *
+        "is undefined there; the angle grid range($(qmin[1]), $(qmax[1]); length = " *
+        "$(qsamples[1])) contains such an angle"))
+
+    q₀ = [[θ] for θ in θs for _ in fractions]
+    p₀ = [[f * p] for p in psep for f in fractions]
+    HODEEnsemble(Pendulum.pendulum_pode_v, Pendulum.pendulum_pode_f, Pendulum.hamiltonian,
+        timespan, timestep, q₀, p₀; parameters = parameters)
 end
 
 @doc raw"""

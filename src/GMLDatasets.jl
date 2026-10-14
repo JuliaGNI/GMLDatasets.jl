@@ -41,7 +41,7 @@ export DataLoader
 export split_and_flatten, onehotbatch
 export mnist, fashion_mnist
 export mnist_data_loader, fashion_mnist_data_loader
-export pendulum, pendulum_energy
+export pendulum, pendulum_energy, separatrix_momentum
 export angular_to_euclidean, euclidean_to_angular
 
 include("mnist_utils.jl")

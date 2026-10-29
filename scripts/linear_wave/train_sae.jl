@@ -4,8 +4,12 @@
 #
 #     julia --project=scripts scripts/linear_wave/train_sae.jl
 #
-# Each network is written to `$(LW_OUTPUT_DIR)/weights/sae_nXX_seedS.h5` together with its loss
-# history, the settings and the package versions. A network whose file exists is skipped, so an
+# With LW_WARM_START=1 (the default) every network starts at the PSD of its dimension
+# (`warm_start!`), so its reconstruction error on the training data starts at the PSD's.
+#
+# Each network is written to `$(LW_OUTPUT_DIR)/weights/sae_nXX_seedS_eEEEE[_warm].h5` after
+# LW_N_EPOCHS epochs, and after every epoch count in LW_CHECKPOINTS, together with its loss history,
+# the settings and the package versions. A network whose final file exists is skipped, so an
 # interrupted run resumes where it stopped and several processes can share the work by splitting
 # LW_HALF_REDUCED_DIMS or LW_SEEDS between them. The seed is set before each network is initialized,
 # so a file depends on (n, seed) alone and not on what was trained before it in the same process.
@@ -24,24 +28,7 @@ dl = DataLoader(to_device(data); autoencoder = true, suppress_info = true)
 
 mkpath(dirname(sae_path(first(HALF_REDUCED_DIMS), first(SEEDS))))
 
-for n in HALF_REDUCED_DIMS, seed in SEEDS
-
-    path = sae_path(n, seed)
-    if isfile(path)
-        println("$path exists, skipped")
-        continue
-    end
-
-    Random.seed!(seed)
-    network = NeuralNetwork(architecture(n), backend, Float64)
-    optimizer = TrainingOptimizer(network.params;
-        algorithm = Adam(; β₁ = ADAM_BETA1, β₂ = ADAM_BETA2, δ = ADAM_DELTA),
-        linesearch = STEP_SIZE, retraction = Cayley())
-
-    timed = @timed train!(network, optimizer, dl, Batch(BATCH_SIZE), N_EPOCHS;
-        show_progress = false)
-    losses = timed.value
-
+function save_network(path, network, losses, n, seed, elapsed)
     # Written to a temporary name and moved, so that an interrupted write never leaves a file that
     # the next run would take for a finished network.
     HDF5.h5open(path * ".partial", "w") do file
@@ -51,11 +38,39 @@ for n in HALF_REDUCED_DIMS, seed in SEEDS
         attributes = HDF5.attributes(file)
         attributes["half_reduced_dim"] = n
         attributes["seed"] = seed
+        attributes["epochs"] = length(losses)
         attributes["backend"] = CUDA.functional() ? "cuda" : "cpu"
-        attributes["elapsed_seconds"] = timed.time
+        attributes["elapsed_seconds"] = elapsed
     end
     mv(path * ".partial", path; force = true)
+end
 
-    @printf("n = %2d, seed %d: loss %.3e → %.3e in %.1f s\n",
-        n, seed, first(losses), last(losses), timed.time)
+for n in HALF_REDUCED_DIMS, seed in SEEDS
+
+    if isfile(sae_path(n, seed))
+        println("$(sae_path(n, seed)) exists, skipped")
+        continue
+    end
+
+    Random.seed!(seed)
+    network = NeuralNetwork(architecture(n), backend, Float64)
+    WARM_START && warm_start!(network, fit_psd(data, n))
+    optimizer = TrainingOptimizer(network.params;
+        algorithm = Adam(; β₁ = ADAM_BETA1, β₂ = ADAM_BETA2, δ = ADAM_DELTA),
+        linesearch = STEP_SIZE, retraction = Cayley())
+
+    # `train!` resumes with the same optimizer, so training in segments between the checkpoints is
+    # the same as training once for N_EPOCHS.
+    losses = Float64[]
+    elapsed = 0.0
+    for epochs in CHECKPOINTS
+        timed = @timed train!(network, optimizer, dl, Batch(BATCH_SIZE),
+            epochs - length(losses); show_progress = false)
+        append!(losses, timed.value)
+        elapsed += timed.time
+        save_network(sae_path(n, seed, epochs), network, losses, n, seed, elapsed)
+        @printf("n = %2d, seed %d, %4d epochs: loss %.3e → %.3e in %.1f s\n",
+            n, seed, epochs, first(losses), last(losses), elapsed)
+        flush(stdout)
+    end
 end

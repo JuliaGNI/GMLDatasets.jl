@@ -36,12 +36,22 @@ const TRAINING_MU = collect(range(MU_MIN, MU_MAX; length = N_PARAMS))
 # The four test values, none of them in the training set.
 const TEST_MU = _floats(_setting("LW_TEST_MU", "0.47,0.51,0.55,0.625", "0.47,0.625"))
 
-# The reductions: one network per reduced dimension 2n and seed.
+# The reductions: one network per reduced dimension 2n and seed. With the warm start below, the
+# seed only decides the random weights of the gradient layers, which start out inactive, so one
+# seed is the default.
 const HALF_REDUCED_DIMS = _ints(_setting("LW_HALF_REDUCED_DIMS", "2:15", "2:3"))
-const SEEDS = _ints(_setting("LW_SEEDS", "1,2,3", "1"))
+const SEEDS = _ints(_setting("LW_SEEDS", "1", "1"))
+
+# `LW_WARM_START=1` starts every SAE at the PSD of its dimension (see `warm_start!`).
+const WARM_START = parse(Bool, get(ENV, "LW_WARM_START", "1"))
 
 # Training: Adam with η = 10⁻³, β₁ = 0.9, β₂ = 0.99, δ = 10⁻⁸ and the Cayley retraction, in Float64.
-const N_EPOCHS = parse(Int, _setting("LW_N_EPOCHS", "100", "2"))
+const N_EPOCHS = parse(Int, _setting("LW_N_EPOCHS", "1000", "2"))
+# Epochs after which `train_sae.jl` also saves the network, e.g. "100,200,500"; N_EPOCHS always is.
+const CHECKPOINTS = sort(unique([_ints(_setting("LW_CHECKPOINTS", string(N_EPOCHS), "1"));
+                                 N_EPOCHS]))
+# Appended to the names of the files `errors.jl` writes and `plot_errors.jl` reads.
+const TAG = get(ENV, "LW_TAG", "")
 const BATCH_SIZE = parse(Int, _setting("LW_BATCH_SIZE", "512", "16"))
 const STEP_SIZE = parse(Float64, _setting("LW_STEP_SIZE", "1e-3", "1e-3"))
 const ADAM_BETA1 = 0.9
@@ -55,7 +65,8 @@ function settings()
     (N = N, mu_min = MU_MIN, mu_max = MU_MAX, n_params = N_PARAMS,
         n_time_steps = N_TIME_STEPS, timespan = collect(TIMESPAN),
         test_mu = TEST_MU, half_reduced_dims = HALF_REDUCED_DIMS, seeds = SEEDS,
-        n_epochs = N_EPOCHS, batch_size = BATCH_SIZE, step_size = STEP_SIZE,
+        n_epochs = N_EPOCHS, warm_start = WARM_START, batch_size = BATCH_SIZE,
+        step_size = STEP_SIZE,
         adam_beta1 = ADAM_BETA1, adam_beta2 = ADAM_BETA2, adam_delta = ADAM_DELTA,
         precision = "Float64", integrator = "ImplicitMidpoint", smoke = SMOKE)
 end
@@ -75,9 +86,12 @@ function architecture(n::Integer)
         sympnet_upscale = 5, activation = tanh)
 end
 
-function sae_path(n, seed)
-    joinpath(OUTPUT_DIR, "weights", @sprintf("sae_n%02d_seed%d.h5", n, seed))
+function sae_path(n, seed, epochs = N_EPOCHS)
+    joinpath(OUTPUT_DIR, "weights",
+        @sprintf("sae_n%02d_seed%d_e%04d%s.h5", n, seed, epochs, WARM_START ? "_warm" : ""))
 end
+
+errors_path(ext) = joinpath(OUTPUT_DIR, "errors" * TAG * "." * ext)
 
 "The training data: the snapshots of all `TRAINING_MU`, as a `2N × n_t × n_μ` array."
 function training_data()
@@ -96,6 +110,30 @@ function fit_psd(data, n::Integer)
     psd = NeuralNetwork(PSDArch(2N, 2n), CPU(), Float64)
     solve!(psd, data)
     psd
+end
+
+"""
+    warm_start!(network, psd)
+
+Start the SAE `network` at the PSD `psd` of the same dimensions: its two PSD-like layers take the
+Stiefel matrices of the PSD, and every gradient layer gets the scale `0`, which makes it the
+identity. The network is then the PSD, so training starts from the PSD's error, and the gradient
+with respect to the scales is not zero, so the gradient layers become active as it proceeds.
+"""
+function warm_start!(network, psd)
+    psd_weights = [p.weight for p in values(psd.params)]
+    k = 0
+    for (layer, p) in zip(network.model.layers, values(network.params))
+        if layer isa PSDLayer
+            k += 1
+            p.weight.A .= psd_weights[k].A
+        elseif hasproperty(p, :scale)
+            p.scale .= 0
+        end
+    end
+    k == length(psd_weights) ||
+        error("expected $(length(psd_weights)) PSD-like layers, found $k")
+    network
 end
 
 "The full-order problem for one test value `μ`, on the time grid of the training data."

@@ -5,8 +5,8 @@
 #
 # Reads `$(LW_OUTPUT_DIR)/errors.h5` and writes `errors.pdf`, drawn at its printed width
 # (`LW_WIDTH_PT`, default a 16 cm text width) with 10 pt text. The errors are on a logarithmic scale,
-# shared by all panels. The SAE markers are the median over the seeds and the bars span the smallest
-# to the largest seed; PSD is deterministic. The panels are labeled below; what the markers mean
+# shared by all panels. With several seeds the SAE markers are the median and bars span the smallest
+# to the largest seed; with one seed there are no bars. PSD is deterministic. The panels are labeled below; what the markers mean
 # goes in the caption.
 
 using CairoMakie
@@ -16,7 +16,7 @@ include(joinpath(@__DIR__, "common.jl"))
 
 const WIDTH_PT = parse(Float64, get(ENV, "LW_WIDTH_PT", string(16 / 2.54 * 72)))
 
-columns = HDF5.h5open(joinpath(OUTPUT_DIR, "errors.h5"), "r") do file
+columns = HDF5.h5open(errors_path("h5"), "r") do file
     Dict(name => read(file, name) for name in keys(file))
 end
 rows = [(method = columns["method"][i], n = columns["n"][i], mu = columns["mu"][i],
@@ -46,8 +46,9 @@ for (k, μ) in pairs(mus)
 
         sae = [[r[field] for r in select("SAE", μ, n)] for n in ns]
         mid = median.(sae)
-        rangebars!(ax, ns .+ 0.12, minimum.(sae), maximum.(sae); color = green,
-            whiskerwidth = 4)
+        # range bars only where there is more than one seed to span
+        any(length.(sae) .> 1) && rangebars!(ax, ns .+ 0.12, minimum.(sae), maximum.(sae);
+            color = green, whiskerwidth = 4)
         scatter!(ax, ns .+ 0.12, mid; color = green, marker = marker, markersize = 7)
     end
 end
@@ -70,5 +71,5 @@ Legend(fig[2 * cld(length(mus), n_cols) + 1, 1:n_cols], legend_entries,
     padding = (0, 0, 0, 0))
 rowgap!(fig.layout, 2)
 
-CairoMakie.save(joinpath(OUTPUT_DIR, "errors.pdf"), fig; pt_per_unit = 1)
-println("wrote ", joinpath(OUTPUT_DIR, "errors.pdf"))
+CairoMakie.save(errors_path("pdf"), fig; pt_per_unit = 1)
+println("wrote ", errors_path("pdf"))

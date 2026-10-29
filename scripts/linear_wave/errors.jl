@@ -85,16 +85,16 @@ sort!(rows; by = r -> (r.method, r.n, r.seed, r.mu))
 
 mkpath(OUTPUT_DIR)
 columns = keys(first(rows))
-open(joinpath(OUTPUT_DIR, "errors.csv"), "w") do io
+open(errors_path("csv"), "w") do io
     println(io, join(columns, ','))
     for r in rows
         println(io, join((v isa AbstractFloat ? repr(v) : string(v) for v in values(r)), ','))
     end
 end
-HDF5.h5open(joinpath(OUTPUT_DIR, "errors.h5"), "w") do file
+HDF5.h5open(errors_path("h5"), "w") do file
     for c in columns
         file[string(c)] = [getproperty(r, c) for r in rows]
     end
     write_metadata(file)
 end
-println("wrote ", joinpath(OUTPUT_DIR, "errors.csv"), " and errors.h5 ($(length(rows)) rows)")
+println("wrote ", errors_path("csv"), " and ", errors_path("h5"), " ($(length(rows)) rows)")

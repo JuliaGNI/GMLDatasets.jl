@@ -7,10 +7,10 @@ in the `scripts/` environment.
 
 | script | does | writes to `LW_OUTPUT_DIR` |
 |:--|:--|:--|
-| `train_sae.jl` | trains one SAE per reduced dimension `2n` and seed | `weights/sae_nXX_seedS.h5` (weights, loss history, settings, package versions) |
-| `errors.jl` | fits the PSD of each dimension, and computes the projection and reduction errors of every reduction at the test wave speeds, with the reduced model of `HRedSys` integrated by the implicit midpoint rule | `errors.csv`, `errors.h5` |
+| `train_sae.jl` | trains one SAE per reduced dimension `2n` and seed, started at the PSD of that dimension | `weights/sae_nXX_seedS_eEEEE_warm.h5` (weights, loss history, settings, package versions), after `LW_N_EPOCHS` epochs and at every epoch count in `LW_CHECKPOINTS` |
+| `errors.jl` | fits the PSD of each dimension, and computes the projection and reduction errors of every reduction at the test wave speeds, with the reduced model of `HRedSys` integrated by the implicit midpoint rule | `errors$(LW_TAG).csv`, `errors$(LW_TAG).h5` |
 | `plot_waves.jl` | the FOM solution for three wave speeds at three times | `wave_plot.h5`, `wave_plot.pdf` |
-| `plot_errors.jl` | the errors against `n`, one panel per test wave speed, from `errors.h5` | `errors.pdf` |
+| `plot_errors.jl` | the errors against `n`, one panel per test wave speed, from `errors$(LW_TAG).h5` | `errors$(LW_TAG).pdf` |
 
 `common.jl` holds the settings, the architecture and the helpers the four share.
 
@@ -27,14 +27,30 @@ julia --project=scripts scripts/linear_wave/plot_errors.jl
 ```
 
 `train_sae.jl` skips every network whose file exists, so it resumes after an interruption, and
-several processes can share the training by splitting the seeds or the dimensions between them:
+several processes can share the training by splitting the dimensions (or the seeds) between them:
 
 ```sh
-for s in 1 2 3; do LW_SEEDS=$s julia --project=scripts scripts/linear_wave/train_sae.jl & done; wait
+for d in 2,6,10,14 3,7,11,15 4,8,12 5,9,13; do
+    LW_HALF_REDUCED_DIMS=$d julia --project=scripts scripts/linear_wave/train_sae.jl &
+done; wait
 ```
 
-With three such processes on a 14-core Apple M-series CPU a network took 70 to 100 s, so the 42
-networks of the default settings took about 25 minutes.
+With four such processes on a 14-core Apple M-series CPU, 1000 epochs of one network took about
+13 minutes, so the 14 networks of the default settings took about an hour; `errors.jl` took about
+another hour.
+
+## The warm start
+
+The SAE contains the PSD: with the scale of every gradient layer set to zero, the gradient layers
+are the identity and the network is its two PSD-like layers, the PSD. `warm_start!` starts each
+SAE there, with the Stiefel matrices of the PSD of its dimension, so training starts from the PSD's
+error and only has to improve on it. Started at random instead (`LW_WARM_START=0`), the SAE of
+2n = 30 stayed above the PSD's training error after 100 epochs, which is an optimization
+shortfall, not a limit of the architecture. With the warm start, the seed decides only the inactive
+weights of the gradient layers, so one seed is the default.
+
+1000 epochs against 100 (both saved with `LW_CHECKPOINTS=100,200,500`): the projection errors at the
+test wave speeds hardly change, but for 2n ≥ 22 the reduction errors fall by up to a factor of two.
 
 ## Settings
 
@@ -48,8 +64,11 @@ settings and the package versions it was produced with.
 | `LW_N_TIME_STEPS` | `200` | snapshots on `t ∈ [0, 1]` |
 | `LW_TEST_MU` | `0.47,0.51,0.55,0.625` | test wave speeds |
 | `LW_HALF_REDUCED_DIMS` | `2:15` | `n`, half the reduced dimension (`a:b` or a comma-separated list) |
-| `LW_SEEDS` | `1,2,3` | seeds of the SAE initialization |
-| `LW_N_EPOCHS` | `100` | training epochs |
+| `LW_SEEDS` | `1` | seeds of the SAE initialization |
+| `LW_WARM_START` | `1` | start every SAE at the PSD of its dimension |
+| `LW_N_EPOCHS` | `1000` | training epochs |
+| `LW_CHECKPOINTS` | `LW_N_EPOCHS` | epoch counts after which the network is saved as well |
+| `LW_TAG` | empty | appended to the names of the error files |
 | `LW_BATCH_SIZE` | `512` | minibatch size |
 | `LW_STEP_SIZE` | `1e-3` | Adam step size; `β₁ = 0.9`, `β₂ = 0.99`, `δ = 10⁻⁸`, Cayley retraction, `Float64` |
 | `LW_OUTPUT_DIR` | `scripts/linear_wave/output` | where everything is written (ignored by git) |

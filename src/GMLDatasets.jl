@@ -43,10 +43,12 @@ export mnist, fashion_mnist
 export mnist_data_loader, fashion_mnist_data_loader
 export pendulum, pendulum_energy, separatrix_momentum
 export angular_to_euclidean, euclidean_to_angular
+export linear_wave, linear_wave_snapshots, linear_wave_parameters
 
 include("mnist_utils.jl")
 include("data_loader.jl")
 include("datasets.jl")
 include("pendulum.jl")
+include("linear_wave.jl")
 
 end

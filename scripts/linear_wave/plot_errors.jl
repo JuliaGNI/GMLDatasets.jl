@@ -35,6 +35,7 @@ axes = Axis[]
 for (k, μ) in pairs(mus)
     row, col = fldmod1(k, n_cols)
     ax = Axis(fig[2row - 1, col]; yscale = log10, xticks = ns[1]:2:ns[end],
+        yticks = ([0.01, 0.03, 0.1, 0.3, 1], ["0.01", "0.03", "0.1", "0.3", "1"]),
         xlabel = L"n", ylabel = "relative error")
     push!(axes, ax)
     Label(fig[2row, col], L"(%$('a' + k - 1))\;\mu = %$(μ)"; tellwidth = false)
@@ -65,7 +66,8 @@ legend_entries = [
     MarkerElement(; color = green, marker = :circle, markersize = 7)]
 Legend(fig[2 * cld(length(mus), n_cols) + 1, 1:n_cols], legend_entries,
     ["PSD projection", "PSD reduction", "SAE projection", "SAE reduction"];
-    orientation = :horizontal, framevisible = false, padding = (0, 0, 0, 0))
+    orientation = :horizontal, nbanks = 2, framevisible = false,
+    padding = (0, 0, 0, 0))
 rowgap!(fig.layout, 2)
 
 CairoMakie.save(joinpath(OUTPUT_DIR, "errors.pdf"), fig; pt_per_unit = 1)

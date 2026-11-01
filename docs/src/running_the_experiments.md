@@ -143,7 +143,7 @@ from the previous one.
 
 - `MNIST_REPETITIONS` (default 10) is how often each configuration is trained. One repetition is one
   configuration of the full run, i.e. ≈1:35 h for `Adam` on an RTX 4090, so the default is ≈16 h —
-  about twice the ≈6:53 h that `mnist_cuda.jl` takes for all four.
+  more than twice the ≈6:53 h that `mnist_cuda.jl` takes for all four.
 - `MNIST_CONFIGURATIONS` (default `geometric-adam-cayley`) selects which ones, comma separated, from
   `geometric-adam-cayley`, `scalar-moment-adam`, `standard-adam`, `gradient`, `momentum`, or `all`;
   `adam-stiefel` and `adam-regular` are aliases of `geometric-adam-cayley` and `standard-adam`.

@@ -109,6 +109,17 @@ breaking release).
   `"0.6.6"` (from `"0.6.5"`) for the same reason; and `KernelAbstractions` to `"0.9.38, 0.10"`
   (from `"0.9.15, 0.10"`), which `GeometricOptimizers` 0.9 requires.
 
+- **Text that GML 0.9 made stale now states the current API.** The learning-rate comments of the
+  five MNIST scripts in `scripts/geometric_optimizers/` say that `Optimizer` defaults to
+  `Static(1e-3)` only for the Adam methods and to an expanding `Backtracking` search for
+  `GradientMethod` and `MomentumMethod`, as `GeometricOptimizers` 0.9.2 does; the scripts' code is
+  unchanged. `docs/src/running_the_experiments.md` lists the `MNIST_CONFIGURATIONS` keys that
+  `mnist_cuda_repetitions.jl` accepts, with `geometric-adam-cayley` as the default and the two
+  aliases. `KNOWN_ISSUES.md` K1 names `ReducedComplexityModeling` as the owner of `DataLoader`. The
+  docs drop the unused `GeometricMachineLearning` InterLinks entry, its committed inventory and the
+  `using GeometricMachineLearning` in `docs/make.jl`; the tutorials still load the package, so
+  `docs/Project.toml` keeps it.
+
   These bounds replace every bound of the same dependencies that the entries below name: for GML,
   `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
   own), and `"0.6.1, 0.7, 0.8"` after the floor raise; for `NeuralNetworkParameters`, the

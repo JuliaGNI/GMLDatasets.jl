@@ -741,9 +741,10 @@ function train(
     per_leaf = algorithm isa GeometricOptimizers.CompositeMethod
 
     # Note that the learning rate is supplied through the line search: the *methods* only determine
-    # the direction. `Static(learning_rate)` is what `Optimizer` defaults to for these methods
-    # anyway; it is written out so that the rate is visible right here, and the per-leaf composite
-    # takes the same rate by the same route, through each leaf's own line search.
+    # the direction. `Optimizer` defaults to `Static(1e-3)` only for the Adam methods, and to an
+    # expanding `Backtracking` search for `GradientMethod` and `MomentumMethod`; passing
+    # `Static(learning_rate)` gives every method a fixed rate, visible right here, and the per-leaf
+    # composite takes its rate by the same route, through each leaf's own line search.
     #
     # Rebuilding after the unrecorded warm-up below restores the exact seeded parameters, global
     # sections, optimizer caches, and data-order RNG that a run without warm-up would have had.

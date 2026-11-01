@@ -4,8 +4,8 @@
 
 - **location:** `src/data_loader.jl:29`
 - **evidence:** `Aqua.test_piracies(GMLDatasets)` fails with one result; `test/quality/aqua.jl` marks
-  it `broken = true`. The method adds to `GeometricMachineLearning.DataLoader` for argument types
-  that this package does not own.
+  it `broken = true`. The method adds to `DataLoader`, which `ReducedComplexityModeling` owns and
+  `GeometricMachineLearning` re-exports, for argument types that this package does not own.
 - **kind:** defect
 - **found:** issue #29, part M29 of the test-suite migration
 

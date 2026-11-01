@@ -535,9 +535,10 @@ end
     build_optimizer(ps, algorithm)
 
 The optimizer and its state, exactly as `mnist_metal.jl` builds them. The learning rate is
-supplied through the line search — the *methods* only determine the direction — and
-`Static(learning_rate)` is what `Optimizer` defaults to for these three anyway; it is written
-out so that the rate is visible.
+supplied through the line search — the *methods* only determine the direction. `Optimizer`
+defaults to `Static(1e-3)` only for `Adam`, and to an expanding `Backtracking` search for
+`GradientMethod` and `MomentumMethod`; passing `Static(learning_rate)` gives all three the same
+fixed rate.
 """
 function build_optimizer(ps::NetworkParameters, algorithm::GeometricOptimizers.OptimizerMethod)
     optimizer = Optimizer(

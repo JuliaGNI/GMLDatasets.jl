@@ -17,10 +17,10 @@
 # along x_r, `hred_drift`, is reported with each reduction error: a large drift means the reduced
 # integration and not the reduction is what the error measures.
 #
-# Writes `$(LW_OUTPUT_DIR)/errors.csv`, one row per (method, n, seed, μ), and `errors.h5`, the same
-# columns with the settings and package versions as attributes. The PSD rows have seed 0.
+# Writes `$(LW_OUTPUT_DIR)/errors$(LW_TAG).csv`, one row per (method, n, seed, μ), and
+# `errors$(LW_TAG).h5`, the same columns with the settings and package versions as attributes. The
+# PSD rows have seed 0.
 
-using CUDA
 using GeometricIntegrators: ImplicitMidpoint, integrate
 
 include(joinpath(@__DIR__, "common.jl"))

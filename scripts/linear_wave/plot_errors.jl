@@ -3,11 +3,11 @@
 #
 #     julia --project=scripts scripts/linear_wave/plot_errors.jl
 #
-# Reads `$(LW_OUTPUT_DIR)/errors.h5` and writes `errors.pdf`, drawn at its printed width
-# (`LW_WIDTH_PT`, default a 16 cm text width) with 10 pt text. The errors are on a logarithmic scale,
-# shared by all panels. With several seeds the SAE markers are the median and bars span the smallest
-# to the largest seed; with one seed there are no bars. PSD is deterministic. The panels are labeled below; what the markers mean
-# goes in the caption.
+# Reads `$(LW_OUTPUT_DIR)/errors$(LW_TAG).h5` and writes `errors$(LW_TAG).pdf`, drawn at its printed
+# width (`LW_WIDTH_PT`, default a 16 cm text width) with 10 pt text. The errors are on a logarithmic
+# scale, shared by all panels. With several seeds the SAE markers are the median and bars span the
+# smallest to the largest seed; with one seed there are no bars. PSD is deterministic. The panels
+# are labeled below, and the legend under them names the markers.
 
 using CairoMakie
 using Statistics

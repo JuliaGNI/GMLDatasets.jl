@@ -1,6 +1,8 @@
 import GeometricProblems.LinearWave as LinearWave
 
-using GeometricIntegrators: ImplicitMidpoint
+using GeometricIntegrators: ImplicitMidpoint, integrate
+using GeometricIntegrators: parameters as problem_parameters
+using GeometricSolutions: EnsembleSolution, GeometricSolution
 
 @doc raw"""
     linear_wave(; N, μ, timespan, n_time_steps, integrator)
@@ -73,7 +75,7 @@ function linear_wave_snapshots(solution::GeometricSolution)
 end
 
 function linear_wave_snapshots(solution::EnsembleSolution)
-    cat((linear_wave_snapshots(s) for s in solution)...; dims = 3)
+    stack(linear_wave_snapshots, solution)
 end
 
 """

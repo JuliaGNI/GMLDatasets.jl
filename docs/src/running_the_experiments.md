@@ -68,11 +68,11 @@ runs the same four trainings. It stays at `n_epochs = 5`, because on the host a 
 
 - **The learning rate comes from the line search.** The optimizer *methods* only produce a direction,
   so the step size is `linesearch = Static(η)`. `Optimizer` defaults to a `Static` step only for
-  `Adam`; for `GradientMethod` and `MomentumMethod` it defaults to a backtracking line search.
-  `Adam(; β₁, β₂, δ)` takes only its moment coefficients, and `MomentumMethod(; α)`'s `α` is the
-  momentum coefficient, not a step size; `Optimizer` converts either to the element type of the
-  parameters. The scripts pass `Static(learning_rate)` explicitly, so the rate is readable at the
-  call site rather than being a package default.
+  `Adam` and the rest of its family; for `GradientMethod` and `MomentumMethod` it defaults to a
+  backtracking line search. `Adam(; β₁, β₂, δ)` takes only its coefficients, none of them a learning
+  rate, and `MomentumMethod(; α)`'s `α` is the momentum coefficient, not a step size; `Optimizer`
+  converts either to the element type of the parameters. The scripts pass `Static(learning_rate)`
+  explicitly, so the rate is readable at the call site rather than being a package default.
 - **`Zygote`, not `ForwardDiff`.** The forward-mode gradient that `Optimizer` builds with
   `mode = :autodiff` costs one pass of the loss per chunk of twelve parameters, of which there are
   154938 here, so a hand-written `∇F!` is passed to `Optimizer(ps, F; ∇F!)`.

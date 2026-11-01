@@ -1,0 +1,157 @@
+# DocInventory version 1
+project = "ReducedComplexityModeling.jl"
+version = "0.5.1"
+
+[[jl.function]]
+name = "ReducedComplexityModeling.read_parameters"
+uri = "#$"
+[[jl.function]]
+name = "ReducedComplexityModeling.train!"
+uri = "#ReducedComplexityModeling.train%21"
+
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{DataLoader{T1, <:Union{AbstractArray{T}, NamedTuple{S, <:Tuple{Vararg{AbstractArray{T}}}} where S} where T, Nothing, K}}, Tuple{T}, Tuple{K}, Tuple{T1}, Tuple{DataLoader{T1, <:Union{AbstractArray{T}, NamedTuple{S, <:Tuple{Vararg{AbstractArray{T}}}} where S} where T, Nothing, K}, KernelAbstractions.Backend}, Tuple{DataLoader{T1, <:Union{AbstractArray{T}, NamedTuple{S, <:Tuple{Vararg{AbstractArray{T}}}} where S} where T, Nothing, K}, KernelAbstractions.Backend, Type{T}}} where {T1, K, T}"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7BDataLoader%7BT1%2C%20%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20NamedTuple%7BS%2C%20%3C%3ATuple%7BVararg%7BAbstractArray%7BT%7D%7D%7D%7D%20where%20S%7D%20where%20T%2C%20Nothing%2C%20K%7D%7D%2C%20Tuple%7BT%7D%2C%20Tuple%7BK%7D%2C%20Tuple%7BT1%7D%2C%20Tuple%7BDataLoader%7BT1%2C%20%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20NamedTuple%7BS%2C%20%3C%3ATuple%7BVararg%7BAbstractArray%7BT%7D%7D%7D%7D%20where%20S%7D%20where%20T%2C%20Nothing%2C%20K%7D%2C%20KernelAbstractions.Backend%7D%2C%20Tuple%7BDataLoader%7BT1%2C%20%3C%3AUnion%7BAbstractArray%7BT%7D%2C%20NamedTuple%7BS%2C%20%3C%3ATuple%7BVararg%7BAbstractArray%7BT%7D%7D%7D%7D%20where%20S%7D%20where%20T%2C%20Nothing%2C%20K%7D%2C%20KernelAbstractions.Backend%2C%20Type%7BT%7D%7D%7D%20where%20%7BT1%2C%20K%2C%20T%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.train-Tuple{TrainingProblem, Optim.FirstOrderOptimizer}"
+uri = "#ReducedComplexityModeling.train-Tuple%7BTrainingProblem%2C%20Optim.FirstOrderOptimizer%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.project-Tuple{GeometricSolutions.GeometricSolution, ReducedBasisModel}"
+uri = "#ReducedComplexityModeling.project-Tuple%7BGeometricSolutions.GeometricSolution%2C%20ReducedBasisModel%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.Batch-Tuple{Int64}"
+uri = "#ReducedComplexityModeling.Batch-Tuple%7BInt64%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.map_to_new_backend-Union{Tuple{T}, Tuple{AbstractArray{T}, KernelAbstractions.Backend}} where T"
+uri = "#ReducedComplexityModeling.map_to_new_backend-Union%7BTuple%7BT%7D%2C%20Tuple%7BAbstractArray%7BT%7D%2C%20KernelAbstractions.Backend%7D%7D%20where%20T"
+[[jl.method]]
+name = "ReducedComplexityModeling.reduce!-Tuple{ReducedBasisModel, Int64, POD}"
+uri = "#ReducedComplexityModeling.reduce%21-Tuple%7BReducedBasisModel%2C%20Int64%2C%20POD%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.hassamples-Tuple{Parameter{DT, ST} where {DT, ST<:(AbstractVector)}}"
+uri = "#ReducedComplexityModeling.hassamples-Tuple%7BParameter%7BDT%2C%20ST%7D%20where%20%7BDT%2C%20ST%3C%3A%28AbstractVector%29%7D%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.data_tensors_from_geometric_solution-Tuple{GeometricSolutions.GeometricSolution{<:Number, <:Number, <:Any, <:NamedTuple{(:t, :q, :p, :q̇, :ṗ)}}}"
+uri = "#ReducedComplexityModeling.data_tensors_from_geometric_solution-Tuple%7BGeometricSolutions.GeometricSolution%7B%3C%3ANumber%2C%20%3C%3ANumber%2C%20%3C%3AAny%2C%20%3C%3ANamedTuple%7B%28%3At%2C%20%3Aq%2C%20%3Ap%2C%20%3Aq%CC%87%2C%20%3A%E1%B9%97%29%7D%7D%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.number_of_batches-Tuple{DataLoader, Batch}"
+uri = "#ReducedComplexityModeling.number_of_batches-Tuple%7BDataLoader%2C%20Batch%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Tuple{AbstractVector}"
+uri = "#ReducedComplexityModeling.DataLoader-Tuple%7BAbstractVector%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{@NamedTuple{q::AT, p::AT}}, Tuple{AT}, Tuple{T}} where {T, AT<:AbstractMatrix{T}}"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7B%40NamedTuple%7Bq%3A%3AAT%2C%20p%3A%3AAT%7D%7D%2C%20Tuple%7BAT%7D%2C%20Tuple%7BT%7D%7D%20where%20%7BT%2C%20AT%3C%3AAbstractMatrix%7BT%7D%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.h5save-Tuple{HDF5.H5DataStore, ParameterSpace}"
+uri = "#ReducedComplexityModeling.h5save-Tuple%7BHDF5.H5DataStore%2C%20ParameterSpace%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{GeometricSolutions.EnsembleSolution{T, T1, Vector{ST}}}, Tuple{ST}, Tuple{TT}, Tuple{TuT}, Tuple{T1}, Tuple{T}} where {T, T1, TuT, TT<:(GeometricSolutions.TimeSeries{T1, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T1, AA} where AA<:AbstractVector{T1})}), ST<:(GeometricSolutions.GeometricSolution{T, T1, TT, NamedTuple{(:t, :q, :p, :q̇, :ṗ), TuT}})}"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7BGeometricSolutions.EnsembleSolution%7BT%2C%20T1%2C%20Vector%7BST%7D%7D%7D%2C%20Tuple%7BST%7D%2C%20Tuple%7BTT%7D%2C%20Tuple%7BTuT%7D%2C%20Tuple%7BT1%7D%2C%20Tuple%7BT%7D%7D%20where%20%7BT%2C%20T1%2C%20TuT%2C%20TT%3C%3A%28GeometricSolutions.TimeSeries%7BT1%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT1%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT1%7D%29%7D%29%2C%20ST%3C%3A%28GeometricSolutions.GeometricSolution%7BT%2C%20T1%2C%20TT%2C%20NamedTuple%7B%28%3At%2C%20%3Aq%2C%20%3Ap%2C%20%3Aq%CC%87%2C%20%3A%E1%B9%97%29%2C%20TuT%7D%7D%29%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.assign_output_estimate-Union{Tuple{T}, Tuple{AbstractArray{T, 3}, Int64}} where T"
+uri = "#ReducedComplexityModeling.assign_output_estimate-Union%7BTuple%7BT%7D%2C%20Tuple%7BAbstractArray%7BT%2C%203%7D%2C%20Int64%7D%7D%20where%20T"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{AbstractArray{T, 3}}, Tuple{T}} where T"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7BAbstractArray%7BT%2C%203%7D%7D%2C%20Tuple%7BT%7D%7D%20where%20T"
+[[jl.method]]
+name = "ReducedComplexityModeling.convert_input_and_batch_indices_to_array-Union{Tuple{K}, Tuple{OT}, Tuple{AT}, Tuple{T}, Tuple{DataLoader{T, AT, OT, K}, Batch, Vector{Tuple{Int64, Int64}}}} where {T, AT, OT, K}"
+uri = "#ReducedComplexityModeling.convert_input_and_batch_indices_to_array-Union%7BTuple%7BK%7D%2C%20Tuple%7BOT%7D%2C%20Tuple%7BAT%7D%2C%20Tuple%7BT%7D%2C%20Tuple%7BDataLoader%7BT%2C%20AT%2C%20OT%2C%20K%7D%2C%20Batch%2C%20Vector%7BTuple%7BInt64%2C%20Int64%7D%7D%7D%7D%20where%20%7BT%2C%20AT%2C%20OT%2C%20K%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling._create_group-Tuple{HDF5.H5DataStore, Any}"
+uri = "#ReducedComplexityModeling._create_group-Tuple%7BHDF5.H5DataStore%2C%20Any%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.accuracy-Tuple{AbstractNeuralNetworks.NeuralNetwork, DataLoader}"
+uri = "#ReducedComplexityModeling.accuracy-Tuple%7BAbstractNeuralNetworks.NeuralNetwork%2C%20DataLoader%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{GeometricSolutions.GeometricSolution{T, T2, TT, NT}}, Tuple{NT}, Tuple{TuT}, Tuple{TT}, Tuple{T2}, Tuple{T}} where {T<:Number, T2<:Number, TT<:(GeometricSolutions.TimeSeries{T2, N, OT} where {N, OT<:(OffsetArrays.OffsetVector{T2, AA} where AA<:AbstractVector{T2})}), TuT, NT<:Union{NamedTuple{(:t, :q, :p, :q̇, :ṗ), TuT}, NamedTuple{(:t, :q, :v), TuT}, NamedTuple{(:t, :q, :q̇), TuT}}}"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7BGeometricSolutions.GeometricSolution%7BT%2C%20T2%2C%20TT%2C%20NT%7D%7D%2C%20Tuple%7BNT%7D%2C%20Tuple%7BTuT%7D%2C%20Tuple%7BTT%7D%2C%20Tuple%7BT2%7D%2C%20Tuple%7BT%7D%7D%20where%20%7BT%3C%3ANumber%2C%20T2%3C%3ANumber%2C%20TT%3C%3A%28GeometricSolutions.TimeSeries%7BT2%2C%20N%2C%20OT%7D%20where%20%7BN%2C%20OT%3C%3A%28OffsetArrays.OffsetVector%7BT2%2C%20AA%7D%20where%20AA%3C%3AAbstractVector%7BT2%7D%29%7D%29%2C%20TuT%2C%20NT%3C%3AUnion%7BNamedTuple%7B%28%3At%2C%20%3Aq%2C%20%3Ap%2C%20%3Aq%CC%87%2C%20%3A%E1%B9%97%29%2C%20TuT%7D%2C%20NamedTuple%7B%28%3At%2C%20%3Aq%2C%20%3Av%29%2C%20TuT%7D%2C%20NamedTuple%7B%28%3At%2C%20%3Aq%2C%20%3Aq%CC%87%29%2C%20TuT%7D%7D%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.sample-Tuple{ParameterSampler, NamedTuple}"
+uri = "#ReducedComplexityModeling.sample-Tuple%7BParameterSampler%2C%20NamedTuple%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.save_parameters-Tuple{HDF5.H5DataStore, NamedTuple}"
+uri = "#ReducedComplexityModeling.save_parameters-Tuple%7BHDF5.H5DataStore%2C%20NamedTuple%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.accuracy-Union{Tuple{BT}, Tuple{AT}, Tuple{T1}, Tuple{T}, Tuple{AbstractNeuralNetworks.Chain, NeuralNetworkParameters.NetworkParameters, DataLoader{T, AT, BT}}} where {T, T1<:Integer, AT<:(AbstractArray{T}), BT<:(AbstractArray{T1})}"
+uri = "#ReducedComplexityModeling.accuracy-Union%7BTuple%7BBT%7D%2C%20Tuple%7BAT%7D%2C%20Tuple%7BT1%7D%2C%20Tuple%7BT%7D%2C%20Tuple%7BAbstractNeuralNetworks.Chain%2C%20NeuralNetworkParameters.NetworkParameters%2C%20DataLoader%7BT%2C%20AT%2C%20BT%7D%7D%7D%20where%20%7BT%2C%20T1%3C%3AInteger%2C%20AT%3C%3A%28AbstractArray%7BT%7D%29%2C%20BT%3C%3A%28AbstractArray%7BT1%7D%29%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.DataLoader-Union{Tuple{AbstractMatrix{T}}, Tuple{T}} where T"
+uri = "#ReducedComplexityModeling.DataLoader-Union%7BTuple%7BAbstractMatrix%7BT%7D%7D%2C%20Tuple%7BT%7D%7D%20where%20T"
+[[jl.method]]
+name = "ReducedComplexityModeling.map_to_type-Union{Tuple{T}, Tuple{AbstractArray, Type{T}}} where T"
+uri = "#ReducedComplexityModeling.map_to_type-Union%7BTuple%7BT%7D%2C%20Tuple%7BAbstractArray%2C%20Type%7BT%7D%7D%7D%20where%20T"
+[[jl.method]]
+name = "ReducedComplexityModeling.compose-Tuple{GeometricEquations.ODEProblem{dType} where dType<:Number, ReducedBasisModel}"
+uri = "#ReducedComplexityModeling.compose-Tuple%7BGeometricEquations.ODEProblem%7BdType%7D%20where%20dType%3C%3ANumber%2C%20ReducedBasisModel%7D"
+[[jl.method]]
+name = "ReducedComplexityModeling.h5load-Tuple{Type{ParameterSpace}, HDF5.H5DataStore}"
+uri = "#ReducedComplexityModeling.h5load-Tuple%7BType%7BParameterSpace%7D%2C%20HDF5.H5DataStore%7D"
+
+[[jl.module]]
+name = "ReducedComplexityModeling.ReducedComplexityModeling"
+uri = "#$"
+
+[[jl.type]]
+name = "ReducedComplexityModeling.ParametricDataLoader"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.Dependent"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.RandomParameterSampler"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.GeometricIntegratorEnsembleData"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.Independent"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.CartesianParameterSampler"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.GeometricIntegratorData"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.QuasiRandomParameterSampler"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.ParameterSampler"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.TrainingProblem"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.POD"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.DataLoader"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.ReducedBasisModel"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.TrainingData"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.Parameter"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.IntrinsicSpace"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.ObservableSpace"
+uri = "#$"
+[[jl.type]]
+name = "ReducedComplexityModeling.ParameterSpace"
+uri = "#$"
+
+[[std.doc]]
+dispname = "Home"
+name = "index"
+uri = ""
+
+[[std.label]]
+name = "ReducedComplexityModeling"
+uri = "#$"

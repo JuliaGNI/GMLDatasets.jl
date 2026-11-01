@@ -48,8 +48,10 @@ end
 for n in HALF_REDUCED_DIMS
     psd = nothing
     for seed in SEEDS
-        if isfile(sae_path(n, seed))
-            println("$(sae_path(n, seed)) exists, skipped")
+        path = sae_path(n, seed)
+        if isfile(path)
+            check_sae_metadata(path, n, seed)
+            println("$path exists, skipped")
             continue
         end
         WARM_START && psd === nothing && (psd = fit_psd(data, n))

@@ -189,3 +189,24 @@ function write_metadata(file)
     end
     nothing
 end
+
+const SAE_SETTING_KEYS = (:N, :mu_min, :mu_max, :n_params, :n_time_steps, :timespan,
+    :warm_start, :batch_size, :step_size, :adam_beta1, :adam_beta2, :adam_delta,
+    :precision, :integrator, :smoke)
+
+"Check that the HDF5 attributes of the saved SAE at `path` match the training settings."
+function check_sae_metadata(path, n, seed, epochs = N_EPOCHS)
+    expected = merge(NamedTuple{SAE_SETTING_KEYS}(settings()),
+        (half_reduced_dim = n, seed = seed, epochs = epochs))
+    HDF5.h5open(path, "r") do file
+        attributes = HDF5.attributes(file)
+        for (k, v) in pairs(expected)
+            key = string(k)
+            value = v isa Bool ? Int(v) : v
+            haskey(attributes, key) || error("$path is missing attribute $key")
+            actual = read(attributes[key])
+            actual == value || error("$path has $key = $actual, expected $value")
+        end
+    end
+    nothing
+end

@@ -45,6 +45,7 @@ for n in HALF_REDUCED_DIMS
     for seed in SEEDS
         path = sae_path(n, seed)
         isfile(path) || error("$path is missing; run train_sae.jl first")
+        check_sae_metadata(path, n, seed)
         push!(reductions, ("SAE", n, seed, load(NeuralNetwork, path, architecture(n))))
     end
 end
@@ -54,21 +55,16 @@ function evaluate(method, n, seed, network, μ)
     sol_full = full_solutions[μ]
     rs = HRedSys(problem, encoder(network), decoder(network); integrator = ImplicitMidpoint())
     e_proj = projection_error(rs, sol_full)
-    e_red, drift = try
-        sol_reduced = integrate_reduced_system(rs)
-        # H∘ℛ evaluated directly: `rs.h_reduced` calls the decoder on (q, p) as two arguments, which
-        # the decoder does not accept.
-        dec = decoder(network)
-        H = map(eachindex(sol_reduced.t)) do k
-            z = dec(vcat(sol_reduced.q[k], sol_reduced.p[k]))
-            LinearWave.hamiltonian(0.0, z[1:N], z[(N + 1):end], (μ = μ,))
-        end
-        (reduction_error(rs, sol_full, sol_reduced),
-            maximum(abs, H .- first(H)) / abs(first(H)))
-    catch err
-        @warn "reduced integration failed" method n seed μ exception = err
-        (NaN, NaN)
+    sol_reduced = integrate_reduced_system(rs)
+    # H∘ℛ evaluated directly: `rs.h_reduced` calls the decoder on (q, p) as two arguments, which
+    # the decoder does not accept.
+    dec = decoder(network)
+    H = map(eachindex(sol_reduced.t)) do k
+        z = dec(vcat(sol_reduced.q[k], sol_reduced.p[k]))
+        LinearWave.hamiltonian(0.0, z[1:N], z[(N + 1):end], (μ = μ,))
     end
+    e_red = reduction_error(rs, sol_full, sol_reduced)
+    drift = maximum(abs, H .- first(H)) / abs(first(H))
     (method = method, n = n, seed = seed, mu = μ, projection_error = e_proj,
         reduction_error = e_red, hred_drift = drift, fom_drift = fom_drift[μ])
 end

@@ -13,8 +13,8 @@ Bibliography.sort_bibliography!(bib.entries, :nyt)  # name-year-title
 #
 # The **trailing slash on the root URL is required**. `DocumenterInterLinks` concatenates the root
 # with the relative URI the inventory records, so without it a URI such as `page/#$` becomes
-# `.../latestpage/#...`, which is a 404 that nothing in the build checks: `@extref` resolution only verifies that the *name* is in the
-# inventory, never that the assembled URL exists.
+# `.../latestpage/#...`, which is a 404 that nothing in the build checks: `@extref` resolution only
+# verifies that the *name* is in the inventory, never that the assembled URL exists.
 #
 # Refresh the fallbacks with
 #     julia -e 'using DocInventories; save("docs/inventories/<Name>.toml", Inventory(<url>; root_url = ""))'

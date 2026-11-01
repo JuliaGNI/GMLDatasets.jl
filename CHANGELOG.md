@@ -109,6 +109,14 @@ breaking release).
   `"0.6.6"` (from `"0.6.5"`) for the same reason; and `KernelAbstractions` to `"0.9.38, 0.10"`
   (from `"0.9.15, 0.10"`), which `GeometricOptimizers` 0.9 requires.
 
+  These bounds replace every bound of the same dependencies that the entries below name: for GML,
+  `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
+  own), and `"0.6.1, 0.7, 0.8"` after the floor raise; for `NeuralNetworkParameters`, the
+  `"0.2.2, 0.3"` of `test/Project.toml`; the `AbstractNeuralNetworks`, `GeometricIntegrators`,
+  `GeometricProblems`, `GeometricSolutions` and `KernelAbstractions` bounds of the widening and of
+  the floor raises; and the `"0.21"` that `GeometricEquations` takes as a direct dependency. They
+  close `KNOWN_ISSUES.md` K3.
+
 - **Text that GML 0.9 made stale now states the current API.** The learning-rate comments of the
   five MNIST scripts in `scripts/geometric_optimizers/` say that `Optimizer` defaults to
   `Static(1e-3)` only for the Adam methods and to an expanding `Backtracking` search for
@@ -119,14 +127,6 @@ breaking release).
   docs drop the unused `GeometricMachineLearning` InterLinks entry, its committed inventory and the
   `using GeometricMachineLearning` in `docs/make.jl`; the tutorials still load the package, so
   `docs/Project.toml` keeps it.
-
-  These bounds replace every bound of the same dependencies that the entries below name: for GML,
-  `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
-  own), and `"0.6.1, 0.7, 0.8"` after the floor raise; for `NeuralNetworkParameters`, the
-  `"0.2.2, 0.3"` of `test/Project.toml`; the `AbstractNeuralNetworks`, `GeometricIntegrators`,
-  `GeometricProblems`, `GeometricSolutions` and `KernelAbstractions` bounds of the widening and of
-  the floor raises; and the `"0.21"` that `GeometricEquations` takes as a direct dependency. They
-  close `KNOWN_ISSUES.md` K3.
 
 - **`scripts/gml/transformer_mnist.jl` and `transformer_fashion_mnist.jl` run on GML 0.9, and the
   documentation describes its API.** The two scripts build each optimizer with

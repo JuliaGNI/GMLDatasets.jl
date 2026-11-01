@@ -147,6 +147,14 @@ breaking release).
   `using GeometricMachineLearning` in `docs/make.jl`; the tutorials still load the package, so
   `docs/Project.toml` keeps it.
 
+- **The docstrings and pages name `ReducedComplexityModeling` as the owner of `DataLoader`.** The
+  `DataLoader`, `mnist_data_loader`, `fashion_mnist_data_loader` and module docstrings, *Home* and
+  *The Pendulum Data Set* say so; `GeometricMachineLearning` 0.9 only re-exports it. The
+  `DataLoader` docstring states what the image constructor adds over the generic tensor–tensor one
+  of `ReducedComplexityModeling`, which accepts an integer target. *Running the Experiments* gives
+  the default of `MNIST_REPETITIONS` as 10, the value `mnist_cuda_repetitions.jl` uses, and its
+  run time as ≈16 h.
+
 - **`scripts/gml/transformer_mnist.jl` and `transformer_fashion_mnist.jl` run on GML 0.9, and the
   documentation describes its API.** The two scripts build each optimizer with
   `TrainingOptimizer(nn.params; algorithm, linesearch)` from `Adam()`, `GradientMethod()` and

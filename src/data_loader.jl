@@ -1,7 +1,7 @@
 @doc raw"""
     DataLoader(images::AbstractArray{T, 3}, labels::AbstractVector)
 
-Make an instance of `GeometricMachineLearning.DataLoader` for an image classification problem.
+Make an instance of `ReducedComplexityModeling.DataLoader` for an image classification problem.
 
 `images` is a tensor whose first two axes are the image axes and whose third axis indexes the images;
 `labels` is a vector of integer labels, one per image. Each image is cut into square patches by
@@ -20,11 +20,10 @@ MNIST images are of size ``28\times28``. For `patch_length = 7` such an image is
 
 # Implementation
 
-This method lives in `GMLDatasets` rather than in `GeometricMachineLearning` because it is the piece
-that is specific to labelled image data. It is also the only way to build a `DataLoader` whose input
-is `Float32` and whose output is `Int`: the generic tensor–tensor constructor in
-`GeometricMachineLearning` requires a single shared element type, whereas a one-hot target is
-integer-valued whatever the images are.
+This method lives in `GMLDatasets` rather than in `ReducedComplexityModeling` because it is the
+piece that is specific to labelled image data: it cuts the images into patches and one-hot encodes
+the labels, and it builds a `:TimeSeries` loader. The generic tensor–tensor constructor of
+`ReducedComplexityModeling` takes its two tensors as they are and builds a `:RegularData` loader.
 """
 function DataLoader(images::AbstractArray{T, 3}, labels::AbstractVector{T1};
         patch_length = 7,

@@ -9,7 +9,7 @@ image-dataset package to document itself. Everything that does lives here: the
 demonstrations and the numerical experiment from [Brantner:2023](@cite).
 
 The entry points are [`mnist_data_loader`](@ref) and [`fashion_mnist_data_loader`](@ref), which hand
-back a `GeometricMachineLearning.DataLoader` in the *time series* format a transformer wants:
+back a `ReducedComplexityModeling.DataLoader` in the *time series* format a transformer wants:
 
 ```julia
 using GMLDatasets
@@ -33,7 +33,8 @@ using AbstractNeuralNetworks: networkbackend
 using KernelAbstractions
 
 # `DataLoader` is imported rather than `using`ed because this package adds a constructor to it — the
-# one for labelled image data, which cannot live in `GeometricMachineLearning` (see `data_loader.jl`).
+# one for labelled image data, which does not belong in `ReducedComplexityModeling` (see
+# `data_loader.jl`). It is `ReducedComplexityModeling`'s, and `GeometricMachineLearning` re-exports it.
 import GeometricMachineLearning: DataLoader
 import MLDatasets
 

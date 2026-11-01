@@ -2,7 +2,7 @@
 
 ### K1 · The `DataLoader` constructor for labelled images is type piracy
 
-- **location:** `src/data_loader.jl:29`
+- **location:** `src/data_loader.jl:28`
 - **evidence:** `Aqua.test_piracies(GMLDatasets)` fails with one result; `test/quality/aqua.jl` marks
   it `broken = true`. The method adds to `DataLoader`, which `ReducedComplexityModeling` owns and
   `GeometricMachineLearning` re-exports, for argument types that this package does not own.

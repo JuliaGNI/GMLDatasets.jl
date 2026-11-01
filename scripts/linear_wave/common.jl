@@ -50,6 +50,8 @@ const N_EPOCHS = parse(Int, _setting("LW_N_EPOCHS", "1000", "2"))
 # Epochs after which `train_sae.jl` also saves the network, e.g. "100,200,500"; N_EPOCHS always is.
 const CHECKPOINTS = sort(unique([_ints(_setting("LW_CHECKPOINTS", string(N_EPOCHS), "1"));
                                  N_EPOCHS]))
+all(c -> 1 ≤ c ≤ N_EPOCHS, CHECKPOINTS) ||
+    error("LW_CHECKPOINTS must lie in 1:$N_EPOCHS, got $CHECKPOINTS")
 # Appended to the names of the files `errors.jl` writes and `plot_errors.jl` reads.
 const TAG = get(ENV, "LW_TAG", "")
 const BATCH_SIZE = parse(Int, _setting("LW_BATCH_SIZE", "512", "16"))
@@ -126,9 +128,9 @@ function warm_start!(network, psd)
     for (layer, p) in zip(network.model.layers, values(network.params))
         if layer isa PSDLayer
             k += 1
-            p.weight.A .= psd_weights[k].A
+            copyto!(p.weight.A, psd_weights[k].A)
         elseif hasproperty(p, :scale)
-            p.scale .= 0
+            fill!(p.scale, 0)
         end
     end
     k == length(psd_weights) ||

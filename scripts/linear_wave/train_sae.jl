@@ -20,7 +20,7 @@ using CUDA
 
 include(joinpath(@__DIR__, "common.jl"))
 
-backend, to_device = CUDA.functional() ? (CUDABackend(), cu) : (CPU(), identity)
+backend, to_device = CUDA.functional() ? (CUDABackend(), CuArray) : (CPU(), identity)
 
 data = training_data()
 @printf("training data: %d × %d × %d (2N × time steps × wave speeds)\n", size(data)...)
@@ -45,32 +45,35 @@ function save_network(path, network, losses, n, seed, elapsed)
     mv(path * ".partial", path; force = true)
 end
 
-for n in HALF_REDUCED_DIMS, seed in SEEDS
+for n in HALF_REDUCED_DIMS
+    psd = nothing
+    for seed in SEEDS
+        if isfile(sae_path(n, seed))
+            println("$(sae_path(n, seed)) exists, skipped")
+            continue
+        end
+        WARM_START && psd === nothing && (psd = fit_psd(data, n))
 
-    if isfile(sae_path(n, seed))
-        println("$(sae_path(n, seed)) exists, skipped")
-        continue
-    end
+        Random.seed!(seed)
+        network = NeuralNetwork(architecture(n), backend, Float64)
+        WARM_START && warm_start!(network, psd)
+        optimizer = TrainingOptimizer(network.params;
+            algorithm = Adam(; β₁ = ADAM_BETA1, β₂ = ADAM_BETA2, δ = ADAM_DELTA),
+            linesearch = STEP_SIZE, retraction = Cayley())
 
-    Random.seed!(seed)
-    network = NeuralNetwork(architecture(n), backend, Float64)
-    WARM_START && warm_start!(network, fit_psd(data, n))
-    optimizer = TrainingOptimizer(network.params;
-        algorithm = Adam(; β₁ = ADAM_BETA1, β₂ = ADAM_BETA2, δ = ADAM_DELTA),
-        linesearch = STEP_SIZE, retraction = Cayley())
-
-    # `train!` resumes with the same optimizer, so training in segments between the checkpoints is
-    # the same as training once for N_EPOCHS.
-    losses = Float64[]
-    elapsed = 0.0
-    for epochs in CHECKPOINTS
-        timed = @timed train!(network, optimizer, dl, Batch(BATCH_SIZE),
-            epochs - length(losses); show_progress = false)
-        append!(losses, timed.value)
-        elapsed += timed.time
-        save_network(sae_path(n, seed, epochs), network, losses, n, seed, elapsed)
-        @printf("n = %2d, seed %d, %4d epochs: loss %.3e → %.3e in %.1f s\n",
-            n, seed, epochs, first(losses), last(losses), elapsed)
-        flush(stdout)
+        # `train!` resumes with the same optimizer, so training in segments between the
+        # checkpoints is the same as training once for N_EPOCHS.
+        losses = Float64[]
+        elapsed = 0.0
+        for epochs in CHECKPOINTS
+            timed = @timed train!(network, optimizer, dl, Batch(BATCH_SIZE),
+                epochs - length(losses); show_progress = false)
+            append!(losses, timed.value)
+            elapsed += timed.time
+            save_network(sae_path(n, seed, epochs), network, losses, n, seed, elapsed)
+            @printf("n = %2d, seed %d, %4d epochs: loss %.3e → %.3e in %.1f s\n",
+                n, seed, epochs, first(losses), last(losses), elapsed)
+            flush(stdout)
+        end
     end
 end

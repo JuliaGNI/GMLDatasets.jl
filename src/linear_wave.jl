@@ -70,8 +70,7 @@ of the rows is ``q``, the second half ``p``) and the one `DataLoader` reads off 
 Given a single `GeometricSolution` it returns the ``2N × n_t`` matrix of that trajectory.
 """
 function linear_wave_snapshots(solution::GeometricSolution)
-    # `solution.q[n]` is the state at step n, counted from zero
-    reduce(hcat, [vcat(solution.q[n], solution.p[n]) for n in 0:(length(solution.t) - 1)])
+    vcat(Array(solution.q), Array(solution.p))
 end
 
 function linear_wave_snapshots(solution::EnsembleSolution)

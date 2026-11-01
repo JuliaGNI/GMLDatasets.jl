@@ -151,8 +151,8 @@ breaking release).
   `ReducedComplexityModeling`;** `GeometricMachineLearning` 0.9 only re-exports it. They are the
   module docstring, the docstrings of the `DataLoader` method for labelled images,
   `mnist_data_loader`, `fashion_mnist_data_loader` and `linear_wave`, the README, *Home*, *The
-  Pendulum Data Set*, *The Linear Wave Data Set* and the header of
-  `scripts/geometric_optimizers/mnist.jl`. The `DataLoader` docstring states what the image
+  Pendulum Data Set*, *The Linear Wave Data Set*, the comment on the import of `DataLoader` and
+  the header of `scripts/geometric_optimizers/mnist.jl`. The `DataLoader` docstring states what the image
   constructor adds over the generic tensor–tensor one of `ReducedComplexityModeling`, which accepts
   an integer target. *Running the Experiments* and the header of `mnist_cuda_repetitions.jl` give
   the default of `MNIST_REPETITIONS` as 10, the value the script uses, and its run time as ≈16 h.

@@ -4,6 +4,7 @@ Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 GMLDatasets = "676c5310-75a3-4edf-a7af-a2dbff91674b"
 GeometricMachineLearning = "194d25b2-d3f5-49f0-af24-c124f4aa80cc"
+GeometricOptimizers = "fc236c15-5557-4942-aa65-b650f329279e"
 GeometricProblems = "18cb22b4-ad41-5c80-9c5f-710df63fbdc9"
 NeuralNetworkParameters = "67f4d93a-60e9-472b-8cdd-1ccf6005724a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -16,7 +17,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 GMLDatasets = {path = ".."}
 
 [compat]
-NeuralNetworkParameters = "0.2.2, 0.3"
+NeuralNetworkParameters = "0.5"
 Random = "1"
 SHA = "0.7, 1"
 SafeTestsets = "0.1"

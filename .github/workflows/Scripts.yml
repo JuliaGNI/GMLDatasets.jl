@@ -6,14 +6,13 @@
 # file.
 #
 # Two of the harness's suites need `GeometricOptimizers` and run against `scripts/Project.toml`,
-# which is a different environment from the package's: it takes `GeometricMachineLearning` and
-# `GeometricOptimizers` from branches, not from the registry, and does not track a `Manifest.toml`
-# (`scripts/Project.toml` names the branches and why). The other two need nothing
-# but `SHA` and Base and run from `test/runtests.jl` instead, inside the package suite.
+# which is a different environment from the package's and does not track a `Manifest.toml`. The
+# other two need nothing but `SHA` and Base and run from `test/runtests.jl` instead, inside the
+# package suite.
 #
-# NOT A REQUIRED CHECK. The environment resolves two moving branches on purpose, so this job can go
-# red for a change made upstream rather than for one made here — which is information worth having
-# before a run is launched, and not a reason to block a merge.
+# NOT A REQUIRED CHECK. The environment resolves the newest releases its `[compat]` admits, so this
+# job can go red for a release made upstream rather than for a change made here — which is
+# information worth having before a run is launched, and not a reason to block a merge.
 
 name: Scripts
 
@@ -46,9 +45,8 @@ jobs:
                   version: "1"
             - uses: julia-actions/cache@v3
             - name: Instantiate the scripts environment
-              # `Pkg.update` and not `Pkg.instantiate`: to `resolve` a `rev = "main"` source is a
-              # fixed pin, so it calls a stale commit satisfiable and would leave this job testing
-              # against something other than `main`. See scripts/revision/README.md.
+              # `Pkg.update` and not `Pkg.instantiate`: the manifest is untracked, and the job tests
+              # the newest releases that `scripts/Project.toml` admits.
               run: julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
             - name: The optimizer-step timing adapter
               run: julia --project=scripts --startup-file=no scripts/geometric_optimizers/test_step_timing.jl

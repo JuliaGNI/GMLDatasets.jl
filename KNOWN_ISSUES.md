@@ -48,14 +48,3 @@
   device. The image stages keep their parameters on the host and are unaffected.
 - **kind:** upstream
 - **found:** 2026-10-23, in the port of the revision harness to GeometricOptimizers 0.9
-
-## Documentation
-
-### K3 · The CHANGELOG states a narrower `GeometricMachineLearning` bound than `Project.toml` has
-
-- **location:** `CHANGELOG.md:57`
-- **evidence:** the `[Unreleased]` bullet "`[compat]` widens …" says
-  `GeometricMachineLearning = "0.6, 0.7"`; `Project.toml:18` has `GeometricMachineLearning = "0.6, 0.7, 0.8"`.
-- **kind:** found late
-- **found:** #19 (2026-09-27, commit d92e3d5), which widened the bound in `Project.toml` and left
-  the CHANGELOG line from #18 unchanged

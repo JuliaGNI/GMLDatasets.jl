@@ -76,19 +76,36 @@ breaking release).
   `GeometricOptimizers` against `scripts/Project.toml`. The other two need nothing but `SHA` and
   Base and run from `test/runtests.jl`, inside the package suite. `CI.yml` is byte-identical in
   every repository by policy and cannot gain a step; its own header prescribes this escape hatch.
-  Not a required check: the scripts environment follows `GeometricMachineLearning`'s `main` on
-  purpose, so the job can go red for a change made upstream.
+  Not a required check: the scripts environment resolves the newest releases its `[compat]` admits,
+  so the job can go red for a release made upstream.
 
 ### Changed
 
+- **GMLDatasets requires GeometricMachineLearning 0.9** (`[compat]` `"0.9"`, from
+  `"0.6.1, 0.7, 0.8"`). GML 0.9 trains with `TrainingOptimizer` and `train!` and no longer defines
+  `Optimizer` or `GradientOptimizer`, so the two tests that trained a network follow it: `test/mnist_utils.jl` takes one `GradientMethod` step with
+  `GeometricOptimizers.optimization_step!` and still asserts that the step lowers the loss, and
+  `test/pendulum.jl` trains the symplectic autoencoder for one epoch with `train!`. `src/` is
+  unchanged. `test/Project.toml` bounds `NeuralNetworkParameters` to `"0.5"`, which GML 0.9 needs,
+  and adds `GeometricOptimizers`, whose binding inside GML is not public, with no bound of its own.
+  Under `NeuralNetworkParameters` 0.5 a function differentiated with respect to a parameter set is
+  called with the `NetworkParameters` itself, so the `NamedTuple` arm of the annotation in
+  `test/mnist_utils.jl` goes.
+  `scripts/Project.toml` takes GML from the registry at `"0.9"` and no longer names a `[sources]`
+  entry for it; delete a `scripts/Manifest.toml` written before this change.
+
+  This bound replaces every `GeometricMachineLearning` bound that the entries below name:
+  `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
+  own), and `"0.6.1, 0.7, 0.8"` after the floor raise. It closes `KNOWN_ISSUES.md` K3.
+
 - **The scripts environment and the revision harness run on GeometricOptimizers 0.9.1 and the
-  `TrainingOptimizer` of GeometricMachineLearning `main`.** The Scripts workflow failed to resolve,
+  `TrainingOptimizer` of GeometricMachineLearning 0.9.** The Scripts workflow failed to resolve,
   because `scripts/Project.toml` bounded GeometricOptimizers to 0.8 while the 0.9 line was what the
   harness needs; the bounds are now GeometricOptimizers `"0.9.1"` and NeuralNetworkParameters
-  `"0.5"`, which GML `main` needs. `GeometricOptimizers` comes from the registry and names no
+  `"0.5"`, which GML 0.9 needs. `GeometricOptimizers` comes from the registry and names no
   source: 0.9.1 is the first release that carries `CompositeMethod`, which the
-  `scalar-moment-adam` baseline is built from. `GeometricMachineLearning` stays on `main`, because
-  the registered 0.8.0 bounds `GeometricOptimizers` to `0.8`. An environment for a benchmark that
+  `scalar-moment-adam` baseline is built from. `GeometricMachineLearning` comes from the registry
+  too (see the entry on GML 0.9 below). An environment for a benchmark that
   measures optimizer steps no longer follows a branch of the package it measures, so a number is
   read back from the release the run bundle's manifest records.
 
@@ -108,14 +125,14 @@ breaking release).
 
 - **The README install instructions no longer develop `GeometricMachineLearning` from `main`.** They
   install GMLDatasets from its repository and let GML resolve from the registry. The paragraph
-  described a `[sources]` pin that `Project.toml` no longer has, and GML `main` no longer has the
-  `Optimizer` API that the tests and the MNIST tutorial use.
+  described a `[sources]` pin that `Project.toml` no longer has, and GML `main` no longer had the
+  `Optimizer` API that the tests and the MNIST tutorial used then.
 
 - **The documentation builds against the registered GeometricMachineLearning, not its `main`
   branch.** `docs/Project.toml` no longer pins GML to `main` under `[sources]`; that pin was for the
   time before 0.5 was registered. GML `main` has since removed `Optimizer` in favour of
   `TrainingOptimizer` and `train!`, so the MNIST tutorial failed with
-  ``UndefVarError: `Optimizer` not defined``, while the package and its tests stay on GML 0.6–0.8.
+  ``UndefVarError: `Optimizer` not defined``, while the package and its tests were on GML 0.6–0.8.
   The docs now resolve the same GML release as the package.
 
 - **`Pkg.test()` no longer runs the doctests.** `test/quality/doctests.jl` is now the group
@@ -165,17 +182,15 @@ breaking release).
   `Project.toml` (#30, an upstream fault). The new `test/quality/doctests.jl` runs
   `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET file is added.
 
-- **The scripts environment resolves `GeometricMachineLearning` from `main`, not from the registry**;
-  `scripts/Project.toml` names the source. The harness needs the optimizer step observer and
-  `PhaseTimer` of
+- **The scripts environment resolved `GeometricMachineLearning` from `main`, not from the registry,
+  until GML 0.9 was registered** (see the entry on GML 0.9 below). The harness needs the optimizer
+  step observer and `PhaseTimer` of
   [GeometricOptimizers #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78), the backend
   fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
   [#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and
   [#85](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/85), and the 0.8 seams above.
-  `scripts/Manifest.toml` stays untracked: a manifest pinning a moving `main` commit is stale the
-  day after it is committed, and every run bundle already carries the manifest that run resolved.
-  Refresh with `Pkg.update`, never `Pkg.resolve` — to `resolve` a `rev = "main"` source is a fixed
-  pin, so it calls a stale commit satisfiable and leaves the environment silently behind.
+  `scripts/Manifest.toml` stays untracked: every run bundle already carries the manifest that run
+  resolved.
 
   Two of those fixes are what `scripts/revision/check_environment.jl` probes, because no version
   number can express them: that an optimizer cache and state can be built for a parameter set living
@@ -193,11 +208,12 @@ breaking release).
   with it. Combining them is what lets a single CI run answer whether the package works against the
   current ecosystem.
 
-  The `NeuralNetworkParameters` floor stays at **0.2.2**, not the bare `0.2` two of those pull
-  requests proposed. `test/mnist_utils.jl` annotates against `ParameterSet`, which 0.2.2 added, so a
-  `0.2` floor would advertise support for versions that cannot run the test suite.
+  The `NeuralNetworkParameters` floor stayed at **0.2.2**, not the bare `0.2` two of those pull
+  requests proposed. `test/mnist_utils.jl` annotated against `ParameterSet`, which 0.2.2 added, so a
+  `0.2` floor would have advertised support for versions that cannot run the test suite.
 
-- **The parameter-set annotation in `test/mnist_utils.jl` admits a `NamedTuple`.** Under
+- **The parameter-set annotation in `test/mnist_utils.jl` admitted a `NamedTuple`** until the move
+  to GML 0.9 above. Under
   `GeometricMachineLearning` 0.7, `NeuralNetworkParameters`' `ZygoteRules.pullback` seeds the reverse
   pass with the wrapped `NamedTuple` rather than the container, so `loss_dl` is called with one while
   differentiating and the old `Union{Tuple, NetworkParameters}` was a `MethodError`.
@@ -213,13 +229,13 @@ breaking release).
   `scripts/Project.toml`. A caller on Julia 1.11 can no longer install this version.
 
 - **The `AbstractNeuralNetworks` lower bound rises from `0.7` to `0.7.2`.** `test/Project.toml`
-  bounds `NeuralNetworkParameters` to `"0.2.2, 0.3"`, while `AbstractNeuralNetworks` 0.7.0 and
+  bounded `NeuralNetworkParameters` to `"0.2.2, 0.3"`, while `AbstractNeuralNetworks` 0.7.0 and
   0.7.1 require `NeuralNetworkParameters` 0.1 and 0.2. The `Downgrade` job resolved the root
   Project.toml at 0.7.0, so `Pkg.test()` stopped on an empty intersection between the manifest and
   the test environment. It failed the same way on `main` before the raise.
 
 - **The `GeometricMachineLearning` lower bound rises from `0.6` to `0.6.1`.** `GeometricMachineLearning`
-  is `"0.6.1, 0.7, 0.8"` now. With the `AbstractNeuralNetworks` bound at 0.7.2, the
+  became `"0.6.1, 0.7, 0.8"`. With the `AbstractNeuralNetworks` bound at 0.7.2, the
   `Downgrade` job resolved the root at `GeometricMachineLearning` 0.6.1 and named 0.6.0 as
   unreachable.
 

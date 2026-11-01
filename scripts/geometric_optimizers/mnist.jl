@@ -331,8 +331,9 @@ function train(
     current_batch[] = (input[:, :, 1:batch_size], output[:, 1:batch_size])
 
     # Note that the learning rate is supplied through the line search: the *methods* only
-    # determine the direction. `Static(learning_rate)` is what `Optimizer` defaults to for
-    # these three methods anyway; it is written out so that the rate is visible right here.
+    # determine the direction. `Optimizer` defaults to `Static(1e-3)` only for `Adam`, and to an
+    # expanding `Backtracking` search for `GradientMethod` and `MomentumMethod`; passing
+    # `Static(learning_rate)` gives all three the same fixed rate, visible right here.
     optimizer = Optimizer(
         ps, F; (∇F!) = ∇F!, algorithm = algorithm, linesearch = Static(learning_rate))
     state = OptimizerState(algorithm, ps)

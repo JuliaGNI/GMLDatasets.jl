@@ -144,8 +144,10 @@ from the previous one.
 - `MNIST_REPETITIONS` (default 5) is how often each configuration is trained. One repetition is one
   configuration of the full run, i.e. ≈1:35 h for `Adam` on an RTX 4090, so the default is ≈8 h —
   about what `mnist_cuda.jl` takes for all four.
-- `MNIST_CONFIGURATIONS` (default `adam-stiefel`) selects which ones, from `adam-stiefel`,
-  `adam-regular`, `gradient`, `momentum`, or `all`. Unknown keys fail before MNIST is loaded.
+- `MNIST_CONFIGURATIONS` (default `geometric-adam-cayley`) selects which ones, comma separated, from
+  `geometric-adam-cayley`, `scalar-moment-adam`, `standard-adam`, `gradient`, `momentum`, or `all`;
+  `adam-stiefel` and `adam-regular` are aliases of `geometric-adam-cayley` and `standard-adam`.
+  Unknown keys fail before MNIST is loaded.
 - `MNIST_VARY_SEED` (default `1`) gives repetition ``r`` the seed ``\mathrm{seed} + r - 1``, so the
   spread is that of the method over initializations *and* over the nondeterminism, which is the
   number to quote. With `0` every repetition uses the same seed and the spread is the nondeterminism

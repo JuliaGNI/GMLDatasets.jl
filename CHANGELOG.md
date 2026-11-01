@@ -120,7 +120,7 @@ breaking release).
 - **Aqua's `persistent_tasks` check runs, and is no longer marked broken.** `InternedStrings` 0.7.1,
   which the tests reach through `MLDatasets` and `Pickle`, has a `Project.toml`, so the check runs
   and passes; marked broken, it failed `Pkg.test()` as an unexpected pass on a fresh resolve. This
-  closes `KNOWN_ISSUES.md` K2 and K6; the upstream fault is #30.
+  closes `KNOWN_ISSUES.md` K2; the upstream fault is #30.
 
 - **The scripts environment and the revision harness run on GeometricOptimizers 0.9.1 and the
   `TrainingOptimizer` of GeometricMachineLearning 0.9.** The Scripts workflow failed to resolve,
@@ -202,8 +202,8 @@ breaking release).
 
   The new `test/quality/aqua.jl` runs `Aqua.test_all`. One check is marked broken, with its issue:
   `piracies`, for the `DataLoader` constructor for labelled images (#29). The new
-  `test/quality/doctests.jl` runs
-  `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET file is added.
+  `test/quality/doctests.jl` runs `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET
+  file is added.
 
 - **The scripts environment resolved `GeometricMachineLearning` from `main`, not from the registry,
   until GML 0.9 was registered** (see the entry on GML 0.9 above). The harness needs the optimizer

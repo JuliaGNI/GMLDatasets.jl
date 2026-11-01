@@ -138,7 +138,8 @@ end
         qsamples = [3], psamples = [2], timespan = (0.0, 2.0), timestep = 0.1)
     data = angular_to_euclidean(solution)
 
-    # No adapter of our own: this is `GeometricMachineLearning`'s own tensor constructor.
+    # No adapter of our own: this is the tensor constructor of `ReducedComplexityModeling`, which
+    # `GeometricMachineLearning` re-exports.
     loader = DataLoader(data; autoencoder = true, suppress_info = true)
     @test loader.input_dim == 4
     @test loader.input_time_steps == 21

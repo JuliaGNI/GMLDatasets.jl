@@ -117,6 +117,11 @@ breaking release).
   the floor raises; and the `"0.21"` that `GeometricEquations` takes as a direct dependency. They
   close `KNOWN_ISSUES.md` K3.
 
+- **Aqua's `persistent_tasks` check runs, and is no longer marked broken.** `InternedStrings` 0.7.1,
+  which the tests reach through `MLDatasets` and `Pickle`, has a `Project.toml`, so the check runs
+  and passes; marked broken, it failed `Pkg.test()` as an unexpected pass on a fresh resolve. This
+  closes `KNOWN_ISSUES.md` K2 and K6; the upstream fault is #30.
+
 - **The scripts environment and the revision harness run on GeometricOptimizers 0.9.1 and the
   `TrainingOptimizer` of GeometricMachineLearning 0.9.** The Scripts workflow failed to resolve,
   because `scripts/Project.toml` bounded GeometricOptimizers to 0.8 while the 0.9 line was what the
@@ -195,10 +200,9 @@ breaking release).
   `GeometricMachineLearning`, `GeometricProblems`) have no entry there, because the root bounds
   apply, and the new `Aqua` and `Documenter` have none either.
 
-  The new `test/quality/aqua.jl` runs `Aqua.test_all`. Two checks are marked broken, each with its
-  issue: `piracies`, for the `DataLoader` constructor for labelled images (#29), and
-  `persistent_tasks`, which Aqua 0.8.18 cannot run because the dependency `InternedStrings` has no
-  `Project.toml` (#30, an upstream fault). The new `test/quality/doctests.jl` runs
+  The new `test/quality/aqua.jl` runs `Aqua.test_all`. One check is marked broken, with its issue:
+  `piracies`, for the `DataLoader` constructor for labelled images (#29). The new
+  `test/quality/doctests.jl` runs
   `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET file is added.
 
 - **The scripts environment resolved `GeometricMachineLearning` from `main`, not from the registry,

@@ -156,6 +156,8 @@ breaking release).
   constructor adds over the generic tensor–tensor one of `ReducedComplexityModeling`, which accepts
   an integer target. *Running the Experiments* and the header of `mnist_cuda_repetitions.jl` give
   the default of `MNIST_REPETITIONS` as 10, the value the script uses, and its run time as ≈16 h.
+  The comment on the `NeuralNetworkParameters` import of `mnist.jl` says what the package does,
+  not how the script came to use it.
 
 - **`scripts/gml/transformer_mnist.jl` and `transformer_fashion_mnist.jl` run on GML 0.9, and the
   documentation describes its API.** The two scripts build each optimizer with

@@ -83,16 +83,17 @@ breaking release).
 
 - **GMLDatasets requires GeometricMachineLearning 0.9** (`[compat]` `"0.9"`, from
   `"0.6.1, 0.7, 0.8"`). GML 0.9 trains with `TrainingOptimizer` and `train!` and no longer defines
-  `Optimizer` or `GradientOptimizer`, so the two tests that trained a network follow it: `test/mnist_utils.jl` takes one `GradientMethod` step with
+  `Optimizer` or `GradientOptimizer`, so the two tests that trained a network follow it:
+  `test/mnist_utils.jl` takes one `GradientMethod` step with
   `GeometricOptimizers.optimization_step!` and still asserts that the step lowers the loss, and
   `test/pendulum.jl` trains the symplectic autoencoder for one epoch with `train!`. `src/` is
   unchanged. `test/Project.toml` bounds `NeuralNetworkParameters` to `"0.5"`, which GML 0.9 needs,
   and adds `GeometricOptimizers`, whose binding inside GML is not public, with no bound of its own.
   Under `NeuralNetworkParameters` 0.5 a function differentiated with respect to a parameter set is
   called with the `NetworkParameters` itself, so the `NamedTuple` arm of the annotation in
-  `test/mnist_utils.jl` goes.
-  `scripts/Project.toml` takes GML from the registry at `"0.9"` and no longer names a `[sources]`
-  entry for it; delete a `scripts/Manifest.toml` written before this change.
+  `test/mnist_utils.jl` goes. `scripts/Project.toml` takes GML from the registry at `"0.9"` and no
+  longer names a `[sources]` entry for it; delete a `scripts/Manifest.toml` written before this
+  change.
 
   This bound replaces every `GeometricMachineLearning` bound that the entries below name:
   `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
@@ -105,9 +106,9 @@ breaking release).
   `"0.5"`, which GML 0.9 needs. `GeometricOptimizers` comes from the registry and names no
   source: 0.9.1 is the first release that carries `CompositeMethod`, which the
   `scalar-moment-adam` baseline is built from. `GeometricMachineLearning` comes from the registry
-  too (see the entry on GML 0.9 below). An environment for a benchmark that
-  measures optimizer steps no longer follows a branch of the package it measures, so a number is
-  read back from the release the run bundle's manifest records.
+  too (see the entry on GML 0.9 above). An environment for a benchmark that measures optimizer
+  steps no longer follows a branch of the package it measures, so a number is read back from the
+  release the run bundle's manifest records.
 
   The harness follows the 0.9 API. A method takes its element type from its coefficients, so
   `Adam(T; …)`, `ScalarMomentAdam(T; …)` and `MomentumMethod(β)` become `Adam(; …)`,
@@ -183,7 +184,7 @@ breaking release).
   `doctest(GMLDatasets)`, as the Doctests job of CI does. No JET file is added.
 
 - **The scripts environment resolved `GeometricMachineLearning` from `main`, not from the registry,
-  until GML 0.9 was registered** (see the entry on GML 0.9 below). The harness needs the optimizer
+  until GML 0.9 was registered** (see the entry on GML 0.9 above). The harness needs the optimizer
   step observer and `PhaseTimer` of
   [GeometricOptimizers #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78), the backend
   fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),

@@ -21,8 +21,8 @@ named a `GeometricOptimizers` or `GeometricMachineLearning` source keeps that en
 `git diff scripts/Project.toml` after a resolve says whether one survived.
 
 `scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from the registry.
-`GeometricMachineLearning` is bounded to 0.9, and `GeometricOptimizers` to 0.9.1, the first release that carries the four things the harness needs of it: the
-optimizer step observer and `PhaseTimer` of
+`GeometricMachineLearning` is bounded to 0.9, and `GeometricOptimizers` to 0.9.1, the first release
+that carries the four things the harness needs of it: the optimizer step observer and `PhaseTimer` of
 [`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78);
 the backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
 [#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and

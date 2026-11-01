@@ -147,9 +147,10 @@ breaking release).
   `using GeometricMachineLearning` in `docs/make.jl`; the tutorials still load the package, so
   `docs/Project.toml` keeps it.
 
-- **The docstrings and pages name `ReducedComplexityModeling` as the owner of `DataLoader`.** The
-  `DataLoader`, `mnist_data_loader`, `fashion_mnist_data_loader` and module docstrings, *Home* and
-  *The Pendulum Data Set* say so; `GeometricMachineLearning` 0.9 only re-exports it. The
+- **The module docstring, the image data loaders' docstrings, *Home* and *The Pendulum Data Set*
+  name `ReducedComplexityModeling` as the owner of `DataLoader`.** The image data loaders are the
+  `DataLoader` method for labelled images, `mnist_data_loader` and `fashion_mnist_data_loader`;
+  `GeometricMachineLearning` 0.9 only re-exports `DataLoader`. The
   `DataLoader` docstring states what the image constructor adds over the generic tensor–tensor one
   of `ReducedComplexityModeling`, which accepts an integer target. *Running the Experiments* gives
   the default of `MNIST_REPETITIONS` as 10, the value `mnist_cuda_repetitions.jl` uses, and its

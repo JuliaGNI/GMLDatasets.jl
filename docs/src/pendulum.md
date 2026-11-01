@@ -86,7 +86,7 @@ q, p = data[1:2, :, :], data[3:4, :, :]
 ## Handing it to a network
 
 There is no `pendulum_data_loader` here: the array above is already in the shape
-[`GeometricMachineLearning.DataLoader`](@extref) reads, so the constructor takes it directly.
+[`ReducedComplexityModeling.DataLoader`](@extref) reads, so the constructor takes it directly.
 
 ```@example pendulum
 using GeometricMachineLearning

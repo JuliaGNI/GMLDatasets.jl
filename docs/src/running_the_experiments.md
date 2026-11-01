@@ -67,13 +67,15 @@ runs the same four trainings. It stays at `n_epochs = 5`, because on the host a 
 500 epochs of 29 batches would be ≈20 h *per configuration*. Points worth knowing:
 
 - **The learning rate comes from the line search.** The optimizer *methods* only produce a direction,
-  so the step size is `linesearch = Static(η)`, which is also what `Optimizer` defaults to for
-  `GradientMethod`, `MomentumMethod` and `Adam`. `Adam`'s positional argument is the element type,
-  not `η`, and `MomentumMethod(α)`'s `α` is the momentum coefficient, not a step size. The scripts
-  pass `Static(learning_rate)` explicitly, so the rate is readable at the call site rather than being
-  a package default.
-- **`Zygote`, not `ForwardDiff`.** The cost of `GradientAutodiff` scales with the number of
-  parameters, of which there are 154938 here, so a hand-written `∇F!` is passed to the `Optimizer`.
+  so the step size is `linesearch = Static(η)`. `Optimizer` defaults to a `Static` step only for
+  `Adam`; for `GradientMethod` and `MomentumMethod` it defaults to a backtracking line search.
+  `Adam(; β₁, β₂, δ)` takes only its moment coefficients, and `MomentumMethod(; α)`'s `α` is the
+  momentum coefficient, not a step size; `Optimizer` converts either to the element type of the
+  parameters. The scripts pass `Static(learning_rate)` explicitly, so the rate is readable at the
+  call site rather than being a package default.
+- **`Zygote`, not `ForwardDiff`.** The forward-mode gradient that `Optimizer` builds with
+  `mode = :autodiff` costs one pass of the loss per chunk of twelve parameters, of which there are
+  154938 here, so a hand-written `∇F!` is passed to `Optimizer(ps, F; ∇F!)`.
   Measured at the full configuration (``L = 16``, batch size 2048, `Float32`): a loss evaluation
   takes 0.84 s, a `Zygote` gradient 3.6 s (21 s for the first one, including compilation), a full
   optimizer step about 5 s.
@@ -90,11 +92,9 @@ runs the same four trainings. It stays at `n_epochs = 5`, because on the host a 
 of `scripts/Project.toml`: it installs, though non-functional, on machines without a CUDA device, so
 the environment resolves everywhere and `mnist_cuda.jl` falls back to the host where there is none.
 
-**The parameters stay on the host.** The optimizer interface of `GeometricOptimizers` cannot hold GPU
-arrays — see its changelog for the two reasons — which is a regression against
-`GeometricMachineLearning`, whose optimizers did run on `CUDABackend()`. It costs little here: the
-optimizer touches only the 154938 parameters, ≈1.2 MB up and down per step, against ≈3 GB of
-device-side activations. What is on the device is the batch, `predict`, the loss and the `Zygote`
+**The parameters stay on the host**, and so do the `Optimizer` and its `OptimizerState`. It costs
+little: the optimizer touches only the 154938 parameters, ≈1.2 MB up and down per step, against ≈3 GB
+of device-side activations. What is on the device is the batch, `predict`, the loss and the `Zygote`
 gradient; the geometry — retraction, global section, `Adam` — runs on the host. Verified at a reduced
 configuration (``L = 2``, batch size 64, 2 epochs, 256 images) against `mnist.jl`: the unconstrained
 `Adam` run, the one without a random `GlobalSection`, is identical digit for digit, and the Stiefel
@@ -137,7 +137,9 @@ and a corrected sample standard deviation over the repetitions — test accuracy
 ``\|Y^TY-\mathbb{I}\|`` and wall clock — with the individual samples printed next to each. Everything
 below the run loop is `mnist_cuda.jl`'s code, with the seed turned into an argument of `train`, so a
 repetition here is comparable to the corresponding run there. Each repetition builds its own
-`Optimizer` and `OptimizerState`, so no cache and no iteration counter survives from the previous one.
+`Optimizer` and `OptimizerState` — one of each per leaf of the parameters for the
+`scalar-moment-adam` baseline, a `CompositeMethod` — so no cache and no iteration counter survives
+from the previous one.
 
 - `MNIST_REPETITIONS` (default 5) is how often each configuration is trained. One repetition is one
   configuration of the full run, i.e. ≈1:35 h for `Adam` on an RTX 4090, so the default is ≈8 h —

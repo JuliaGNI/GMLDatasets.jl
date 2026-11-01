@@ -117,6 +117,17 @@ breaking release).
   the floor raises; and the `"0.21"` that `GeometricEquations` takes as a direct dependency. They
   close `KNOWN_ISSUES.md` K3.
 
+- **`scripts/gml/transformer_mnist.jl` and `transformer_fashion_mnist.jl` run on GML 0.9, and the
+  documentation describes its API.** The two scripts build each optimizer with
+  `TrainingOptimizer(nn.params; algorithm, linesearch)` from `Adam()`, `GradientMethod()` and
+  `MomentumMethod(; α = T(0.5))`, train with `train!`, and take `accuracy` from
+  `ReducedComplexityModeling`, which `scripts/Project.toml` adds at `"0.5"`. `MNIST_N_EPOCHS` sets
+  their number of epochs (default 500), so `MNIST_N_EPOCHS=2` is a smoke run. `KNOWN_ISSUES.md` K4
+  keeps the four `scripts/geometric_optimizers/` scripts only. *Running the Experiments* states the
+  GeometricOptimizers 0.9 defaults and constructors, and *The Pendulum Data Set* links `DataLoader`
+  to its docstring in the `ReducedComplexityModeling` manual, whose inventory `docs/make.jl` reads,
+  with a committed copy in `docs/inventories/`.
+
 - **Aqua's `persistent_tasks` check runs, and is no longer marked broken.** `InternedStrings` 0.7.1,
   which the tests reach through `MLDatasets` and `Pickle`, has a `Project.toml`, so the check runs
   and passes; marked broken, it failed `Pkg.test()` as an unexpected pass on a fresh resolve.

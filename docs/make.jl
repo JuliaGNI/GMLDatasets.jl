@@ -30,6 +30,11 @@ links = InterLinks(
         "https://juliagni.github.io/GeometricSolutions.jl/stable/",
         "https://juliagni.github.io/GeometricSolutions.jl/stable/objects.inv",
         joinpath(@__DIR__, "inventories", "GeometricSolutions.toml")
+    ),
+    "ReducedComplexityModeling" => (
+        "https://juliarcm.github.io/ReducedComplexityModeling.jl/latest/",
+        "https://juliarcm.github.io/ReducedComplexityModeling.jl/latest/objects.inv",
+        joinpath(@__DIR__, "inventories", "ReducedComplexityModeling.toml")
     )
 )
 

@@ -1,11 +1,13 @@
 using CUDA, GeometricMachineLearning, GMLDatasets, JLD2
+using ReducedComplexityModeling: accuracy
 
 # MNIST images are 28×28, so a sequence_length of 16 = 4² means the image patches are of size 7² = 49
 const patch_length = 7
 const n_heads = 7
 const L = 16
 const batch_size = 2048
-const n_epochs = 500
+# `MNIST_N_EPOCHS=2` is a smoke run, as in `scripts/geometric_optimizers/mnist_cuda.jl`.
+const n_epochs = parse(Int, get(ENV, "MNIST_N_EPOCHS", "500"))
 const add_connection = false
 
 # Use the GPU where there is one and fall back to the host where there is not, so that the script
@@ -32,23 +34,24 @@ model2 = ClassificationTransformer(dl;
 
 batch = Batch(batch_size, dl)
 
-# The optimizer *method* only produces a direction; the step size is `Optimizer`'s `step_size`
-# keyword, which is why `GradientMethod()` and `MomentumMethod(α)` take no learning rate.
+# The optimizer *method* only produces a direction; the step size is `TrainingOptimizer`'s
+# `linesearch` keyword, which is why `GradientMethod()` and `MomentumMethod(; α)` take no learning
+# rate. `TrainingOptimizer` converts the method to the element type of the parameters.
 function transformer_training(Ψᵉ::GeometricMachineLearning.Architecture;
-        n_epochs = 100, opt = AdamOptimizer(T), step_size = T(0.001))
+        n_epochs = 100, algorithm = Adam(), step_size = T(0.001))
     nn = NeuralNetwork(Ψᵉ, backend, T)
-    optimizer_instance = Optimizer(opt, nn; step_size = step_size)
+    opt = TrainingOptimizer(nn.params; algorithm = algorithm, linesearch = step_size)
 
-    println("initial test accuracy: ", GeometricMachineLearning.accuracy(nn, dl_test), "\n")
+    println("initial test accuracy: ", accuracy(nn, dl_test), "\n")
 
     # use the `time` function to get the system time.
     init_time = time()
 
-    loss_array = optimizer_instance(nn, dl, batch, n_epochs, FeedForwardLoss())
+    loss_array = train!(nn, opt, dl, batch, n_epochs; loss = FeedForwardLoss())
 
     total_time = time() - init_time
 
-    accuracy_score = GeometricMachineLearning.accuracy(nn, dl_test)
+    accuracy_score = accuracy(nn, dl_test)
     println("final test accuracy: ", accuracy_score, "\n")
 
     loss_array, nn, total_time, accuracy_score
@@ -57,9 +60,9 @@ end
 loss_array2, nn2, total_time2, accuracy_score2 = transformer_training(model2; n_epochs = n_epochs)
 loss_array1, nn1, total_time1, accuracy_score1 = transformer_training(model1; n_epochs = n_epochs)
 loss_array3, nn3, total_time3, accuracy_score3 = transformer_training(
-    model2; n_epochs = n_epochs, opt = GradientOptimizer())
+    model2; n_epochs = n_epochs, algorithm = GradientMethod())
 loss_array4, nn4, total_time4, accuracy_score4 = transformer_training(
-    model2; n_epochs = n_epochs, opt = MomentumOptimizer(T(0.5)))
+    model2; n_epochs = n_epochs, algorithm = MomentumMethod(; α = T(0.5)))
 
 const mtc = GeometricMachineLearning.map_to_cpu
 
@@ -81,9 +84,9 @@ text_string = "n_epochs: " * string(n_epochs) * "\n" *
               " classification accuracy: " * string(accuracy_score1) * "\n" *
               "Stiefel weights:   time: " * string(total_time2) *
               " classification accuracy: " * string(accuracy_score2) * "\n" *
-              "GradientOptimizer: time: " * string(total_time3) *
+              "GradientMethod:    time: " * string(total_time3) *
               " classification accuracy: " * string(accuracy_score3) * "\n" *
-              "MomentumOptimizer: time: " * string(total_time4) *
+              "MomentumMethod:    time: " * string(total_time4) *
               " classification accuracy: " * string(accuracy_score4) * "\n"
 
 print(text_string)

@@ -9,17 +9,6 @@
 - **kind:** defect
 - **found:** issue #29, part M29 of the test-suite migration
 
-## Upstream
-
-### K2 · Aqua's `persistent_tasks` check cannot run, because `InternedStrings` has no `Project.toml`
-
-- **location:** `test/quality/aqua.jl:13`
-- **evidence:** `Aqua.has_persistent_tasks(Base.PkgId(GMLDatasets))` with Aqua 0.8.18 throws
-  "Unable to locate Project.toml in …/InternedStrings/JTzem". The dependency comes in through
-  `MLDatasets` and `Pickle`. `test/quality/aqua.jl` marks the check `broken = true`.
-- **kind:** upstream
-- **found:** issue #30, part M29 of the test-suite migration
-
 ## Scripts
 
 ### K4 · Six MNIST scripts outside the revision harness use an API that GeometricOptimizers 0.9 and GML `main` do not define
@@ -48,14 +37,3 @@
   device. The image stages keep their parameters on the host and are unaffected.
 - **kind:** upstream
 - **found:** 2026-10-23, in the port of the revision harness to GeometricOptimizers 0.9
-
-## Documentation
-
-### K3 · The CHANGELOG states a narrower `GeometricMachineLearning` bound than `Project.toml` has
-
-- **location:** `CHANGELOG.md:57`
-- **evidence:** the `[Unreleased]` bullet "`[compat]` widens …" says
-  `GeometricMachineLearning = "0.6, 0.7"`; `Project.toml:18` has `GeometricMachineLearning = "0.6, 0.7, 0.8"`.
-- **kind:** found late
-- **found:** #19 (2026-09-27, commit d92e3d5), which widened the bound in `Project.toml` and left
-  the CHANGELOG line from #18 unchanged

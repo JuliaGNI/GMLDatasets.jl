@@ -13,18 +13,16 @@ rm -f scripts/Manifest.toml
 julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
 ```
 
-The `rm` is not redundant. `Manifest.toml` is untracked, and one written while `Project.toml` still
-named a `GeometricOptimizers` source keeps that entry as `repo-url`/`repo-rev`. When the project
-names no source, `Pkg` falls back to the manifest's, so `Pkg.update` would keep the old repository
-commit **and** write the source back into `Project.toml`. A manifest from before the move to the
-registry therefore has to go, and `git diff scripts/Project.toml` after a resolve says whether one
-survived.
+The `rm` is not redundant. `Manifest.toml` is untracked, and a manifest that `Pkg` writes while
+`Project.toml` names a `GeometricOptimizers` or `GeometricMachineLearning` source keeps that entry
+as `repo-url`/`repo-rev`. When the project names no source, `Pkg` falls back to the manifest's, so
+`Pkg.update` keeps that repository commit **and** writes the source back into `Project.toml`. A
+manifest with a `repo-url` entry for either package therefore has to go, and
+`git diff scripts/Project.toml` after a resolve says whether one survived.
 
-`scripts/Project.toml` takes `GeometricMachineLearning` from `main`, not from the registry: the
-registered 0.8.0 bounds `GeometricOptimizers` and `AbstractNeuralNetworks` to `0.8`, and the harness
-runs on the 0.9 line of both. `GeometricOptimizers` itself comes from the registry, and `[compat]`
-requires 0.9.1, the first release that carries the four things the harness needs of it: the
-optimizer step observer and `PhaseTimer` of
+`scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from the registry.
+`GeometricMachineLearning` is bounded to 0.9, and `GeometricOptimizers` to 0.9.1, the first release
+that carries the four things the harness needs of it: the optimizer step observer and `PhaseTimer` of
 [`GeometricOptimizers.jl` PR #78](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/78);
 the backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/79),
 [#84](https://github.com/JuliaGNI/GeometricOptimizers.jl/pull/84) and
@@ -32,13 +30,10 @@ the backend fixes of [#79](https://github.com/JuliaGNI/GeometricOptimizers.jl/pu
 that go with it, which is how the `scalar-moment-adam` baseline is assembled over a mixed parameter
 tree; and `scripts/retraction_records.jl`, the retraction benchmark, which lives beside the
 algorithms it measures. A run's own bundle records the manifest it resolved, so the optimizer
-version behind a number is read from there. Use `Pkg.update` rather than `Pkg.instantiate` or
-`Pkg.resolve`: to `resolve` a `rev = "main"` source is a fixed pin, so it reports a stale commit as
-satisfiable and leaves the environment silently behind `main`.
+version behind a number is read from there.
 
-`Manifest.toml` is **not** tracked. A manifest pinning a moving `main` commit goes stale the day
-after it is committed; every run bundle instead carries the manifest that run actually resolved,
-under `environments/scripts/`, which is the copy a result has to be reproduced from.
+`Manifest.toml` is **not** tracked. Every run bundle carries the manifest that run actually
+resolved, under `environments/scripts/`, which is the copy a result has to be reproduced from.
 
 Two of those upstream fixes are what the environment preflight probes, because no version number
 can express them: that an optimizer cache and state can be built for a parameter set living on the

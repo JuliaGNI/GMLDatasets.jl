@@ -32,10 +32,8 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 # `GMLDatasets` is not registered, so it is reached by path.
 #
-# `GeometricMachineLearning` comes from `main` rather than from the registry: the registered 0.8.0
-# bounds `GeometricOptimizers` to `0.8` and `AbstractNeuralNetworks` to `0.8`, and the harness runs
-# on the 0.9 line of both. `GeometricOptimizers` itself comes from the registry, and `[compat]`
-# requires 0.9.1, the first release that carries everything this harness needs of it:
+# `GeometricOptimizers` comes from the registry, and `[compat]` requires 0.9.1, the first release
+# that carries everything this harness needs of it:
 #
 #   * the optimizer step observer and `PhaseTimer` (GeometricOptimizers #78), which the decomposed
 #     schema-v4 timings are measured through;
@@ -49,20 +47,16 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 # `main` rather than a release, so there is none: `Pkg.status` and the run bundle's manifest say
 # which release a run used.
 #
-# `Manifest.toml` is not tracked — a manifest pinning a moving `main` commit goes stale the day
-# after it is committed, and the run bundle already carries the one a run actually resolved, under
+# `Manifest.toml` is not tracked: the run bundle carries the one a run actually resolved, under
 # `environments/scripts/`. Delete it whenever this `[sources]` block changes: an entry written while
 # a source was named here keeps a `repo-url` and a `repo-rev`, and Pkg falls back to them where the
 # project names no source, so `Pkg.update` would keep that commit and write the entry back into this
-# file. Instantiate before a run, and refresh with `Pkg.update`, not `Pkg.resolve`: a `rev = "main"`
-# source is a fixed pin to `resolve`, which reports the stale commit as satisfiable and leaves the
-# environment behind `main` without saying so.
+# file. Instantiate before a run.
 [sources]
 GMLDatasets = {path = ".."}
-GeometricMachineLearning = {url = "https://github.com/JuliaGNI/GeometricMachineLearning.jl.git", rev = "main"}
 
 [compat]
-GeometricMachineLearning = "0.8"
+GeometricMachineLearning = "0.9"
 GeometricOptimizers = "0.9.1"
 NeuralNetworkParameters = "0.5"
 julia = "1.12"

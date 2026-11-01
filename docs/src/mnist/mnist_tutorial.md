@@ -226,7 +226,7 @@ make_error_plot(; theme = :light) # hide
 We can also call [`ReducedComplexityModeling.accuracy`](https://juliarcm.github.io/ReducedComplexityModeling.jl/latest/) to obtain the test accuracy instead of the training error:
 
 ```@example mnist
-using ReducedComplexityModeling: accuracy # hide
+using ReducedComplexityModeling: accuracy
 (accuracy(nn1, dl_test), accuracy(nn2, dl_test), accuracy(nn3, dl_test), accuracy(nn4, dl_test))
 ```
 

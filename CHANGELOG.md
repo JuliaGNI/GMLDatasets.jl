@@ -119,8 +119,10 @@ breaking release).
 
 - **Aqua's `persistent_tasks` check runs, and is no longer marked broken.** `InternedStrings` 0.7.1,
   which the tests reach through `MLDatasets` and `Pickle`, has a `Project.toml`, so the check runs
-  and passes; marked broken, it failed `Pkg.test()` as an unexpected pass on a fresh resolve. This
-  closes `KNOWN_ISSUES.md` K2; the upstream fault is #30.
+  and passes; marked broken, it failed `Pkg.test()` as an unexpected pass on a fresh resolve.
+  `test/Project.toml` bounds `InternedStrings` to `"0.7.1"`, because `Pickle` still admits 0.7.0,
+  which has no `Project.toml` and makes the check error. This closes `KNOWN_ISSUES.md` K2; the
+  upstream fault is #30.
 
 - **The scripts environment and the revision harness run on GeometricOptimizers 0.9.1 and the
   `TrainingOptimizer` of GeometricMachineLearning 0.9.** The Scripts workflow failed to resolve,

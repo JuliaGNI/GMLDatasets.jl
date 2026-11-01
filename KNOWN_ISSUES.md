@@ -20,6 +20,16 @@
 - **kind:** upstream
 - **found:** issue #30, part M29 of the test-suite migration
 
+### K6 · `Pkg.test()` fails on `InternedStrings` 0.7.1, because the `persistent_tasks` check that `test/quality/aqua.jl` marks broken passes there
+
+- **location:** `test/quality/aqua.jl:13`
+- **evidence:** `InternedStrings` 0.7.1 ships a `Project.toml`, so Aqua's check runs and passes, and
+  `Pkg.test()` stops after the Aqua testset with "Persistent tasks: … Unexpected Pass … Got correct
+  result, please change to @test if no longer broken" (9 passed, 1 errored, 1 broken). With
+  `InternedStrings` held at 0.7.0 in the manifest, the suite passes. A fresh resolve takes 0.7.1.
+- **kind:** upstream
+- **found:** 2026-11-01; K2
+
 ## Scripts
 
 ### K4 · Six MNIST scripts outside the revision harness use an API that GeometricOptimizers 0.9 and GML `main` do not define

@@ -104,11 +104,11 @@ We still have to initialize the optimizers:
 ```@example mnist
 const batch_size = 2048
 const n_epochs = 500
-# an instance of batch is needed for the optimizer
+# an instance of batch is needed for the training
 batch = Batch(batch_size, dl)
 
-opt1 = Optimizer(Adam(T), nn1)
-opt2 = Optimizer(Adam(T), nn2)
+opt1 = TrainingOptimizer(nn1.params; algorithm = Adam())
+opt2 = TrainingOptimizer(nn2.params; algorithm = Adam())
 
 nothing # hide
 ```
@@ -116,8 +116,8 @@ nothing # hide
 And with this we can finally perform the training:
 
 ```julia
-loss_array1 = opt1(nn1, dl, batch, n_epochs, FeedForwardLoss())
-loss_array2 = opt2(nn2, dl, batch, n_epochs, FeedForwardLoss())
+loss_array1 = train!(nn1, opt1, dl, batch, n_epochs; loss = FeedForwardLoss())
+loss_array2 = train!(nn2, opt2, dl, batch, n_epochs; loss = FeedForwardLoss())
 ```
 
 We furthermore optimize the second neural network (with weights on the manifold) with the `GradientMethod` and the `MomentumMethod`:
@@ -126,8 +126,9 @@ We furthermore optimize the second neural network (with weights on the manifold)
 nn3 = NeuralNetwork(model2, backend, T)
 nn4 = NeuralNetwork(model2, backend, T)
 
-opt3 = Optimizer(GradientMethod(), nn3; step_size = T(0.001))
-opt4 = Optimizer(MomentumMethod(T(0.5)), nn4; step_size = T(0.001))
+opt3 = TrainingOptimizer(nn3.params; algorithm = GradientMethod(), linesearch = T(0.001))
+opt4 = TrainingOptimizer(nn4.params; algorithm = MomentumMethod(; α = T(0.5)),
+                         linesearch = T(0.001))
 
 nothing # hide
 ```
@@ -135,8 +136,8 @@ nothing # hide
 
 For training we use the same data, the same batch and the same number of epochs:
 ```julia
-loss_array3 = opt3(nn3, dl, batch, n_epochs, FeedForwardLoss())
-loss_array4 = opt4(nn4, dl, batch, n_epochs, FeedForwardLoss())
+loss_array3 = train!(nn3, opt3, dl, batch, n_epochs; loss = FeedForwardLoss())
+loss_array4 = train!(nn4, opt4, dl, batch, n_epochs; loss = FeedForwardLoss())
 ```
 
 And we get the following result:
@@ -222,10 +223,10 @@ make_error_plot(; theme = :light) # hide
     ```
     which is what we see in the error plot.
 
-We can also call [`GeometricMachineLearning.accuracy`](https://juliagni.github.io/GeometricMachineLearning.jl/latest/data_loader/data_loader/) to obtain the test accuracy instead of the training error:
+We can also call [`ReducedComplexityModeling.accuracy`](https://juliarcm.github.io/ReducedComplexityModeling.jl/latest/) to obtain the test accuracy instead of the training error:
 
 ```@example mnist
-using GeometricMachineLearning: accuracy # hide
+using ReducedComplexityModeling: accuracy # hide
 (accuracy(nn1, dl_test), accuracy(nn2, dl_test), accuracy(nn3, dl_test), accuracy(nn4, dl_test))
 ```
 
@@ -240,7 +241,9 @@ of the home page. This page deliberately does not repeat them: a docstring rende
 makes every `@ref` to it resolve to whichever of the two Documenter saw last, which was this one, so
 the reference on the home page linked away from itself.
 
-`accuracy`, `ClassificationTransformer` and `ClassificationLayer` are documented in the
+`accuracy` is documented in the
+[`ReducedComplexityModeling` reference](https://juliarcm.github.io/ReducedComplexityModeling.jl/latest/),
+and `ClassificationTransformer` and `ClassificationLayer` in the
 [`GeometricMachineLearning` reference](https://juliagni.github.io/GeometricMachineLearning.jl/latest/).
 
 ## References

@@ -95,9 +95,27 @@ breaking release).
   longer names a `[sources]` entry for it; delete a `scripts/Manifest.toml` written before this
   change.
 
-  This bound replaces every `GeometricMachineLearning` bound that the entries below name:
+  The MNIST tutorial follows the same API: it builds each optimizer with
+  `TrainingOptimizer(nn.params; algorithm, linesearch)`, its training calls are `train!`, and it
+  takes `accuracy` from `ReducedComplexityModeling`, which owns it in GML 0.9, so
+  `docs/Project.toml` adds `ReducedComplexityModeling` at `"0.5"`. Its figures still come from the
+  committed weights and loss histories.
+
+  Six `[compat]` floors rise, because GML 0.9.0 and its dependencies cannot install beside the old
+  ones: `AbstractNeuralNetworks` to `"0.9.2"` (from `"0.7.2, 0.8, 0.9"`) and `GeometricEquations` to
+  `"0.21.5"` (from `"0.21"`), which GML 0.9.0 requires; `GeometricIntegrators` to `"0.18.6"` (from
+  `"0.18.2"`), the first release on `GeometricBase` 0.15, which `GeometricEquations` 0.21.5
+  requires; `GeometricProblems` to `"0.9.1"` (from `"0.8, 0.9"`) and `GeometricSolutions` to
+  `"0.6.6"` (from `"0.6.5"`) for the same reason; and `KernelAbstractions` to `"0.9.38, 0.10"`
+  (from `"0.9.15, 0.10"`), which `GeometricOptimizers` 0.9 requires.
+
+  These bounds replace every bound of the same dependencies that the entries below name: for GML,
   `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its
-  own), and `"0.6.1, 0.7, 0.8"` after the floor raise. It closes `KNOWN_ISSUES.md` K3.
+  own), and `"0.6.1, 0.7, 0.8"` after the floor raise; for `NeuralNetworkParameters`, the
+  `"0.2.2, 0.3"` of `test/Project.toml`; the `AbstractNeuralNetworks`, `GeometricIntegrators`,
+  `GeometricProblems`, `GeometricSolutions` and `KernelAbstractions` bounds of the widening and of
+  the floor raises; and the `"0.21"` that `GeometricEquations` takes as a direct dependency. They
+  close `KNOWN_ISSUES.md` K3.
 
 - **The scripts environment and the revision harness run on GeometricOptimizers 0.9.1 and the
   `TrainingOptimizer` of GeometricMachineLearning 0.9.** The Scripts workflow failed to resolve,

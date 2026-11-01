@@ -13,11 +13,11 @@ rm -f scripts/Manifest.toml
 julia --project=scripts -e 'using Pkg; Pkg.update(); Pkg.precompile()'
 ```
 
-The `rm` is not redundant. `Manifest.toml` is untracked, and one written while `Project.toml` still
-named a `GeometricOptimizers` or `GeometricMachineLearning` source keeps that entry as
-`repo-url`/`repo-rev`. When the project names no source, `Pkg` falls back to the manifest's, so
-`Pkg.update` would keep the old repository commit **and** write the source back into
-`Project.toml`. A manifest from before the move to the registry therefore has to go, and
+The `rm` is not redundant. `Manifest.toml` is untracked, and a manifest that `Pkg` writes while
+`Project.toml` names a `GeometricOptimizers` or `GeometricMachineLearning` source keeps that entry
+as `repo-url`/`repo-rev`. When the project names no source, `Pkg` falls back to the manifest's, so
+`Pkg.update` keeps that repository commit **and** writes the source back into `Project.toml`. A
+manifest with a `repo-url` entry for either package therefore has to go, and
 `git diff scripts/Project.toml` after a resolve says whether one survived.
 
 `scripts/Project.toml` takes `GeometricMachineLearning` and `GeometricOptimizers` from the registry.

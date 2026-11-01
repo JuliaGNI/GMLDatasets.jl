@@ -1,7 +1,7 @@
 # A port of `scripts/gml/transformer_mnist.jl` that only relies on `GeometricOptimizers`
 # (`GeometricMachineLearning` depends on that package, so it cannot be used here — which is also why
 # this script loads `MLDatasets` directly instead of going through `GMLDatasets`, whose data loaders
-# hand back a `GeometricMachineLearning.DataLoader`). Everything that `GeometricMachineLearning`
+# hand back a `ReducedComplexityModeling.DataLoader`). Everything that `GeometricMachineLearning`
 # supplies through `DataLoader`, `ClassificationTransformer` and `NeuralNetwork` is written out
 # explicitly below.
 #

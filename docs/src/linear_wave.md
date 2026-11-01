@@ -11,7 +11,7 @@ reduction because a linear subspace needs many modes to represent them.
 
 [`linear_wave`](@ref) is one call to `GeometricProblems.LinearWave.hodeensemble` and one to
 `GeometricIntegrators.integrate`; [`linear_wave_snapshots`](@ref) arranges the result as the tensor a
-`GeometricMachineLearning.DataLoader` takes.
+`ReducedComplexityModeling.DataLoader` takes.
 
 ## The system
 

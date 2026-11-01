@@ -36,9 +36,9 @@
 # ## What it costs
 #
 # One repetition is one configuration of the full run: 500 epochs × 29 batches at 0.37–0.47
-# s/step on an RTX 4090, i.e. ≈1:35 h. Five repetitions of one configuration are therefore
-# ≈8 h, about the same as the ≈6:53 h `mnist_cuda.jl` takes for all four. Run it the same way,
-# in a `screen`, through the wrapper next to it:
+# s/step on an RTX 4090, i.e. ≈1:35 h. The default ten repetitions of one configuration are
+# therefore ≈16 h, more than twice the ≈6:53 h `mnist_cuda.jl` takes for all four. Run it the
+# same way, in a `screen`, through the wrapper next to it:
 #
 #   screen -dmS mnist scripts/geometric_optimizers/run_mnist_repetitions.sh              # 10 × geometric Adam
 #   screen -dmS mnist scripts/geometric_optimizers/run_mnist_repetitions.sh --repeat 3   # 3 of them

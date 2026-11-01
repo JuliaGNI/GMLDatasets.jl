@@ -32,7 +32,7 @@ values ``\mu \in [5/12, 2/3]``, ``N = 128``, `n_time_steps = 200` snapshots on `
 (so the time step is ``1/199``), integrated with the implicit midpoint rule.
 
 Use [`linear_wave_snapshots`](@ref) to turn the solution into the data tensor a
-`GeometricMachineLearning.DataLoader` takes:
+`ReducedComplexityModeling.DataLoader` takes:
 
 ```julia
 using GeometricMachineLearning

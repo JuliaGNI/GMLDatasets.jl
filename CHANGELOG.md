@@ -79,6 +79,23 @@ breaking release).
   Not a required check: the scripts environment resolves the newest releases its `[compat]` admits,
   so the job can go red for a release made upstream.
 
+- **The linear-wave data set**: `linear_wave`, `linear_wave_snapshots` and `linear_wave_parameters`.
+  `linear_wave()` integrates `GeometricProblems.LinearWave`, the wave equation with homogeneous
+  Dirichlet boundary conditions, for twenty wave speeds μ ∈ [5/12, 2/3] with the implicit midpoint
+  rule, on N = 128 interior points and 200 snapshots on t ∈ [0, 1].
+  `linear_wave_snapshots` turns the solution into the `2N × n_t × n_μ` tensor that
+  `DataLoader(…; autoencoder = true)` takes, with q in the first half of the rows and p in the
+  second. `linear_wave_parameters` gives the wave speed of each slice. The docs page "The Linear
+  Wave Data Set" describes the problem, after [buchfink2023symplectic].
+
+  `scripts/linear_wave/` is the symplectic-autoencoder experiment on it. `train_sae.jl` trains one
+  SAE per reduced dimension and seed, each started by default at the PSD of its dimension, and
+  `errors.jl` computes the projection and reduction errors of the PSD and of every SAE at four test
+  wave speeds outside the training set. `plot_waves.jl` and `plot_errors.jl` draw the figures. The
+  settings come from `LW_*` environment variables, and `LW_SMOKE=1` sets token sizes, at which
+  `Scripts.yml` runs all four scripts. `scripts/Project.toml` adds `GeometricIntegrators`, which
+  `errors.jl` uses.
+
 ### Changed
 
 - **GMLDatasets requires GeometricMachineLearning 0.9** (`[compat]` `"0.9"`, from
@@ -101,13 +118,15 @@ breaking release).
   `docs/Project.toml` adds `ReducedComplexityModeling` at `"0.5"`. Its figures still come from the
   committed weights and loss histories.
 
-  Six `[compat]` floors rise, because GML 0.9.0 and its dependencies cannot install beside the old
-  ones: `AbstractNeuralNetworks` to `"0.9.2"` (from `"0.7.2, 0.8, 0.9"`) and `GeometricEquations` to
-  `"0.21.5"` (from `"0.21"`), which GML 0.9.0 requires; `GeometricIntegrators` to `"0.18.6"` (from
-  `"0.18.2"`), the first release on `GeometricBase` 0.15, which `GeometricEquations` 0.21.5
-  requires; `GeometricProblems` to `"0.9.1"` (from `"0.8, 0.9"`) and `GeometricSolutions` to
+  Six `[compat]` floors rise: five because GML 0.9.0 and its dependencies cannot install beside
+  the old ones, and one for the linear-wave data set. The five are `AbstractNeuralNetworks` to
+  `"0.9.2"` (from `"0.7.2, 0.8, 0.9"`) and `GeometricEquations` to `"0.21.5"` (from `"0.21"`), which
+  GML 0.9.0 requires; `GeometricIntegrators` to `"0.18.6"` (from `"0.18.2"`), the first release on
+  `GeometricBase` 0.15, which `GeometricEquations` 0.21.5 requires; `GeometricSolutions` to
   `"0.6.6"` (from `"0.6.5"`) for the same reason; and `KernelAbstractions` to `"0.9.38, 0.10"`
-  (from `"0.9.15, 0.10"`), which `GeometricOptimizers` 0.9 requires.
+  (from `"0.9.15, 0.10"`), which `GeometricOptimizers` 0.9 requires. `GeometricProblems` goes to
+  `"0.10"` (from `"0.8, 0.9"`): 0.10 defines `LinearWave` with homogeneous Dirichlet boundary
+  conditions, which the linear-wave data set needs.
 
   These bounds replace every bound of the same dependencies that the entries below name: for GML,
   `"0.6, 0.7"` in the four-dependency widening, `"0.6, 0.7, 0.8"` (#19, which has no entry of its

@@ -63,6 +63,7 @@ makedocs(;
         "Home" => "index.md",
         "MNIST Tutorial" => "mnist/mnist_tutorial.md",
         "The Pendulum Data Set" => "pendulum.md",
+        "The Linear Wave Data Set" => "linear_wave.md",
         "The Numerical Experiment on Homogeneous Spaces" => "homogeneous_spaces_experiment.md",
         "Running the Experiments" => "running_the_experiments.md",
         "References" => "references.md"

@@ -56,3 +56,11 @@ jobs:
               run: |
                   bash -n scripts/revision/run_experiments.sh
                   bash -n scripts/revision/run_in_screen.sh
+            - name: The linear-wave experiment, end to end at token sizes
+              env:
+                  LW_SMOKE: "1"
+              run: |
+                  julia --project=scripts --startup-file=no scripts/linear_wave/train_sae.jl
+                  julia --project=scripts --startup-file=no scripts/linear_wave/errors.jl
+                  julia --project=scripts --startup-file=no scripts/linear_wave/plot_waves.jl
+                  julia --project=scripts --startup-file=no scripts/linear_wave/plot_errors.jl

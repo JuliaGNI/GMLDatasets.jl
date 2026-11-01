@@ -34,7 +34,7 @@ using KernelAbstractions
 
 # `DataLoader` is imported rather than `using`ed because this package adds a constructor to it — the
 # one for labelled image data, which does not belong in `ReducedComplexityModeling` (see
-# `data_loader.jl`). It is `ReducedComplexityModeling`'s, and `GeometricMachineLearning` re-exports it.
+# `data_loader.jl`). `ReducedComplexityModeling` owns it; `GeometricMachineLearning` re-exports it.
 import GeometricMachineLearning: DataLoader
 import MLDatasets
 

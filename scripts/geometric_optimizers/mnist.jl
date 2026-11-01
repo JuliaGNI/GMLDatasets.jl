@@ -1,9 +1,9 @@
 # A port of `scripts/gml/transformer_mnist.jl` that only relies on `GeometricOptimizers`
 # (`GeometricMachineLearning` depends on that package, so it cannot be used here — which is also why
-# this script loads `MLDatasets` directly instead of going through `GMLDatasets`, whose data loaders
-# hand back a `ReducedComplexityModeling.DataLoader`). Everything that `GeometricMachineLearning`
-# supplies through `DataLoader`, `ClassificationTransformer` and `NeuralNetwork` is written out
-# explicitly below.
+# this script loads `MLDatasets` directly instead of going through `GMLDatasets`, which imports
+# `ReducedComplexityModeling.DataLoader` through `GeometricMachineLearning`). Everything that
+# `GeometricMachineLearning` supplies through `DataLoader`, `ClassificationTransformer` and
+# `NeuralNetwork` is written out explicitly below.
 #
 # The neural network is the same as `ClassificationTransformer(dl; n_heads = n_heads, L = L,
 # add_connection = false, Stiefel = Stiefel)`, i.e. `L` blocks of

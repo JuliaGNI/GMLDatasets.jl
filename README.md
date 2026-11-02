@@ -15,7 +15,7 @@ autoencoders.
 
 ## What is in here
 
-`src/` is a thin layer between `MLDatasets` and `GeometricMachineLearning.DataLoader`:
+`src/` is a thin layer between `MLDatasets` and `ReducedComplexityModeling.DataLoader`:
 
 ```julia
 using GMLDatasets

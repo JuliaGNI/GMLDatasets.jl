@@ -18,7 +18,7 @@ data set for the autoencoders.
 ## The data loaders
 
 [`mnist_data_loader`](@ref) and [`fashion_mnist_data_loader`](@ref) hand back a
-`GeometricMachineLearning.DataLoader` in the *time series* format a transformer consumes — each
+`ReducedComplexityModeling.DataLoader` in the *time series* format a transformer consumes — each
 ``28\times28`` image cut into 16 patches of ``7\times7``, each patch flattened into a column, the
 labels one-hot encoded:
 

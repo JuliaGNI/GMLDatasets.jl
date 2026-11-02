@@ -2,7 +2,7 @@
 
 ### K1 · The `DataLoader` constructor for labelled images is type piracy
 
-- **location:** `src/data_loader.jl:29`
+- **location:** `src/data_loader.jl:28`
 - **evidence:** `Aqua.test_piracies(GMLDatasets)` fails with one result; `test/quality/aqua.jl` marks
   it `broken = true`. The method adds to `DataLoader`, which `ReducedComplexityModeling` owns and
   `GeometricMachineLearning` re-exports, for argument types that this package does not own.
@@ -13,7 +13,7 @@
 
 ### K4 · Four MNIST scripts outside the revision harness use an API that GeometricOptimizers 0.9 does not define
 
-- **location:** `scripts/geometric_optimizers/mnist.jl:404`, `mnist_cuda.jl:828`, `mnist_metal.jl:569`,
+- **location:** `scripts/geometric_optimizers/mnist.jl:401`, `mnist_cuda.jl:828`, `mnist_metal.jl:569`,
   `mnist_metal_short.jl:576`
 - **evidence:** the four scripts call `Adam(T)` and `MomentumMethod(momentum_coefficient)`;
   GeometricOptimizers 0.9 defines only `Adam(; β₁, β₂, δ)` and `MomentumMethod(; α)`. The scripts

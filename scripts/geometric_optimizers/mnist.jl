@@ -1,9 +1,9 @@
 # A port of `scripts/gml/transformer_mnist.jl` that only relies on `GeometricOptimizers`
 # (`GeometricMachineLearning` depends on that package, so it cannot be used here — which is also why
-# this script loads `MLDatasets` directly instead of going through `GMLDatasets`, whose data loaders
-# hand back a `GeometricMachineLearning.DataLoader`). Everything that `GeometricMachineLearning`
-# supplies through `DataLoader`, `ClassificationTransformer` and `NeuralNetwork` is written out
-# explicitly below.
+# this script loads `MLDatasets` directly instead of going through `GMLDatasets`, which imports
+# `ReducedComplexityModeling.DataLoader` through `GeometricMachineLearning`). Everything that
+# `GeometricMachineLearning` supplies through `DataLoader`, `ClassificationTransformer` and
+# `NeuralNetwork` is written out explicitly below.
 #
 # The neural network is the same as `ClassificationTransformer(dl; n_heads = n_heads, L = L,
 # add_connection = false, Stiefel = Stiefel)`, i.e. `L` blocks of
@@ -20,11 +20,8 @@
 
 using GeometricOptimizers
 using GeometricOptimizers: solver_step!, increase_iteration_number!, initialize_state!
-# `GeometricOptimizers` 0.5.0 dropped `ParameterHandling` for `NeuralNetworkParameters`, which is the
-# package that owns a parameter set and does its flattening. This script used to reach the old one
-# through `GeometricOptimizers`, so it stopped loading at that release; these are the replacements.
-# `freeparameters` is the leaf protocol -- it is `Y.A` for a `StiefelManifold`, by a method
-# `GeometricOptimizers` registers, so this script no longer needs its own copy of that knowledge.
+# `NeuralNetworkParameters` owns a parameter set and its flattening. `freeparameters` is the leaf
+# protocol: it is `Y.A` for a `StiefelManifold`, by a method that `GeometricOptimizers` registers.
 using NeuralNetworkParameters: NetworkParameters, flatten, freeparameters,
                                parameterlayout, parameterrange, flatlength
 using SimpleSolvers: Static

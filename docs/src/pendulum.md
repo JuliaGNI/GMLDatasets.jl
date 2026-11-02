@@ -13,7 +13,7 @@ recovers exactly.
 Everything here is [`pendulum`](@ref) and [`angular_to_euclidean`](@ref) — one call to
 [`GeometricProblems`](https://github.com/JuliaGNI/GeometricProblems.jl) and
 [`GeometricIntegrators`](https://github.com/JuliaGNI/GeometricIntegrators.jl), and one coordinate
-change. The data loader is `GeometricMachineLearning`'s own; this package adds no adapter for it.
+change. The data loader is `ReducedComplexityModeling`'s own; this package adds no adapter for it.
 
 ## The system
 

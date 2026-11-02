@@ -25,7 +25,7 @@ fashion_mnist(split::Symbol = :train) = MLDatasets.FashionMNIST(split = split)[:
 @doc raw"""
     mnist_data_loader(split = :train; patch_length = 7, transform = identity, suppress_info = false)
 
-Load MNIST and wrap it in a `GeometricMachineLearning.DataLoader`.
+Load MNIST and wrap it in a `ReducedComplexityModeling.DataLoader`.
 
 This composes [`mnist`](@ref) with [`DataLoader`](@ref), i.e. it cuts each image into patches of
 `patch_length` ``\times`` `patch_length`, flattens each patch into a column and one-hot encodes the
@@ -51,7 +51,7 @@ end
 @doc raw"""
     fashion_mnist_data_loader(split = :train; patch_length = 7, transform = identity, suppress_info = false)
 
-Load Fashion-MNIST and wrap it in a `GeometricMachineLearning.DataLoader`.
+Load Fashion-MNIST and wrap it in a `ReducedComplexityModeling.DataLoader`.
 
 Like [`mnist_data_loader`](@ref), but for [`fashion_mnist`](@ref).
 """
